@@ -1,0 +1,86 @@
+CRITICAL DATA QUALITY: 1,521 out of 2,081 open grants (73%) have 
+descriptions shorter than 100 characters. This is severely impacting 
+user experience and matching quality.
+
+Run a two-phase enrichment:
+
+PHASE 1 — Extract from raw_data (free, no AI cost):
+Many scrapers store extra content in the raw_data JSONB field that 
+never made it to the description column.
+
+Run this SQL to find and fix them:
+UPDATE grants 
+SET description = COALESCE(
+  raw_data->>'summary',
+  raw_data->>'content', 
+  raw_data->>'beskrivning',
+  raw_data->>'short_description',
+  raw_data->>'excerpt',
+  raw_data->>'ingress',
+  raw_data->>'text',
+  description
+)
+WHERE status IN ('open', 'upcoming')
+AND LENGTH(COALESCE(description, '')) < 100
+AND (
+  LENGTH(COALESCE(raw_data->>'summary', '')) > 100 OR
+  LENGTH(COALESCE(raw_data->>'content', '')) > 100 OR
+  LENGTH(COALESCE(raw_data->>'beskrivning', '')) > 100 OR
+  LENGTH(COALESCE(raw_data->>'short_description', '')) > 100 OR
+  LENGTH(COALESCE(raw_data->>'excerpt', '')) > 100 OR
+  LENGTH(COALESCE(raw_data->>'ingress', '')) > 100 OR
+  LENGTH(COALESCE(raw_data->>'text', '')) > 100
+);
+
+After running, report:
+SELECT COUNT(*) FROM grants 
+WHERE status IN ('open','upcoming') 
+AND LENGTH(COALESCE(description,'')) < 100;
+
+PHASE 2 — AI enrichment for remaining short grants:
+For grants still under 100 chars after Phase 1, create a batch 
+enrichment script at server/scripts/enrich-descriptions.ts:
+
+Query up to 100 grants at a time:
+SELECT id, title, source_name, url, raw_data, description
+FROM grants
+WHERE status IN ('open','upcoming')
+AND LENGTH(COALESCE(description,'')) < 100
+ORDER BY 
+  CASE source_name 
+    WHEN 'Vinnova' THEN 1
+    WHEN 'Tillväxtverket' THEN 2  
+    WHEN 'Almi' THEN 3
+    ELSE 4
+  END,
+  created_at DESC
+LIMIT 100;
+
+For each grant, call Claude API with:
+System: "You enrich a Swedish grant database. Write factual 
+descriptions based on grant titles and sources. Be concise and accurate."
+
+User: "Write a 120-180 word description in Swedish for this grant:
+Title: {title}
+Source: {source_name}
+
+Describe: what it funds, who can apply, and what types of projects 
+qualify. Use formal Swedish. No headers, just a paragraph."
+
+Update: SET description = ai_generated_text, 
+        updated_at = NOW()
+WHERE id = {id}
+
+Rate limit: 1 second between calls to avoid API throttling.
+Log progress: "Enriched {n}/100: {title}"
+
+After the script runs, report final count:
+SELECT COUNT(*) FROM grants 
+WHERE status IN ('open','upcoming') 
+AND LENGTH(COALESCE(description,'')) < 100;
+
+Target: Get this number below 200.
+
+Run Phase 1 immediately (SQL only, safe).
+Then run Phase 2 script for the top 100 priority grants.
+Report results of both phases.

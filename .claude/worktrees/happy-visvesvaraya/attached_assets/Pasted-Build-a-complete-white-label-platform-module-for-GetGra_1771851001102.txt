@@ -1,0 +1,1636 @@
+Build a complete white-label platform module for GetGrant.ai, enabling grant
+consultants and advisory firms to offer GetGrant.ai's functionality under their
+own brand to their clients. Full subdomain routing, custom branding, client
+management, billing, and partner analytics included.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1: DATABASE SCHEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add to shared/schema.ts and run npm run db:push.
+```typescript
+// Partner account — one per consulting firm
+export const partners = pgTable('partners', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: varchar('user_id').notNull().unique(),    // the partner's own GetGrant.ai user
+  
+  // Identity
+  companyName: varchar('company_name').notNull(),
+  companyOrgNumber: varchar('company_org_number'),  // Swedish org number
+  companyWebsite: varchar('company_website'),
+  contactName: varchar('contact_name').notNull(),
+  contactEmail: varchar('contact_email').notNull(),
+  contactPhone: varchar('contact_phone'),
+  
+  // Routing
+  subdomain: varchar('subdomain').notNull().unique(),
+  // e.g. "acme" → acme.getgrant.ai
+  // Constraints: 3-30 chars, lowercase alphanumeric + hyphens, no reserved words
+  customDomain: varchar('custom_domain').unique(),
+  // e.g. "grants.acmeconsulting.se" — Professional plan only
+  customDomainVerified: boolean('custom_domain_verified').default(false),
+  customDomainVerifiedAt: timestamp('custom_domain_verified_at'),
+  customDomainCnameTarget: varchar('custom_domain_cname_target'),
+  // what the partner should point their CNAME to
+  
+  // Branding
+  logoUrl: varchar('logo_url'),
+  faviconUrl: varchar('favicon_url'),
+  primaryColor: varchar('primary_color').default('#2563EB'),    // hex
+  accentColor: varchar('accent_color').default('#10B981'),      // hex
+  primaryTextColor: varchar('primary_text_color').default('#FFFFFF'),
+  // text on primary color background
+  fontFamily: varchar('font_family').default('Inter'),
+  // Inter | Roboto | Open Sans | Lato | Montserrat
+  
+  // White-label text customization
+  platformName: varchar('platform_name'),
+  // e.g. "AcmeGrant" — replaces "GetGrant.ai" in UI
+  tagline: varchar('tagline'),
+  // Custom hero text on login page
+  supportEmail: varchar('support_email'),
+  // Shown to clients for support — defaults to partner's contactEmail
+  supportUrl: varchar('support_url'),
+  // Link to partner's own support page (optional)
+  
+  // Footer
+  showPoweredBy: boolean('show_powered_by').default(true),
+  // "Powered by GetGrant.ai" in footer
+  // Starter: must show, Professional: can hide
+  footerText: varchar('footer_text'),
+  // Custom footer text (optional)
+  
+  // Plan & billing
+  plan: varchar('plan').notNull().default('starter'),
+  // starter | professional | enterprise
+  stripeCustomerId: varchar('stripe_customer_id'),
+  stripeSubscriptionId: varchar('stripe_subscription_id'),
+  stripeSubscriptionStatus: varchar('stripe_subscription_status'),
+  // active | past_due | cancelled | trialing
+  trialEndsAt: timestamp('trial_ends_at'),
+  
+  // Limits (based on plan, can be overridden for enterprise)
+  maxClients: integer('max_clients').default(10),
+  maxAiRequestsPerMonth: integer('max_ai_requests_per_month').default(100),
+  // null = unlimited
+  
+  // Feature flags per plan
+  allowClientSelfSignup: boolean('allow_client_self_signup').default(false),
+  // Starter: false (partner invites only)
+  // Professional+: true (clients can sign up via branded link)
+  allowCustomDomain: boolean('allow_custom_domain').default(false),
+  allowApiAccess: boolean('allow_api_access').default(false),
+  allowCustomEmailDomain: boolean('allow_custom_email_domain').default(false),
+  // Send emails from partner's own domain (e.g. noreply@acmeconsulting.se)
+  
+  // Status
+  status: varchar('status').notNull().default('active'),
+  // active | suspended | cancelled | pending_setup
+  suspendedReason: varchar('suspended_reason'),
+  onboardingCompletedAt: timestamp('onboarding_completed_at'),
+  
+  // Stats cache (updated nightly)
+  cachedClientCount: integer('cached_client_count').default(0),
+  cachedActiveApplications: integer('cached_active_applications').default(0),
+  cachedGrantsWon: integer('cached_grants_won').default(0),
+  cachedTotalGrantValueSek: integer('cached_total_grant_value_sek').default(0),
+  statsCachedAt: timestamp('stats_cached_at'),
+  
+  notes: text('notes'),                              // internal admin notes
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Client accounts managed by a partner
+export const partnerClients = pgTable('partner_clients', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  partnerId: uuid('partner_id').notNull().references(() => partners.id),
+  userId: varchar('user_id').references(() => users.id),
+  // null if invite pending (user hasn't signed up yet)
+  
+  // Client identity (stored separately from users table for pre-invite state)
+  email: varchar('email').notNull(),
+  name: varchar('name'),
+  companyName: varchar('company_name'),
+  companyOrgNumber: varchar('company_org_number'),
+  phone: varchar('phone'),
+  
+  // Invite flow
+  status: varchar('status').notNull().default('invited'),
+  // invited | active | inactive | blocked
+  inviteToken: varchar('invite_token').unique(),     // secure random token
+  inviteTokenExpiresAt: timestamp('invite_token_expires_at'),
+  invitedAt: timestamp('invited_at').defaultNow(),
+  invitedBy: varchar('invited_by').notNull(),        // partner userId
+  joinedAt: timestamp('joined_at'),
+  
+  // Access control
+  // Which plan the client gets — partner pays for this or client pays directly
+  clientPlan: varchar('client_plan').default('pro'),
+  billedBy: varchar('billed_by').default('partner'),
+  // partner = partner pays for client's plan
+  // client = client has own subscription
+  
+  // Partner notes about this client
+  internalNotes: text('internal_notes'),
+  tags: varchar('tags').array().default('[]'),
+  
+  // Activity tracking
+  lastActiveAt: timestamp('last_active_at'),
+  totalApplications: integer('total_applications').default(0),
+  totalGrantsWon: integer('total_grants_won').default(0),
+  totalGrantValueSek: integer('total_grant_value_sek').default(0),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+  
+  // Unique constraint: one client per partner (by email)
+}, (table) => ({
+  uniquePartnerClient: unique().on(table.partnerId, table.email)
+}));
+
+// Partner activity log — audit trail for partner actions
+export const partnerActivityLog = pgTable('partner_activity_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  partnerId: uuid('partner_id').notNull().references(() => partners.id),
+  performedByUserId: varchar('performed_by_user_id').notNull(),
+  
+  activityType: varchar('activity_type').notNull(),
+  // client_invited | client_joined | client_removed | client_blocked
+  // branding_updated | domain_configured | plan_upgraded | plan_downgraded
+  // api_key_generated | settings_changed | client_impersonated
+  
+  description: text('description').notNull(),
+  targetClientId: uuid('target_client_id'),          // if action relates to a client
+  metadata: jsonb('metadata').default('{}'),
+  ipAddress: varchar('ip_address'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// API keys for partners (Professional+ plan)
+export const partnerApiKeys = pgTable('partner_api_keys', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  partnerId: uuid('partner_id').notNull().references(() => partners.id),
+  
+  name: varchar('name').notNull(),                   // e.g. "Production", "Testing"
+  keyPrefix: varchar('key_prefix').notNull(),        // first 8 chars for display: "gg_pk_ab"
+  keyHash: varchar('key_hash').notNull(),            // bcrypt hash of full key
+  scopes: varchar('scopes').array().default(['read']),
+  // read | write | clients:manage | grants:read
+  
+  lastUsedAt: timestamp('last_used_at'),
+  expiresAt: timestamp('expires_at'),               // null = never expires
+  
+  status: varchar('status').default('active'),       // active | revoked
+  revokedAt: timestamp('revoked_at'),
+  revokedReason: varchar('revoked_reason'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Monthly usage stats per partner
+export const partnerUsageStats = pgTable('partner_usage_stats', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  partnerId: uuid('partner_id').notNull().references(() => partners.id),
+  
+  month: varchar('month').notNull(),                 // YYYY-MM format
+  
+  // Usage counters
+  activeClients: integer('active_clients').default(0),
+  newClients: integer('new_clients').default(0),
+  totalLogins: integer('total_logins').default(0),
+  totalApplicationsCreated: integer('total_applications_created').default(0),
+  totalAiRequests: integer('total_ai_requests').default(0),
+  totalGrantSearches: integer('total_grant_searches').default(0),
+  
+  // Outcomes
+  grantsWonCount: integer('grants_won_count').default(0),
+  grantsWonValueSek: integer('grants_won_value_sek').default(0),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  uniquePartnerMonth: unique().on(table.partnerId, table.month)
+}));
+
+// Custom email domain settings (Professional+ plan)
+export const partnerEmailSettings = pgTable('partner_email_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  partnerId: uuid('partner_id').notNull().references(() => partners.id).unique(),
+  
+  fromEmail: varchar('from_email'),
+  // e.g. noreply@acmeconsulting.se
+  fromName: varchar('from_name'),
+  // e.g. "AcmeGrant by Acme Consulting"
+  replyToEmail: varchar('reply_to_email'),
+  
+  // Domain verification (Resend domain setup)
+  domainVerified: boolean('domain_verified').default(false),
+  resendDomainId: varchar('resend_domain_id'),
+  dnsRecords: jsonb('dns_records').default('[]'),
+  // [{ type: 'TXT', name: '_dmarc', value: '...' }]
+  
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2: SUBDOMAIN ROUTING MIDDLEWARE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create server/middleware/whitelabel.ts. This runs on every request
+and injects partner branding context.
+```typescript
+import { Request, Response, NextFunction } from 'express';
+
+// Cache partner lookups for 5 minutes to avoid DB hit on every request
+const partnerCache = new Map<string, { partner: Partner | null; cachedAt: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+export interface PartnerContext {
+  isWhitelabel: boolean;
+  partner: Partner | null;
+  branding: BrandingConfig;
+}
+
+export interface BrandingConfig {
+  platformName: string;
+  logoUrl: string | null;
+  faviconUrl: string | null;
+  primaryColor: string;
+  accentColor: string;
+  primaryTextColor: string;
+  fontFamily: string;
+  tagline: string | null;
+  supportEmail: string;
+  supportUrl: string | null;
+  showPoweredBy: boolean;
+  footerText: string | null;
+}
+
+const DEFAULT_BRANDING: BrandingConfig = {
+  platformName: 'GetGrant.ai',
+  logoUrl: null,
+  faviconUrl: null,
+  primaryColor: '#2563EB',
+  accentColor: '#10B981',
+  primaryTextColor: '#FFFFFF',
+  fontFamily: 'Inter',
+  tagline: null,
+  supportEmail: 'support@getgrant.ai',
+  supportUrl: null,
+  showPoweredBy: false,
+  footerText: null,
+};
+
+export async function whitelabelMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const host = req.hostname;                         // e.g. "acme.getgrant.ai"
+  
+  // Parse subdomain
+  const getgrantDomain = process.env.BASE_DOMAIN || 'getgrant.ai';
+  const isSubdomain = host.endsWith(`.${getgrantDomain}`) && 
+                       host !== getgrantDomain &&
+                       host !== `www.${getgrantDomain}`;
+  
+  let lookupKey: string | null = null;
+  let lookupType: 'subdomain' | 'customDomain' | null = null;
+  
+  if (isSubdomain) {
+    lookupKey = host.replace(`.${getgrantDomain}`, '');
+    lookupType = 'subdomain';
+  } else if (host !== getgrantDomain && host !== `www.${getgrantDomain}`) {
+    // Could be a custom domain
+    lookupKey = host;
+    lookupType = 'customDomain';
+  }
+  
+  if (!lookupKey || !lookupType) {
+    // Main domain — no white-label
+    req.partnerContext = {
+      isWhitelabel: false,
+      partner: null,
+      branding: DEFAULT_BRANDING
+    };
+    return next();
+  }
+  
+  // Check cache
+  const cacheKey = `${lookupType}:${lookupKey}`;
+  const cached = partnerCache.get(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    req.partnerContext = buildContext(cached.partner);
+    return next();
+  }
+  
+  // DB lookup
+  try {
+    const partner = await db.query.partners.findFirst({
+      where: lookupType === 'subdomain'
+        ? and(
+            eq(partners.subdomain, lookupKey),
+            eq(partners.status, 'active')
+          )
+        : and(
+            eq(partners.customDomain, lookupKey),
+            eq(partners.customDomainVerified, true),
+            eq(partners.status, 'active')
+          )
+    });
+    
+    partnerCache.set(cacheKey, { partner: partner || null, cachedAt: Date.now() });
+    req.partnerContext = buildContext(partner || null);
+    next();
+  } catch (error) {
+    console.error('Whitelabel middleware error:', error);
+    req.partnerContext = { isWhitelabel: false, partner: null, branding: DEFAULT_BRANDING };
+    next();
+  }
+}
+
+function buildContext(partner: Partner | null): PartnerContext {
+  if (!partner) {
+    return { isWhitelabel: false, partner: null, branding: DEFAULT_BRANDING };
+  }
+  
+  return {
+    isWhitelabel: true,
+    partner,
+    branding: {
+      platformName: partner.platformName || partner.companyName,
+      logoUrl: partner.logoUrl,
+      faviconUrl: partner.faviconUrl,
+      primaryColor: partner.primaryColor || DEFAULT_BRANDING.primaryColor,
+      accentColor: partner.accentColor || DEFAULT_BRANDING.accentColor,
+      primaryTextColor: partner.primaryTextColor || DEFAULT_BRANDING.primaryTextColor,
+      fontFamily: partner.fontFamily || DEFAULT_BRANDING.fontFamily,
+      tagline: partner.tagline,
+      supportEmail: partner.supportEmail || partner.contactEmail,
+      supportUrl: partner.supportUrl,
+      showPoweredBy: partner.showPoweredBy,
+      footerText: partner.footerText,
+    }
+  };
+}
+
+// Extend Express Request type
+declare global {
+  namespace Express {
+    interface Request {
+      partnerContext: PartnerContext;
+    }
+  }
+}
+
+// Call invalidatePartnerCache(partnerId) when partner settings are updated
+export function invalidatePartnerCache(partnerId: string): void {
+  for (const [key, value] of partnerCache.entries()) {
+    if (value.partner?.id === partnerId) {
+      partnerCache.delete(key);
+    }
+  }
+}
+```
+
+Register in server/index.ts BEFORE all routes:
+```typescript
+import { whitelabelMiddleware } from './middleware/whitelabel';
+app.use(whitelabelMiddleware);
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3: API ROUTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create server/routes/partners.ts. Mount at /api/partners in server/index.ts.
+All routes require authentication unless noted.
+
+## 3.1 — Partner registration & setup
+POST /api/partners/register
+Register as a new partner.
+Body: {
+companyName: string,
+companyOrgNumber?: string,
+companyWebsite?: string,
+contactName: string,
+contactEmail: string,
+contactPhone?: string,
+subdomain: string,           // validated: 3-30 chars, [a-z0-9-], no reserved words
+plan: 'starter' | 'professional'
+}
+Validation:
+
+User must not already be a partner (one partner account per user)
+subdomain must be unique and not reserved:
+Reserved: ['www', 'app', 'api', 'admin', 'mail', 'smtp', 'ftp',
+'getgrant', 'support', 'help', 'blog', 'dev', 'staging']
+contactEmail must be valid email format
+
+Process:
+
+Create partner record with status: 'pending_setup'
+Create Stripe customer for the partner
+Create default branding (company name as platformName)
+Log activity: 'partner_registered'
+Send welcome + setup instructions email to contactEmail
+Send admin notification to GetGrant.ai admin
+
+Response: {
+partnerId: string,
+subdomain: string,
+dashboardUrl: string,        // /partner/dashboard
+setupUrl: string,            // /partner/setup — onboarding wizard
+message: 'Partner account created. Complete setup to go live.'
+}
+GET /api/partners/subdomain-check/:subdomain
+Public — no auth required.
+Check if a subdomain is available.
+Response: { available: boolean, reason?: string }
+GET /api/partner/profile
+Get the current user's partner profile (if they are a partner).
+Response: full partner object with cachedStats
+PUT /api/partner/profile
+Update partner profile fields.
+Body: { companyName?, contactName?, contactEmail?,
+contactPhone?, companyWebsite?, notes? }
+Validate email format if provided.
+Log activity: 'settings_changed'
+Invalidate partner cache.
+POST /api/partner/complete-onboarding
+Mark onboarding as complete (after all setup steps done).
+Sets onboardingCompletedAt = now(), status = 'active'
+Sends "You're live!" email to partner.
+
+## 3.2 — Branding
+GET /api/partner/branding
+Returns current branding configuration.
+PUT /api/partner/branding
+Update branding settings.
+Body: {
+platformName?: string,       // max 30 chars
+primaryColor?: string,       // must be valid hex (#RRGGBB)
+accentColor?: string,
+primaryTextColor?: string,
+fontFamily?: string,         // must be in allowed list
+tagline?: string,            // max 120 chars
+supportEmail?: string,
+supportUrl?: string,
+showPoweredBy?: boolean,     // Starter plan: always true, cannot be changed
+footerText?: string          // max 200 chars
+}
+Validation:
+
+Hex colors: must match /^#[0-9A-Fa-f]{6}$/
+showPoweredBy: if partner.plan === 'starter', force true regardless of input
+Color contrast check: warn (but don't block) if primaryTextColor has
+poor contrast ratio against primaryColor (WCAG AA: 4.5:1)
+
+After save: invalidate partner cache.
+Log activity: 'branding_updated'
+POST /api/partner/branding/logo
+Upload partner logo.
+Body: multipart/form-data with 'logo' file
+Validation:
+
+Max size: 2MB
+Allowed types: image/png, image/svg+xml, image/jpeg
+Dimensions: warn if not between 100×20 and 800×200 px
+
+Process:
+
+Upload to cloud storage (use existing file upload infrastructure)
+Update partner.logoUrl
+Invalidate cache
+
+POST /api/partner/branding/favicon
+Upload favicon.
+Same as logo but: max 512×512 px, recommend 32×32, PNG or ICO.
+GET /api/partner/branding/preview
+Returns the full BrandingConfig as it would appear to clients.
+Useful for the live preview in the dashboard.
+
+## 3.3 — Custom domain
+POST /api/partner/domain
+Set a custom domain (Professional+ plan only).
+Body: { customDomain: string }   // e.g. "grants.acmeconsulting.se"
+Validation:
+
+Partner must be on Professional+ plan
+Domain format valid (not a getgrant.ai subdomain)
+Domain not already claimed by another partner
+
+Process:
+
+Generate a unique CNAME verification token
+Store domain + token, set customDomainVerified = false
+Return DNS instructions:
+{
+domain: string,
+cnameRecord: {
+type: 'CNAME',
+name: string,              // e.g. "grants" (the subdomain part)
+value: 'partners.getgrant.ai.'
+},
+verificationTxtRecord: {
+type: 'TXT',
+name: '_getgrant-verify',
+value: string              // unique token for this partner
+},
+instructions: string[]       // step-by-step instructions
+}
+
+POST /api/partner/domain/verify
+Trigger DNS verification check.
+Process:
+
+DNS lookup: resolve CNAME for customDomain — must point to partners.getgrant.ai
+DNS lookup: resolve TXT _getgrant-verify.customDomain — must contain token
+If both pass: set customDomainVerified = true, customDomainVerifiedAt = now()
+Invalidate cache.
+
+Response: {
+verified: boolean,
+cnameOk: boolean,
+txtOk: boolean,
+message: string
+}
+DELETE /api/partner/domain
+Remove custom domain. Resets to subdomain only.
+Invalidate cache.
+
+## 3.4 — Client management
+GET /api/partner/clients
+List all clients for this partner.
+Query params:
+
+?status=invited|active|inactive|blocked
+?search=email or company name
+?limit=50&offset=0
+?orderBy=joinedAt|lastActiveAt|totalApplications (default: invitedAt desc)
+
+Response: {
+clients: [{
+id, email, name, companyName, status,
+invitedAt, joinedAt, lastActiveAt,
+totalApplications, totalGrantsWon, totalGrantValueSek,
+clientPlan, tags
+}],
+total: number,
+summary: {
+totalActive: number,
+totalInvited: number,
+totalGrantValueSek: number
+}
+}
+POST /api/partner/clients/invite
+Invite a new client.
+Body: {
+email: string,
+name?: string,
+companyName?: string,
+companyOrgNumber?: string,
+clientPlan?: string,         // default: 'pro'
+internalNotes?: string,
+tags?: string[]
+}
+Validation:
+
+Partner must not exceed maxClients limit
+Email must not already be a client of this partner
+Email must be valid format
+
+Process:
+
+Check if user with this email already exists in GetGrant.ai
+Generate secure invite token (32 random bytes, hex encoded)
+Set inviteTokenExpiresAt = now() + 7 days
+Create partnerClients record with status: 'invited'
+Send invite email (see Part 5 for email templates)
+Log activity: 'client_invited'
+
+Response: {
+clientId: string,
+inviteToken: string,
+inviteUrl: string,           // https://{subdomain}.getgrant.ai/join/{token}
+expiresAt: string
+}
+POST /api/partner/clients/invite/resend/:clientId
+Resend invite email. Generates new token, resets expiry.
+Only for clients with status 'invited'.
+GET /api/partner/clients/:clientId
+Full client detail.
+Response: client + {
+applications: Application[],  // client's applications (read-only view)
+recentActivity: string[]      // last 5 actions by this client
+}
+PUT /api/partner/clients/:clientId
+Update client record (partner's own fields only).
+Body: { name?, companyName?, internalNotes?, tags?, status? }
+Cannot change: email, userId, joinedAt
+DELETE /api/partner/clients/:clientId
+Remove client from partner's roster.
+Does NOT delete the user's GetGrant.ai account — only removes the
+partner association.
+If clientPlan was billed by partner, cancel the plan entitlement.
+Log activity: 'client_removed'
+POST /api/partner/clients/:clientId/block
+Block a client (they can no longer log in via this partner's portal).
+Sets status: 'blocked'.
+Log activity: 'client_blocked'
+POST /api/partner/clients/:clientId/impersonate
+Professional+ plan only. View the platform as this client.
+Creates a time-limited impersonation session (max 30 minutes).
+Full audit log entry with timestamp and reason.
+Body: { reason: string }       // required — why are you impersonating?
+Response: {
+impersonationToken: string,
+expiresAt: string,
+redirectUrl: string          // URL to open with impersonation token
+}
+Log activity: 'client_impersonated' with reason.
+
+## 3.5 — Client self-signup (Professional+ plan)
+GET /api/whitelabel/config
+Public — no auth required. Called by frontend on every page load.
+Uses req.partnerContext from middleware.
+Response: {
+isWhitelabel: boolean,
+branding: BrandingConfig,
+partnerId?: string,
+features: {
+allowSelfSignup: boolean,
+signupUrl?: string           // /join if allowed
+}
+}
+POST /api/whitelabel/client-signup
+Public — no auth required. For professional+ partners with self-signup enabled.
+Body: {
+email: string,
+name: string,
+companyName?: string,
+password: string,
+inviteToken?: string           // if came via invite link
+}
+Validation:
+
+Partner must allow self-signup (allowClientSelfSignup = true)
+Email not already registered
+Password min 8 chars
+If inviteToken provided: validate it's valid and not expired
+
+Process:
+
+Create GetGrant.ai user account
+Create partnerClients record with status: 'active'
+Apply clientPlan entitlement
+If inviteToken: mark original invite as accepted
+Send welcome email (branded with partner branding)
+Log activity: 'client_joined'
+
+GET /api/whitelabel/invite/:token
+Public — validate an invite token.
+Response: {
+valid: boolean,
+expired?: boolean,
+partnerName?: string,
+clientEmail?: string,
+platformName?: string
+}
+POST /api/whitelabel/accept-invite/:token
+Accept an invite and create an account.
+Body: { name: string, password: string }
+Same process as client-signup but uses invite token to pre-fill email.
+
+## 3.6 — Analytics & usage
+GET /api/partner/analytics
+Returns analytics data for the partner dashboard.
+Query params:
+
+?period=7d|30d|90d|12m (default: 30d)
+
+Response: {
+summary: {
+totalClients: number,
+activeClientsThisPeriod: number,
+newClientsThisPeriod: number,
+totalApplicationsThisPeriod: number,
+totalAiRequestsThisPeriod: number,
+grantsWonThisPeriod: number,
+grantValueWonSek: number
+},
+// Time series data for charts
+clientGrowth: [{ date: string, count: number }],
+applicationActivity: [{ date: string, created: number, submitted: number }],
+aiUsage: [{ date: string, requests: number }],
+// Top clients by activity
+topClients: [{
+name: string, companyName: string,
+applications: number, grantsWon: number
+}],
+// Grant discovery stats (what are clients finding?)
+topGrantSources: [{ source: string, searches: number }],
+// AI usage breakdown
+aiUsageByFeature: [{
+feature: 'matching' | 'application_writing' | 'eligibility_check' | 'report_generation',
+count: number
+}],
+// Plan usage
+planUsage: {
+used: number,                // current active clients
+limit: number,               // maxClients
+aiRequestsUsed: number,
+aiRequestsLimit: number | null
+}
+}
+GET /api/partner/analytics/export
+Download analytics as CSV.
+Query params: ?period=30d&format=csv
+
+## 3.7 — API keys (Professional+ plan)
+GET /api/partner/api-keys
+List all API keys (shows prefix only, not full key).
+POST /api/partner/api-keys
+Generate a new API key.
+Body: { name: string, scopes: string[], expiresAt?: string }
+Process:
+
+Generate key: "gg_pk_" + 40 random chars (base58)
+Store bcrypt hash of full key
+Store prefix (first 14 chars) for display
+Return FULL KEY once — never shown again
+
+Response: {
+id: string,
+name: string,
+key: string,                   // FULL KEY — show once, store nowhere
+prefix: string,
+scopes: string[],
+createdAt: string,
+warning: 'Store this key securely. It will not be shown again.'
+}
+DELETE /api/partner/api-keys/:keyId
+Revoke a key.
+Body: { reason?: string }
+Sets status: 'revoked', revokedAt, revokedReason.
+
+## 3.8 — Admin routes (GetGrant.ai internal)
+All require admin authentication.
+GET /api/admin/partners
+List all partner accounts.
+Query: ?status=active|suspended|pending_setup&search=
+GET /api/admin/partners/:partnerId
+Full partner detail.
+PUT /api/admin/partners/:partnerId
+Admin can update any partner field including plan, maxClients, status.
+POST /api/admin/partners/:partnerId/suspend
+Body: { reason: string }
+Sets status: 'suspended', suspendedReason.
+Sends email notification to partner.
+POST /api/admin/partners/:partnerId/reinstate
+Clears suspension.
+GET /api/admin/partners/stats
+Platform-wide partner stats:
+{
+totalPartners: number,
+activePartners: number,
+totalPartnerClients: number,
+mrr: { starter: number, professional: number, enterprise: number },
+topPartners: [{ companyName, clientCount, grantValueSek }]
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 4: FRONTEND — COMPONENTS & PAGES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 4.1 — WhitelabelProvider (global)
+
+Create client/src/providers/WhitelabelProvider.tsx.
+Wrap the entire app with this provider.
+```tsx
+// On app load, fetch /api/whitelabel/config
+// Apply CSS custom properties to :root based on branding:
+//
+//   --color-primary: #2563EB
+//   --color-accent: #10B981
+//   --color-primary-text: #FFFFFF
+//   --font-family: Inter, sans-serif
+//
+// Update <title> to platformName
+// Update <link rel="icon"> to faviconUrl (or default)
+// Inject <link rel="stylesheet"> for Google Fonts if non-default font
+
+// Expose via useWhitelabel() hook:
+// {
+//   isWhitelabel: boolean,
+//   branding: BrandingConfig,
+//   partner: PartnerSummary | null
+// }
+
+// All existing color classes (bg-blue-600, text-blue-600 etc.) should
+// gradually be replaced with CSS variable references, but for v1 it's
+// acceptable to apply partner primary color only to:
+// - Primary buttons
+// - Navigation bar background
+// - Logo area
+// Use Tailwind arbitrary values: className={`bg-[var(--color-primary)]`}
+```
+
+## 4.2 — AppLogo component
+
+Replace the existing logo/brand name in the nav bar:
+```tsx
+// client/src/components/AppLogo.tsx
+
+export function AppLogo() {
+  const { isWhitelabel, branding } = useWhitelabel();
+  
+  if (isWhitelabel && branding.logoUrl) {
+    return (
+      <img 
+        src={branding.logoUrl} 
+        alt={branding.platformName}
+        className="h-8 max-w-[180px] object-contain"
+      />
+    );
+  }
+  
+  return (
+    <div className="flex items-center gap-2">
+      <span 
+        className="font-bold text-xl"
+        style={{ color: isWhitelabel ? `var(--color-primary)` : undefined }}
+      >
+        {branding.platformName}
+      </span>
+      {!isWhitelabel && (
+        <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+          .ai
+        </span>
+      )}
+    </div>
+  );
+}
+```
+
+## 4.3 — Footer component
+```tsx
+// client/src/components/Footer.tsx
+
+export function Footer() {
+  const { isWhitelabel, branding } = useWhitelabel();
+  
+  return (
+    <footer className="border-t py-4 px-6 text-sm text-muted-foreground">
+      <div className="flex items-center justify-between">
+        <span>{branding.footerText || `© ${new Date().getFullYear()} ${branding.platformName}`}</span>
+        <div className="flex items-center gap-4">
+          {branding.supportUrl && (
+            <a href={branding.supportUrl} target="_blank" rel="noopener">
+              Support
+            </a>
+          )}
+          <a href={`mailto:${branding.supportEmail}`}>
+            {branding.supportEmail}
+          </a>
+          {isWhitelabel && branding.showPoweredBy && (
+            <a 
+              href="https://getgrant.ai" 
+              target="_blank" 
+              rel="noopener"
+              className="text-xs text-muted-foreground/60 hover:text-muted-foreground"
+            >
+              Powered by GetGrant.ai
+            </a>
+          )}
+        </div>
+      </div>
+    </footer>
+  );
+}
+```
+
+## 4.4 — Partner Dashboard (/partner)
+
+This section is ONLY accessible to users who have a partner account.
+Add "Partner" link in the main nav for partner users, or redirect
+automatically if user navigates to /partner.
+
+### Sub-page: /partner/dashboard
+┌──────────────────────────────────────────────────────────────────┐
+│  🏢 Acme Consulting Partner Dashboard         [Förhandsgranska]  │
+│  acme.getgrant.ai  •  Starter-plan  [Uppgradera]                │
+│                                                                  │
+│  SAMMANFATTNING (senaste 30 dagarna)                            │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
+│  │ 8 aktiva │ │ 3 nya    │ │ 12 ans.  │ │ 350k SEK │          │
+│  │ klienter │ │ klienter │ │ skapade  │ │ i bidrag │          │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
+│                                                                  │
+│  KLIENTAKTIVITET ─────────────────────────── [Visa alla →]     │
+│  ● Företag AB      Senast aktiv: idag       2 ansökningar       │
+│  ● Startup XYZ     Senast aktiv: igår       1 ansökan           │
+│  ● Tech Partners   Senast aktiv: 5 dagar    0 ansökningar ⚠️    │
+│                                                                  │
+│  SNABBLÄNKAR                                                    │
+│  [+ Bjud in klient]  [⚙ Varumärke]  [🌐 Domän]  [📊 Analys]  │
+│                                                                  │
+│  PLANSTATUS                                                      │
+│  Klienter: 8 / 10 (80%)  ████████░░                            │
+│  [Uppgradera till Professional för fler klienter]               │
+└──────────────────────────────────────────────────────────────────┘
+
+### Sub-page: /partner/clients
+┌──────────────────────────────────────────────────────────────────┐
+│  👥 Klienter                              [+ Bjud in klient]    │
+│  [Alla] [Aktiva (8)] [Väntande (2)] [Inaktiva (1)]             │
+│  Sök: [________________________]                                 │
+│                                                                  │
+│  Namn / Företag        Status     Senast aktiv  Ansök. Bidragsvärde│
+│  ─────────────────────────────────────────────────────────────── │
+│  Emma Svensson         ● Aktiv    Idag          3      250k SEK │
+│  Företag AB            Aktiv sedan 12 jan 2026                  │
+│  [Se profil] [Skicka meddelande] [Ta bort]              [···]  │
+│                                                                  │
+│  Johan Berg            ⏳ Inbjuden  Ej gått med  —       —      │
+│  startup@example.com   Bjöd in: 3 dagar sedan                   │
+│  Inbjudan upphör: om 4 dagar                                    │
+│  [Skicka påminnelse] [Avbryt inbjudan]                          │
+│                                                                  │
+│  [Ladda fler]                                                    │
+└──────────────────────────────────────────────────────────────────┘
+
+### Sub-page: /partner/branding
+┌──────────────────────────────────────────────────────────────────┐
+│  🎨 Varumärkesanpassning                                        │
+│                                                                  │
+│  LOGOTYP                                                         │
+│  [Ladda upp logotyp] (PNG, SVG, max 2MB, rekommenderat 300×60px)│
+│  [Ladda upp favicon] (PNG, max 512×512px, rekommenderat 32×32px)│
+│                                                                  │
+│  PLATTFORMSNAMN                                                  │
+│  Visningsnamn: [AcmeGrant________________]                       │
+│  (visas i navigering, e-post och flikar)                        │
+│                                                                  │
+│  VÄLKOMSTTEKST                                                   │
+│  Tagline (valfritt): [______________________]         │
+│  (visas på inloggningssidan under logotypen)                    │
+│                                                                  │
+│  FÄRGER                                                          │
+│  Primärfärg:    [#2563EB] [● färgväljare]                       │
+│  Accentfärg:    [#10B981] [● färgväljare]                       │
+│  Textfärg:      [#FFFFFF] [● färgväljare]                       │
+│  (textfärg används på knappar med primärfärg som bakgrund)      │
+│                                                                  │
+│  TYPSNITT                                                        │
+│  [Inter ▼] Inter | Roboto | Open Sans | Lato | Montserrat       │
+│                                                                  │
+│  SUPPORT                                                         │
+│  Supportadress: [support@acmeconsulting.se_______]          │
+│  Support-URL:   [https://acmeconsulting.se/support]          │
+│                                                                  │
+│  SIDFOT                                                          │
+│  Sidfottext:    [© 2026 Acme Consulting___________]         │
+│  Visa "Powered by GetGrant.ai": [✅] (krävs för Starter-plan)  │
+│                                                                  │
+│  FÖRHANDSGRANSKNING ──────────────────────────────────────────  │
+│  [iframe showing live preview of branded login page]            │
+│                                                                  │
+│  [Spara ändringar]                                              │
+└──────────────────────────────────────────────────────────────────┘
+
+### Sub-page: /partner/domain
+┌──────────────────────────────────────────────────────────────────┐
+│  🌐 Domäninställningar                                          │
+│                                                                  │
+│  DIN SUBDOMAIN (alla planer)                                     │
+│  https://acme.getgrant.ai  ✅ Aktiv                             │
+│  [Kopiera länk]                                                  │
+│                                                                  │
+│  ANPASSAD DOMÄN (Professional+) ─────────────────────────────  │
+│  {if Starter plan:}                                             │
+│  🔒 Anpassad domän kräver Professional-plan                     │
+│  [Uppgradera för att aktivera]                                   │
+│                                                                  │
+│  {if Professional+ plan:}                                        │
+│  {if no custom domain:}                                         │
+│  Domän: [grants.acmeconsulting.se_______________]               │
+│  [Lägg till domän]                                              │
+│                                                                  │
+│  {if domain added but not verified:}                            │
+│  ⏳ grants.acmeconsulting.se — Verifiering pågår               │
+│                                                                  │
+│  Lägg till dessa DNS-poster hos din domänleverantör:           │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │ Typ  | Namn              | Värde                          │ │
+│  │ CNAME | grants           | partners.getgrant.ai.          │ │
+│  │ TXT  | _getgrant-verify | gg_verify_a1b2c3d4e5f6...      │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  DNS-ändringar kan ta 1–24 timmar att spridas.                 │
+│  [Kontrollera verifiering]                                       │
+│                                                                  │
+│  {if domain verified:}                                          │
+│  ✅ grants.acmeconsulting.se — Verifierad och aktiv            │
+│  SSL-certifikat: ✅ Aktivt (automatisk förnyelse)              │
+│  [Ta bort anpassad domän]                                       │
+└──────────────────────────────────────────────────────────────────┘
+
+### Sub-page: /partner/analytics
+┌──────────────────────────────────────────────────────────────────┐
+│  📊 Analys                    [7 dagar ▼] [Exportera CSV]       │
+│                                                                  │
+│  KLIENTTILLVÄXT                                                  │
+│  [Line chart: total clients over time]                          │
+│                                                                  │
+│  ANSÖKNINGSAKTIVITET                                            │
+│  [Bar chart: applications created vs submitted per week]        │
+│                                                                  │
+│  AI-ANVÄNDNING                                                   │
+│  [Stacked bar: matching / writing / eligibility / reports]      │
+│                                                                  │
+│  TOP KLIENTER                                                    │
+│  Företag AB         5 ansökningar    2 vunna    375k SEK       │
+│  Startup XYZ        3 ansökningar    1 vunna    100k SEK       │
+│                                                                  │
+│  POPULÄRASTE BIDRAGSKÄLLOR (bland dina klienter)               │
+│  Vinnova (23 sökningar) | Tillväxtverket (18) | EU F&T (12)   │
+│                                                                  │
+│  PLANKAPACITET                                                   │
+│  Klienter: 8/10  [████████░░]                                  │
+│  AI-förfrågningar: 67/100  [██████░░░░]  (denna månad)        │
+└──────────────────────────────────────────────────────────────────┘
+
+### Sub-page: /partner/settings
+┌──────────────────────────────────────────────────────────────────┐
+│  ⚙️ Inställningar                                               │
+│                                                                  │
+│  KONTAKTINFORMATION                                              │
+│  Företagsnamn: [Acme Consulting AB_________]                   │
+│  Org.nummer:   [556123-4567________________]                    │
+│  Webbplats:    [https://acmeconsulting.se__]                   │
+│  Kontaktperson:[Anna Andersson_____________]                    │
+│  E-post:       [anna@acmeconsulting.se_____]                   │
+│  Telefon:      [+46 70 123 45 67___________]                   │
+│                                                                  │
+│  KLIENTREGISTRERING                                              │
+│  Tillåt klienter att registrera sig själva:                    │
+│  [🔒 Kräver Professional-plan]                                  │
+│  {if Professional+:}                                            │
+│  [ ] Tillåt självregistrering via länk                         │
+│  Registreringslänk: https://acme.getgrant.ai/join              │
+│  [Kopiera länk]                                                  │
+│                                                                  │
+│  E-POSTINSTÄLLNINGAR (Professional+)                            │
+│  Avsändaradress: [noreply@acmeconsulting.se]                   │
+│  Avsändarnamn:   [AcmeGrant__________________]                 │
+│  [Konfigurera DNS-poster för e-post]                            │
+│                                                                  │
+│  PLAN & FAKTURERING                                             │
+│  Nuvarande plan: Starter (1 495 SEK/mån)                       │
+│  Nästa faktura: 1 mars 2026                                     │
+│  [Hantera abonnemang via Stripe]                                │
+│  [Uppgradera till Professional]                                  │
+│                                                                  │
+│  API-ÅTKOMST (Professional+)                                    │
+│  [🔒 Kräver Professional-plan]                                  │
+│                                                                  │
+│  FAROZON ─────────────────────────────────────────────────────  │
+│  [Avsluta partner-konto]  (klientkonton påverkas inte)         │
+└──────────────────────────────────────────────────────────────────┘
+
+## 4.5 — Client invite acceptance page
+
+Route: /join/:token (accessible on any branded subdomain)
+{Partner logo}
+Du har blivit inbjuden till {platformName}
+av {partnerCompanyName}
+GetGrant.ai hjälper svenska företag att hitta och
+söka rätt bidrag — med AI-matchning och skrivhjälp.
+─────────────────────────────────────
+E-post: {pre-filled from invite, read-only}
+Ditt namn: []
+Lösenord: [___________________]
+Bekräfta: [___]
+[Skapa konto och börja →]
+─────────────────────────────────────
+Har du redan ett konto? [Logga in]
+
+After signup: redirect to onboarding wizard (existing flow).
+
+## 4.6 — Branded login page
+
+When a user visits a white-label subdomain and is not logged in,
+show the branded login page instead of the default:
+{Partner logo — large, centered}
+{tagline if set}
+─────────────────────────────────────
+Logga in på {platformName}
+E-post: [______________________]
+Lösenord: [____________________]
+[Logga in]
+[Glömt lösenord?]
+Nytt företag? {if allowSelfSignup:} [Skapa konto] {else:} Kontakta {contactName}
+─────────────────────────────────────
+{if showPoweredBy:}
+Powered by GetGrant.ai
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 5: EMAIL TEMPLATES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All emails sent to CLIENTS use partner branding (logo, colors, platformName,
+support email). All emails sent to the PARTNER use GetGrant.ai branding.
+
+### 5.1 — Client invite email
+From: {partner's fromName or "platformName"} <{partner's fromEmail or noreply@getgrant.ai}>
+Subject: Du har blivit inbjuden till {platformName}
+{Partner logo}
+Hej {clientName || "där"},
+{partnerContactName} på {partnerCompanyName} har bjudit in
+dig till {platformName} — en plattform för att hitta och söka
+rätt bidrag för ditt företag.
+[Acceptera inbjudan och skapa konto →]
+{inviteUrl}
+Länken är giltig i 7 dagar (till {expiresAt}).
+Har du frågor? Kontakta {supportEmail}.
+{platformName}
+{if showPoweredBy:} Powered by GetGrant.ai
+
+### 5.2 — Client invite reminder (resent)
+Subject: Påminnelse: Din inbjudan till {platformName} upphör snart
+Hej {clientName},
+Din inbjudan till {platformName} upphör om {daysLeft} dagar.
+[Acceptera inbjudan →]
+{platformName}
+
+### 5.3 — Client welcome (after signup)
+Subject: Välkommen till {platformName}!
+Hej {clientName},
+Välkommen till {platformName}! Ditt konto är nu aktivt.
+Kom igång:
+
+Fyll i din företagsprofil för bättre matchning
+Utforska bidrag som passar ditt företag
+Skriv din första ansökan med AI-hjälp
+
+[Kom igång →]
+Har du frågor? {supportEmail} hjälper dig.
+{platformName}
+
+### 5.4 — Partner welcome (after registration)
+From: GetGrant.ai noreply@getgrant.ai
+Subject: Välkommen som partner — ditt konto är klart
+Hej {contactName},
+Välkommen till GetGrant.ai partner-program!
+Ditt vita märke är aktivt på:
+https://{subdomain}.getgrant.ai
+NÄSTA STEG:
+
+Ladda upp din logotyp och välj dina färger
+Bjud in din första klient
+Utforska partner-dashboarden
+
+[Gå till partner-dashboard →]
+Vid frågor: partner@getgrant.ai
+GetGrant.ai
+
+### 5.5 — Partner plan upgrade confirmation
+Subject: Planuppgradering bekräftad — {plan}
+Hej {contactName},
+Din plan har uppgraderats till {plan}.
+NYTT TILLGÄNGLIGT:
+{list of features unlocked by new plan}
+Din subdomain: https://{subdomain}.getgrant.ai
+{if customDomain enabled:} Anpassad domän: nu tillgänglig
+GetGrant.ai
+
+### 5.6 — Domain verification success
+Subject: ✅ Domänverifiering lyckades — {customDomain}
+Hej {contactName},
+Din anpassade domän är nu verifierad och aktiv:
+https://{customDomain}
+SSL-certifikatet aktiveras automatiskt inom 15 minuter.
+GetGrant.ai
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 6: PLAN DEFINITIONS & BILLING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Define plan limits in server/config/partnerPlans.ts:
+```typescript
+export const PARTNER_PLANS = {
+  starter: {
+    name: 'Starter',
+    priceMonthlySek: 1495,
+    stripePriceId: process.env.STRIPE_PARTNER_STARTER_PRICE_ID!,
+    maxClients: 10,
+    maxAiRequestsPerMonth: 100,
+    features: {
+      subdomain: true,
+      customDomain: false,
+      showPoweredByRequired: true,     // cannot hide "Powered by"
+      allowClientSelfSignup: false,    // partner must manually invite
+      allowApiAccess: false,
+      allowCustomEmailDomain: false,
+      allowClientImpersonation: false,
+      analyticsRetentionDays: 30,
+      prioritySupport: false,
+    }
+  },
+  professional: {
+    name: 'Professional',
+    priceMonthlySek: 3995,
+    stripePriceId: process.env.STRIPE_PARTNER_PROFESSIONAL_PRICE_ID!,
+    maxClients: 50,
+    maxAiRequestsPerMonth: 500,
+    features: {
+      subdomain: true,
+      customDomain: true,
+      showPoweredByRequired: false,    // can hide "Powered by"
+      allowClientSelfSignup: true,
+      allowApiAccess: true,
+      allowCustomEmailDomain: true,
+      allowClientImpersonation: true,
+      analyticsRetentionDays: 365,
+      prioritySupport: true,
+    }
+  },
+  enterprise: {
+    name: 'Enterprise',
+    priceMonthlySek: null,             // custom pricing
+    stripePriceId: null,               // billed separately
+    maxClients: null,                  // unlimited
+    maxAiRequestsPerMonth: null,       // unlimited
+    features: {
+      subdomain: true,
+      customDomain: true,
+      showPoweredByRequired: false,
+      allowClientSelfSignup: true,
+      allowApiAccess: true,
+      allowCustomEmailDomain: true,
+      allowClientImpersonation: true,
+      analyticsRetentionDays: null,    // unlimited
+      prioritySupport: true,
+      dedicatedAccountManager: true,
+      customSla: true,
+      customFeatures: true,
+    }
+  }
+} as const;
+
+// Helper to check if partner has access to a feature
+export function partnerHasFeature(
+  partner: Partner,
+  feature: keyof typeof PARTNER_PLANS.starter.features
+): boolean {
+  const plan = PARTNER_PLANS[partner.plan as keyof typeof PARTNER_PLANS];
+  return plan?.features[feature] ?? false;
+}
+
+// Helper to check limits
+export function partnerWithinLimit(
+  partner: Partner,
+  type: 'clients',
+  currentCount: number
+): { allowed: boolean; limit: number | null; current: number } {
+  const plan = PARTNER_PLANS[partner.plan as keyof typeof PARTNER_PLANS];
+  const limit = type === 'clients' ? plan.maxClients : null;
+  return {
+    allowed: limit === null || currentCount < limit,
+    limit,
+    current: currentCount
+  };
+}
+```
+
+Create Stripe products and prices in Stripe dashboard:
+- Product: "GetGrant.ai Partner - Starter" → 1,495 SEK/month recurring
+- Product: "GetGrant.ai Partner - Professional" → 3,995 SEK/month recurring
+- Store price IDs in environment variables
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 7: SCHEDULED JOBS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add to server/jobs/partnerJobs.ts:
+```typescript
+import { CronJob } from 'cron';
+
+// Nightly at 02:00 — update partner stats cache
+export const partnerStatsCacheJob = new CronJob('0 2 * * *', async () => {
+  const allPartners = await db.query.partners.findMany({
+    where: eq(partners.status, 'active')
+  });
+  
+  for (const partner of allPartners) {
+    const clientCount = await db.select({ count: count() })
+      .from(partnerClients)
+      .where(and(
+        eq(partnerClients.partnerId, partner.id),
+        eq(partnerClients.status, 'active')
+      ));
+    
+    // Aggregate application stats across all clients
+    const clientIds = await getPartnerClientUserIds(partner.id);
+    const appStats = await getApplicationStats(clientIds);
+    
+    await db.update(partners)
+      .set({
+        cachedClientCount: clientCount[0].count,
+        cachedActiveApplications: appStats.active,
+        cachedGrantsWon: appStats.won,
+        cachedTotalGrantValueSek: appStats.totalValue,
+        statsCachedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(partners.id, partner.id));
+    
+    // Update monthly usage stats
+    const month = new Date().toISOString().substring(0, 7); // YYYY-MM
+    await db.insert(partnerUsageStats)
+      .values({
+        partnerId: partner.id,
+        month,
+        activeClients: clientCount[0].count,
+        // other fields updated via API as they occur
+      })
+      .onConflictDoUpdate({
+        target: [partnerUsageStats.partnerId, partnerUsageStats.month],
+        set: { activeClients: clientCount[0].count, updatedAt: new Date() }
+      });
+  }
+}, null, true, 'Europe/Stockholm');
+
+// Daily at 09:00 — expire pending invites
+export const inviteExpirationJob = new CronJob('0 9 * * *', async () => {
+  const expired = await db.update(partnerClients)
+    .set({ status: 'inactive', updatedAt: new Date() })
+    .where(and(
+      eq(partnerClients.status, 'invited'),
+      lt(partnerClients.inviteTokenExpiresAt, new Date())
+    ))
+    .returning();
+  
+  if (expired.length > 0) {
+    console.log(`Expired ${expired.length} partner client invites`);
+  }
+}, null, true, 'Europe/Stockholm');
+
+// Weekly on Monday at 07:00 — send partner activity digest
+export const partnerWeeklyDigestJob = new CronJob('0 7 * * 1', async () => {
+  const activePartners = await db.query.partners.findMany({
+    where: eq(partners.status, 'active')
+  });
+  
+  for (const partner of activePartners) {
+    // Only send if partner has had activity this week
+    const weeklyStats = await getPartnerWeeklyStats(partner.id);
+    if (weeklyStats.totalLogins > 0 || weeklyStats.newClients > 0) {
+      await sendPartnerWeeklyDigest(partner, weeklyStats);
+    }
+  }
+}, null, true, 'Europe/Stockholm');
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 8: SECURITY CONSIDERATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Implement these security controls explicitly:
+```typescript
+// 1. CLIENT DATA ISOLATION
+// A partner may ONLY access data belonging to their own clients.
+// In every partner route that accesses user data, verify the target
+// user is a client of this partner:
+
+async function verifyClientBelongsToPartner(
+  partnerId: string,
+  clientUserId: string
+): Promise<boolean> {
+  const client = await db.query.partnerClients.findFirst({
+    where: and(
+      eq(partnerClients.partnerId, partnerId),
+      eq(partnerClients.userId, clientUserId),
+      eq(partnerClients.status, 'active')
+    )
+  });
+  return !!client;
+}
+
+// 2. IMPERSONATION SECURITY
+// Impersonation tokens: JWT with 30-minute expiry
+// Include: partnerId, targetUserId, reason, expiresAt
+// Verify on every request that:
+//   - Token not expired
+//   - Target user is still an active client of this partner
+//   - Partner still has impersonation permission (plan check)
+// Log every page visit during impersonation session
+
+// 3. API KEY VALIDATION
+// For API key authentication, validate in middleware:
+// - Extract "Authorization: Bearer gg_pk_..." header
+// - Look up keyPrefix in DB
+// - bcrypt.compare(fullKey, keyHash)
+// - Check key is not expired or revoked
+// - Check partner is active
+// - Rate limit: 1000 requests/hour per API key
+
+// 4. SUBDOMAIN INJECTION PREVENTION
+// Validate subdomain on registration:
+const RESERVED_SUBDOMAINS = new Set([
+  'www', 'app', 'api', 'admin', 'mail', 'smtp', 'ftp',
+  'getgrant', 'support', 'help', 'blog', 'dev', 'staging',
+  'partner', 'partners', 'static', 'cdn', 'assets',
+  'auth', 'login', 'signup', 'dashboard', 'test'
+]);
+
+function validateSubdomain(subdomain: string): { valid: boolean; reason?: string } {
+  if (subdomain.length < 3 || subdomain.length > 30)
+    return { valid: false, reason: 'Subdomänen måste vara 3–30 tecken' };
+  if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(subdomain))
+    return { valid: false, reason: 'Endast gemener, siffror och bindestreck' };
+  if (RESERVED_SUBDOMAINS.has(subdomain))
+    return { valid: false, reason: 'Denna subdomain är reserverad' };
+  return { valid: true };
+}
+
+// 5. CUSTOM DOMAIN XSS PREVENTION
+// Validate custom domain format before storing:
+function validateCustomDomain(domain: string): boolean {
+  // Must be a valid hostname, not a getgrant.ai domain
+  const hostnameRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+  return hostnameRegex.test(domain) && 
+         !domain.endsWith('getgrant.ai') &&
+         !domain.endsWith('getgrant.se');
+}
+
+// 6. BRANDING COLOR VALIDATION
+// Prevent XSS via color injection in CSS variables
+function validateHexColor(color: string): boolean {
+  return /^#[0-9A-Fa-f]{6}$/.test(color);
+}
+// Sanitize all color values before writing to CSS custom properties
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 9: PRICING PAGE SECTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add a "White-label / Konsulter" section to the existing pricing page:
+FÖR BIDRAGSKONSULTER & RÅDGIVARE
+─────────────────────────────────────────────────────────────────
+Erbjud AI-driven bidragsrådgivning under ditt eget varumärke.
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│  STARTER         │  │  PROFESSIONAL    │  │  ENTERPRISE      │
+│  1 495 SEK/mån   │  │  3 995 SEK/mån   │  │  Kontakta oss    │
+├──────────────────┤  ├──────────────────┤  ├──────────────────┤
+│ ✅ 10 klienter   │  │ ✅ 50 klienter   │  │ ✅ Obegränsat    │
+│ ✅ acme.get...   │  │ ✅ Anpassad dom. │  │ ✅ Anpassad dom. │
+│ ✅ Logo & färger │  │ ✅ Dölj "Powered"│  │ ✅ White-label   │
+│ ✅ Klienthantering│ │ ✅ Självregistr. │  │ ✅ API-åtkomst   │
+│ ✅ Analys-panel  │  │ ✅ API-åtkomst   │  │ ✅ Dedikerad CSM │
+│ ⬜ Anpassad dom. │  │ ✅ Anpassad e-post│ │ ✅ SLA-garanti   │
+│ ⬜ API-åtkomst   │  │ ✅ Klientens vyn │  │ ✅ Anpassade     │
+│ ⬜ Dölj "Powered"│  │ ✅ Prio-support  │  │    funktioner    │
+└──────────────────┘  └──────────────────┘  └──────────────────┘
+[Bli partner — Starter]  [Bli partner — Professional]  [Kontakta oss]
+─────────────────────────────────────────────────────────────────
+Vanliga frågor:
+Q: Vad betalar mina klienter?
+A: Starter: du betalar för dina klienters Pro-abonnemang.
+Professional: klienter kan ha egna abonnemang eller du betalar.
+Q: Kan mina klienter se att plattformen är GetGrant.ai?
+A: Starter: "Powered by GetGrant.ai" visas. Professional: valfritt.
+Q: Vad händer med mina klienters data om jag avslutar?
+A: Klientkontona kvarstår. De förlorar bara tillgång via din portal.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 10: TESTING CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DATABASE
+- [ ] All 7 tables created without errors
+- [ ] Unique constraint on partners.subdomain enforced
+- [ ] Unique constraint on partners.customDomain enforced
+- [ ] Unique constraint on partnerClients (partnerId, email) enforced
+- [ ] Foreign key cascades work correctly
+
+SUBDOMAIN ROUTING
+- [ ] acme.getgrant.ai → loads partner branding for "acme"
+- [ ] www.getgrant.ai → loads default GetGrant.ai branding
+- [ ] getgrant.ai → loads default branding
+- [ ] unknown.getgrant.ai → loads default branding (partner not found)
+- [ ] Partner cache works: second request within 5 min doesn't hit DB
+- [ ] Cache invalidated when branding is updated
+
+BRANDING
+- [ ] Logo upload — loads and displays in nav
+- [ ] Favicon upload — shows in browser tab
+- [ ] Primary color applied to buttons and nav
+- [ ] Platform name appears in page title and nav
+- [ ] Tagline appears on login page
+- [ ] "Powered by" shows for Starter, hides for Professional
+- [ ] CSS custom properties injected correctly (no XSS via color values)
+- [ ] Invalid hex colors rejected (API + frontend validation)
+- [ ] Color contrast warning shown when contrast ratio < 4.5:1
+
+SUBDOMAIN VALIDATION
+- [ ] "www" subdomain rejected as reserved
+- [ ] "admin" subdomain rejected as reserved
+- [ ] "ab" rejected (too short)
+- [ ] "a".repeat(31) rejected (too long)
+- [ ] "ACME" rejected (uppercase)
+- [ ] "acme consulting" rejected (space)
+- [ ] "acme" accepted ✅
+- [ ] "acme-consulting" accepted ✅
+- [ ] Duplicate subdomain rejected (409 error)
+- [ ] Subdomain-check endpoint returns correct availability
+
+CLIENT MANAGEMENT
+- [ ] Invite creates record with status 'invited' + sends email
+- [ ] Invite token expires after 7 days
+- [ ] Resend invite generates new token, resets expiry
+- [ ] Client accepts invite → status becomes 'active', userId linked
+- [ ] Client signup via self-signup link (Professional plan)
+- [ ] Invited client email pre-filled and read-only on signup page
+- [ ] Removing client removes partner association (not the user account)
+- [ ] Blocking client prevents login via partner portal
+- [ ] Cannot exceed maxClients limit (409 error with clear message)
+
+CUSTOM DOMAIN
+- [ ] Starter plan: custom domain section shows upgrade prompt
+- [ ] Professional plan: can add custom domain
+- [ ] DNS instructions generated correctly (CNAME + TXT records shown)
+- [ ] Verification checks both CNAME and TXT records
+- [ ] Verified domain routes correctly (same branding as subdomain)
+- [ ] Invalid domain format rejected
+- [ ] getgrant.ai domains rejected as custom domain
+
+CLIENT ISOLATION
+- [ ] Partner A cannot see Partner B's clients via API
+- [ ] Partner A cannot see Partner B's clients' applications
+- [ ] Impersonation only works for active clients of the impersonating partner
+
+IMPERSONATION (Professional plan)
+- [ ] Partner can impersonate their own client
+- [ ] Starter plan: impersonation API returns 403
+- [ ] Impersonation token expires after 30 minutes
+- [ ] Impersonation is fully logged (with reason, timestamp, IP)
+- [ ] Cannot impersonate a client of another partner
+
+API KEYS (Professional plan)
+- [ ] Generate key: full key shown once, prefix stored
+- [ ] Generated key authenticates API requests
+- [ ] Revoked key rejected with 401
+- [ ] Expired key rejected with 401
+- [ ] Starter plan: API key generation returns 403
+
+ANALYTICS
+- [ ] Stats summary shows correct numbers for 7d/30d/90d/12m
+- [ ] Client growth chart renders correctly
+- [ ] AI usage breakdown shows correct feature split
+- [ ] Plan capacity bars show correct usage %
+- [ ] CSV export downloads with correct data
+
+PLAN ENFORCEMENT
+- [ ] Starter: maxClients = 10 (cannot invite 11th client)
+- [ ] Professional: maxClients = 50
+- [ ] Starter: showPoweredBy forced to true even if API sends false
+- [ ] Feature access enforced server-side (not just UI hiding)
+
+BILLING
+- [ ] Starter plan subscription created in Stripe on registration
+- [ ] Professional plan upgrade creates new Stripe subscription
+- [ ] Downgrade cancels Professional, resets feature flags
+- [ ] Suspended partner cannot log in or invite clients
+- [ ] Past-due subscription shows warning in partner dashboard
+
+EMAILS
+- [ ] Client invite email arrives with partner branding (logo, colors)
+- [ ] Client invite email sent from partner's custom email if configured
+- [ ] Client welcome email sent after signup (branded)
+- [ ] Partner welcome email sent after registration (GetGrant.ai branding)
+- [ ] Domain verification success email sent when DNS verified
+- [ ] Weekly digest sent only to partners with activity
+
+ONBOARDING
+- [ ] New partner redirected to /partner/setup after registration
+- [ ] Setup wizard walks through: branding → invite first client → go live
+- [ ] onboardingCompletedAt set when partner completes setup
+- [ ] "You're live!" email sent on first client invite or completion
+
+PRICING PAGE
+- [ ] Partner pricing section visible on /pricing
+- [ ] Starter CTA redirects to partner registration with plan pre-selected
+- [ ] Professional CTA redirects to partner registration with plan pre-selected
+- [ ] Enterprise CTA opens contact form
+
+ADMIN
+- [ ] Admin can list all partners
+- [ ] Admin can suspend a partner (sends email notification)
+- [ ] Admin can reinstate a partner
+- [ ] Admin stats show correct platform-wide totals
+- [ ] Admin can override maxClients for enterprise partners

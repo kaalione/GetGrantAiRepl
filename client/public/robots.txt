@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /
+Allow: /bidrag
+Allow: /priser
+Disallow: /dashboard
+Disallow: /company
+Disallow: /applications
+Disallow: /calendar
+Disallow: /projects
+Disallow: /settings
+Disallow: /alerts
+Disallow: /content-library
+Disallow: /admin
+Disallow: /partner
+Disallow: /invite
+Disallow: /api/
+
+Sitemap: https://getgrant.ai/sitemap.xml

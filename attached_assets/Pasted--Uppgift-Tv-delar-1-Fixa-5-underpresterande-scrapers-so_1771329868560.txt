@@ -1,0 +1,200 @@
+## Uppgift
+
+Två delar:
+1. **Fixa 5 underpresterande scrapers** som redan finns men ger för få bidrag
+2. **Lägg till 8 nya scraper-källor** baserat på prioritering
+
+---
+
+### DEL 1: FIXA UNDERPRESTERANDE SCRAPERS
+
+Dessa sources finns redan i systemet men returnerar alldeles för få bidrag. 
+Felsök och fixa varje scraper. Vanliga problem: selectors matchar inte, 
+pagination saknas, JS-rendering krävs men BS4 används, URL har ändrats.
+
+#### 1.1 Formas (Har: 3 bidrag, Bör ha: 15-25)
+- URL: https://formas.se/soka-finansiering/alla-utlysningar.html
+- Teknik: BeautifulSoup
+- Troligt problem: Sidan kan ha ändrat HTML-struktur eller scraper missar pagination
+- Åtgärd: Besök sidan, inspektera HTML, uppdatera selectors. Kontrollera att både öppna OCH kommande utlysningar fångas
+
+#### 1.2 Energimyndigheten (Har: 2 bidrag, Bör ha: 20-30)
+- URL: https://www.energimyndigheten.se/forskning-och-innovation/utlysningar/
+- Teknik: BeautifulSoup ELLER GDP API (rekommenderas)
+- Troligt problem: Om den använder web scraping — sidan kan vara JS-renderad. GDP API är bättre.
+- Åtgärd: Kontrollera om GDP API finns tillgängligt (samma typ som Vinnova). Kopiera VinnovaApiClient-strukturen och anpassa endpoint. Om inget API finns, byt till Playwright.
+
+#### 1.3 Jordbruksverket (Har: 4 bidrag, Bör ha: 30+)
+- URL: https://jordbruksverket.se/stod/stod-och-ersattningar
+- Teknik: Playwright (krävs — JS-renderad)
+- Troligt problem: Sidstruktur med undersidor. Stöden finns under kategorier.
+- Åtgärd: Navigera alla kategorier, scrapa undersidor. Jordbruksverket har 30+ stödformer.
+
+#### 1.4 Almi (Har: 2 bidrag, Bör ha: 10-15)
+- URL: https://www.almi.se/vara-tjanster/finansiering/
+- Teknik: BeautifulSoup
+- Troligt problem: Finansieringsprodukter finns under flera undersidor (lån, bidrag, garanti)
+- Åtgärd: Scrapa alla finansieringskategorier. Tagga korrekt: typ = "lån", "bidrag", "garanti" etc.
+
+#### 1.5 Boverket (Har: 1 bidrag, Bör ha: 8-10)
+- URL: https://www.boverket.se/sv/bidrag--garantier/
+- Teknik: BeautifulSoup
+- Troligt problem: Sidan listar bidrag OCH garantier under samma sektion
+- Åtgärd: Scrapa hela bidrag-sektionen. Varje bidrag har undersida med detaljer.
+
+**Felsökningsprocess för varje scraper:**
+1. Kör scraper manuellt och logga output
+2. Besök URL i browser och jämför med scrapad data
+3. Inspektera HTML med dev tools — identifiera nya selectors
+4. Kolla om pagination saknas (vanligt problem)
+5. Kolla om sidan kräver JS-rendering (byt till Playwright om så)
+6. Uppdatera selectors och testa igen
+7. Verifiera att antal bidrag är rimligt
+
+**Efter fix — kör deduplicering:**
+```sql
+-- Hitta potentiella dubbletter efter fix
+SELECT title, source_name, COUNT(*) 
+FROM grants 
+GROUP BY title, source_name 
+HAVING COUNT(*) > 1;
+
+-- Hitta dubbletter över sources (t.ex. Verksamt + Vinnova)
+SELECT title, array_agg(source_name), COUNT(*) 
+FROM grants 
+GROUP BY title 
+HAVING COUNT(*) > 3;
+```
+
+---
+
+### DEL 2: LÄGG TILL NYA KÄLLOR (8 st)
+
+Prioriterade nya sources att implementera, sorterade efter ROI:
+
+#### 2.1 Interreg Öresund-Kattegat-Skagerrak (ÖKS)
+- URL: https://interreg-oks.eu/projektbanken
+- Teknik: BeautifulSoup
+- Fokus: Gränsöverskridande samarbete Syd/Västsverige + Danmark + Norge
+- Estimat: 10-20 utlysningar
+- Tid: 3 timmar
+
+#### 2.2 Interreg Central Baltic
+- URL: https://centralbaltic.eu/for-applicants/calls-for-proposals/
+- Teknik: BeautifulSoup
+- Fokus: Ostkusten, Gotland + Finland + Estland + Lettland
+- Estimat: 5-15 utlysningar
+- Tid: 3 timmar
+
+#### 2.3 Interreg Aurora (Botnia-Atlantica)
+- URL: https://www.interregaurora.eu/
+- Teknik: BeautifulSoup
+- Fokus: Norrland + Finland + Norge
+- Estimat: 5-10 utlysningar
+- Tid: 2-3 timmar
+
+#### 2.4 Interreg North Sea Region
+- URL: https://www.interregnorthsea.eu/
+- Teknik: BeautifulSoup
+- Fokus: Västsverige + Nordsjöregionen
+- Estimat: 5-10 utlysningar
+- Tid: 2-3 timmar
+
+#### 2.5 Interreg Baltic Sea Region
+- URL: https://interreg-baltic.eu/
+- Teknik: BeautifulSoup
+- Fokus: Hela Sverige + Östersjöregionen
+- Estimat: 10-15 utlysningar
+- Tid: 2-3 timmar
+
+**Tips för Interreg-scrapers:** Bygg en generisk InterregScraper-basklass. Alla 5 program har liknande struktur (calls for proposals-sida med kort info + länk till detaljer). Anpassa per program med config.
+
+#### 2.6 Forte
+- URL: https://forte.se/sok-finansiering/
+- Teknik: BeautifulSoup
+- Fokus: Hälsa, arbetsliv, välfärd — relevant för HealthTech/MedTech
+- Estimat: 10-20 utlysningar
+- Tid: 3 timmar
+
+#### 2.7 KK-stiftelsen
+- URL: https://www.kks.se/utlysningar/
+- Teknik: BeautifulSoup
+- Fokus: Samarbete högskola + företag — relevant för forskningsintensiva SME
+- Estimat: 5-15 utlysningar
+- Tid: 2-3 timmar
+
+#### 2.8 Internetstiftelsen
+- URL: https://internetstiftelsen.se/sok-stod/
+- Teknik: BeautifulSoup
+- Fokus: Digitala projekt, internettillgänglighet
+- Estimat: 3-8 utlysningar
+- Tid: 2 timmar
+
+---
+
+### IMPLEMENTATION FÖR VARJE NY KÄLLA
+
+Följ befintlig scraper-arkitektur. Varje ny scraper ska:
+
+1. **Ärva från BaseScraper** (eller motsvarande basklass i projektet)
+2. **Returnera grants i standardformat:**
+```typescript
+{
+  title: string;
+  description: string;
+  source_url: string;        // URL till bidraget
+  source_name: string;       // T.ex. "Interreg ÖKS"
+  status: 'open' | 'upcoming' | 'closed';
+  deadline: Date | null;
+  amount_min: number | null;
+  amount_max: number | null;
+  amount_description: string | null;
+  eligibility_criteria: string | null;   // Raw text — AI extraction körs separat
+  grant_type: string;        // "grant", "loan", "guarantee", etc.
+  funding_body: string;      // T.ex. "Interreg", "Forte"
+  application_url: string | null;
+}
+```
+3. **Använda upsert via source_url** som unique key (deduplicering nivå 1)
+4. **Respektera rate limits:** max 1 request per 2 sekunder, respektera robots.txt
+5. **Logga:** antal nya, uppdaterade, oförändrade grants per körning
+6. **Registrera i scraper-config** så den körs automatiskt i cron
+
+### EXTERN LÄNK: Stiftelsemedel.se
+
+Integrera INTE som scraper. Istället:
+- Lägg till en sektion/kort på grants-sidan: "🔍 Hitta fler stiftelser"
+- Text: "Sök bland 17 000+ stiftelser på Stiftelsemedel.se"
+- Direktlänk: https://stiftelsemedel.se/
+- Eventuellt också: https://stiftelser.lansstyrelsen.se/
+
+---
+
+### Verifiering efter implementation
+```sql
+-- Kontrollera nya sources
+SELECT source_name, COUNT(*), 
+  COUNT(*) FILTER (WHERE status = 'open') as open,
+  COUNT(*) FILTER (WHERE status = 'upcoming') as upcoming,
+  COUNT(*) FILTER (WHERE status = 'closed') as closed
+FROM grants 
+GROUP BY source_name 
+ORDER BY COUNT(*) DESC;
+
+-- Total
+SELECT COUNT(*) as total_grants FROM grants;
+
+-- Kontrollera deduplicering
+SELECT title, COUNT(*) as dupes
+FROM grants 
+GROUP BY title 
+HAVING COUNT(*) > 2
+ORDER BY dupes DESC
+LIMIT 20;
+```
+
+**Förväntat resultat efter allt:**
+- Fixade scrapers: +100-150 nya bidrag
+- 8 nya källor: +50-120 nya bidrag
+- Totalt: ~1 550-1 670 bidrag (upp från 1 404)
+- 29 aktiva sources (upp från 21)

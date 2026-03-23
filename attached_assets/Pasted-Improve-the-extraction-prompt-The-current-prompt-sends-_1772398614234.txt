@@ -1,0 +1,107 @@
+Improve the extraction prompt
+The current prompt sends raw grant text to Claude and expects structured JSON back. The quality of the output depends almost entirely on the prompt quality. Two known problems: (1) grants with very short descriptions produce low-confidence extractions, (2) the prompt doesn't tell Claude what to do when a field genuinely doesn't exist vs. when the information is present but worded ambiguously.
+ 
+1
+Find the extraction prompt
+Open server/services/eligibilityExtractor.ts (or the equivalent file in your codebase).
+Find the EXTRACTION_PROMPT constant or the string passed to the Claude API messages array.
+You are replacing the system/user prompt with the improved version below.
+ 
+2
+Replace the extraction prompt with this improved version
+Replace the entire prompt string with the following.
+Key changes: explicit empty-array instructions, confidence calibration guide,
+and handling for grants where eligibility is implicit (e.g. 'Swedish companies only').
+ 
+const EXTRACTION_PROMPT = `
+You extract eligibility criteria from Swedish/Nordic grant descriptions.
+Return ONLY valid JSON — no explanation, no markdown, no preamble.
+ 
+SCHEMA (all fields required):
+{
+ "company_types": string[],     // e.g. ["aktiebolag", "ekonomisk_forening"]
+                                 // Use [] if all org types are eligible
+                                 // Valid values: aktiebolag, handelsbolag,
+                                 //   enskild_firma, ekonomisk_forening,
+                                 //   ideell_forening, stiftelse, all
+ "company_sizes": {
+   "min_employees": number|null,  // null if not specified
+   "max_employees": number|null,  // null if not specified
+   "size_categories": string[]    // ["micro","small","medium","large"]
+                                 // Use [] if no size restriction
+ },
+ "revenue": {
+   "min_sek": number|null,        // Annual revenue in SEK, null if not stated
+   "max_sek": number|null
+ },
+ "geography": {
+   "regions": string[],           // Swedish region names, or ["hela_sverige"]
+                                 // or ["eu"] for EU-wide. Use [] if unclear.
+   "counties": string[]           // Swedish county (lan) names if specified
+ },
+ "sectors": string[],            // Industry sectors explicitly mentioned.
+                                 // Use [] if open to all sectors.
+                                 // e.g. ["tech","cleantech","life_science"]
+ "company_age": {
+   "min_years": number|null,
+   "max_years": number|null       // e.g. 3 for 'startups under 3 years old'
+ },
+ "collaboration_required": boolean, // true if grant requires a consortium
+ "who_cannot_apply": string[],   // Explicit exclusions mentioned in text
+ "other_requirements": string[], // Free-text list of other conditions
+ "funding_details": {
+   "min_amount_sek": number|null,
+   "max_amount_sek": number|null,
+   "co_funding_required": boolean,
+   "co_funding_pct": number|null  // e.g. 50 for '50% co-funding required'
+ },
+ "confidence_score": number      // 0.0–1.0. See calibration guide below.
+}
+ 
+CONFIDENCE SCORE CALIBRATION:
+ 0.9–1.0: Explicit, detailed eligibility section. Clear size limits,
+          sector focus, geography stated, company type named.
+ 0.7–0.89: Most key fields present. Some ambiguity in one or two fields.
+ 0.5–0.69: Partial information. Key fields like sector or size inferred
+           from context rather than explicitly stated.
+ 0.3–0.49: Very little eligibility detail. Only geography or org type clear.
+ 0.1–0.29: Almost no extractable eligibility. Description is a stub.
+ 0.0:      Cannot extract anything useful. Return this score but still
+           return valid JSON with all fields as null or [].
+ 
+IMPORTANT RULES:
+- Never guess. If a field is not mentioned, use null or [].
+- 'Swedish companies' implies geography.regions = ["hela_sverige"],
+ company_types = [] (all Swedish org types eligible).
+- 'SME' means company_sizes.size_categories = ["micro","small","medium"]
+ and max_employees = 249 (EU SME definition).
+- If text is in Swedish: behörig = eligible, sökande = applicant,
+ företag = company, omsättning = revenue, anställda = employees.
+- Return [] not null for array fields.
+- Return null not 0 for numeric fields that are not mentioned.
+`
+ 
+3
+Add a minimum-text guard before calling the API
+Before calling the Claude API, check that the grant has enough text to extract from.
+If not, skip it and record a reason — do not waste API calls on empty grants.
+ 
+// Add this before the API call in extractEligibility()
+const textToAnalyze = [
+ grant.description,
+ grant.eligibility_criteria,  // raw text field
+ grant.amount_description,
+].filter(Boolean).join(' ').trim();
+ 
+if (textToAnalyze.length < 80) {
+ // Too little text — record why and skip
+ return {
+   ...emptyEligibility(),
+   confidence_score: 0.0,
+   extraction_skip_reason: 'insufficient_text',
+ };
+}
+ 
+// Cap at 5000 chars to control token cost
+const truncated = textToAnalyze.substring(0, 5000);
+ Is in

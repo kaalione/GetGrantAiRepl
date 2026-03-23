@@ -1,0 +1,1016 @@
+You are completing BidragAI's production features using the EXISTING tech stack.
+
+CURRENT STACK (DO NOT CHANGE):
+✓ Backend: Express.js
+✓ Frontend: React + Vite
+✓ Database: PostgreSQL with Drizzle ORM (Replit Database)
+✓ Routing: Wouter (not Next.js router)
+✓ Auth: Will use Replit Auth
+✓ Email: Resend (already installed)
+
+GOAL: Add multi-user auth, rate limiting, email notifications, and cron automation.
+
+═══════════════════════════════════════════════════════════════════════════
+PRIORITY 1: REPLIT AUTH INTEGRATION (MULTI-USER SUPPORT)
+═══════════════════════════════════════════════════════════════════════════
+
+Replit provides built-in authentication. Use it instead of building from scratch.
+
+STEP 1.1: Enable Replit Auth
+
+In your Replit project:
+1. Go to "Tools" → "Authentication"
+2. Enable "Replit Auth"
+3. This automatically handles Google login and sessions
+
+STEP 1.2: Update Database Schema for Users
+
+Update your Drizzle schema file (likely in db/schema.ts or similar):
+```typescript
+import { pgTable, uuid, text, timestamp, boolean, integer, numeric, jsonb } from 'drizzle-orm/pg-core';
+
+// Add users table
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  replitUserId: text('replit_user_id').unique().notNull(),
+  email: text('email').notNull(),
+  fullName: text('full_name'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Update companies table to link to users
+export const companies = pgTable('companies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id).notNull(), // ADD THIS
+  companyName: text('company_name').notNull(),
+  orgNumber: text('org_number'),
+  industry: text('industry'),
+  employees: integer('employees'),
+  revenue: numeric('revenue'),
+  foundedYear: integer('founded_year'),
+  description: text('description'),
+  location: text('location'),
+  contactEmail: text('contact_email'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Add profiles table for user preferences
+export const profiles = pgTable('profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  emailNotifications: boolean('email_notifications').default(true),
+  notificationFrequency: text('notification_frequency').default('daily'), // 'daily', 'weekly', 'never'
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Add notifications tracking
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  grantId: uuid('grant_id').references(() => grants.id),
+  type: text('type').notNull(), // 'new_grant_match', 'deadline_reminder', 'weekly_digest'
+  sentAt: timestamp('sent_at').defaultNow(),
+  openedAt: timestamp('opened_at'),
+  clickedAt: timestamp('clicked_at'),
+});
+```
+
+Run migration:
+```bash
+npm run db:push  # or however you run Drizzle migrations
+```
+
+STEP 1.3: Create Auth Middleware
+
+Create server/middleware/auth.ts:
+```typescript
+import { Request, Response, NextFunction } from 'express';
+
+// Extend Express Request type to include user
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        replitUserId: string;
+        email: string;
+        fullName?: string;
+      };
+    }
+  }
+}
+
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  // Replit Auth provides user info via headers
+  const replitUserId = req.headers['x-replit-user-id'] as string;
+  const replitUserName = req.headers['x-replit-user-name'] as string;
+  const replitUserEmail = req.headers['x-replit-user-email'] as string;
+
+  if (!replitUserId) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Du måste vara inloggad för att komma åt denna resurs',
+    });
+  }
+
+  // Find or create user in database
+  const db = req.app.get('db'); // Assuming you store db instance in app
+  
+  let user = await db.query.users.findFirst({
+    where: eq(users.replitUserId, replitUserId),
+  });
+
+  if (!user) {
+    // Create user on first login
+    [user] = await db.insert(users).values({
+      replitUserId,
+      email: replitUserEmail || `${replitUserName}@replit.com`,
+      fullName: replitUserName,
+    }).returning();
+  }
+
+  // Attach user to request
+  req.user = {
+    id: user.id,
+    replitUserId: user.replitUserId,
+    email: user.email,
+    fullName: user.fullName,
+  };
+
+  next();
+}
+
+export function optionalAuth(req: Request, res: Response, next: NextFunction) {
+  const replitUserId = req.headers['x-replit-user-id'] as string;
+  
+  if (replitUserId) {
+    // Run requireAuth logic but don't fail if no user
+    requireAuth(req, res, next);
+  } else {
+    next();
+  }
+}
+```
+
+STEP 1.4: Protect API Routes
+
+Update your Express routes to use auth middleware:
+```typescript
+// In server/routes/companies.ts (or wherever your routes are)
+import express from 'express';
+import { requireAuth } from '../middleware/auth';
+
+const router = express.Router();
+
+// Protect company routes
+router.use(requireAuth);
+
+// Get user's companies
+router.get('/companies', async (req, res) => {
+  const companies = await db.query.companies.findMany({
+    where: eq(companies.userId, req.user.id),
+  });
+  
+  res.json(companies);
+});
+
+// Create company (automatically link to current user)
+router.post('/companies', async (req, res) => {
+  const [company] = await db.insert(companies).values({
+    ...req.body,
+    userId: req.user.id, // Link to logged-in user
+  }).returning();
+  
+  res.json(company);
+});
+
+// Update company (check ownership)
+router.put('/companies/:id', async (req, res) => {
+  const company = await db.query.companies.findFirst({
+    where: and(
+      eq(companies.id, req.params.id),
+      eq(companies.userId, req.user.id)
+    ),
+  });
+  
+  if (!company) {
+    return res.status(404).json({ error: 'Company not found or access denied' });
+  }
+  
+  const [updated] = await db.update(companies)
+    .set(req.body)
+    .where(eq(companies.id, req.params.id))
+    .returning();
+  
+  res.json(updated);
+});
+
+export default router;
+```
+
+Apply same pattern to:
+- Applications routes
+- Profile routes
+- Any route that accesses user-specific data
+
+STEP 1.5: Update Frontend to Show Auth Status
+
+Create src/components/UserMenu.tsx:
+```typescript
+import { useEffect, useState } from 'react';
+
+interface ReplitUser {
+  name: string;
+  email: string;
+}
+
+export function UserMenu() {
+  const [user, setUser] = useState<ReplitUser | null>(null);
+
+  useEffect(() => {
+    // Replit Auth provides user info in window object
+    const replitUser = (window as any).REPLIT_USER;
+    if (replitUser) {
+      setUser({
+        name: replitUser.name,
+        email: replitUser.email,
+      });
+    }
+  }, []);
+
+  if (!user) {
+    return (
+      <a 
+        href="/login" 
+        className="btn btn-primary"
+      >
+        Logga in
+      </a>
+    );
+  }
+
+  return (
+    <div className="dropdown dropdown-end">
+      <label tabIndex={0} className="btn btn-ghost btn-circle avatar">
+        <div className="w-10 rounded-full">
+          <img src={`https://ui-avatars.com/api/?name=${user.name}`} alt={user.name} />
+        </div>
+      </label>
+      <ul tabIndex={0} className="mt-3 p-2 shadow menu menu-compact dropdown-content bg-base-100 rounded-box w-52">
+        <li className="menu-title">
+          <span>{user.name}</span>
+        </li>
+        <li><a href="/profile">Profil</a></li>
+        <li><a href="/applications">Mina ansökningar</a></li>
+        <li><a href="/logout">Logga ut</a></li>
+      </ul>
+    </div>
+  );
+}
+```
+
+Add to your main navigation component.
+
+STEP 1.6: Create Login Page
+
+Replit Auth uses a simple redirect flow. Create src/pages/Login.tsx:
+```typescript
+export function Login() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold">BidragAI</h2>
+          <p className="mt-2 text-gray-600">
+            Hitta och ansök om bidrag med AI
+          </p>
+        </div>
+        
+        
+          href="/auth/replit"
+          className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
+        >
+          Logga in med Replit
+        </a>
+      </div>
+    </div>
+  );
+}
+```
+
+Add auth endpoint in server:
+```typescript
+// server/routes/auth.ts
+import express from 'express';
+
+const router = express.Router();
+
+router.get('/auth/replit', (req, res) => {
+  // Replit Auth handles this automatically
+  // Just redirect to home after auth
+  res.redirect('/dashboard');
+});
+
+router.get('/logout', (req, res) => {
+  // Clear any session cookies if you have them
+  res.redirect('/');
+});
+
+export default router;
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PRIORITY 2: RATE LIMITING (COST PROTECTION)
+═══════════════════════════════════════════════════════════════════════════
+
+Use simple in-memory rate limiting (no Redis needed for MVP).
+
+STEP 2.1: Install Rate Limiting Package
+```bash
+npm install express-rate-limit
+```
+
+STEP 2.2: Create Rate Limiting Middleware
+
+Create server/middleware/rateLimiter.ts:
+```typescript
+import rateLimit from 'express-rate-limit';
+
+// General API rate limiter
+export const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requests per window
+  message: {
+    error: 'För många requests',
+    message: 'Försök igen om 15 minuter',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// AI semantic analysis limiter (more restrictive)
+export const semanticAnalysisLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 analyses per hour
+  keyGenerator: (req) => req.user?.id || req.ip, // Rate limit per user
+  message: {
+    error: 'AI-gräns nådd',
+    message: 'Du har använt alla dina 10 AI-analyser för denna timme. Försök igen senare.',
+    resetAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Application generation limiter
+export const applicationGenerationLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  max: 20, // 20 generations per day
+  keyGenerator: (req) => req.user?.id || req.ip,
+  message: {
+    error: 'Daglig gräns nådd',
+    message: 'Du har genererat 20 ansökningar idag. Kom tillbaka imorgon.',
+    resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+```
+
+STEP 2.3: Apply to Routes
+```typescript
+// In your main server file or routes
+import { apiLimiter, semanticAnalysisLimiter, applicationGenerationLimiter } from './middleware/rateLimiter';
+
+// Apply general rate limiter to all API routes
+app.use('/api', apiLimiter);
+
+// Apply specific limiters to AI endpoints
+app.post('/api/grants/:id/analyze', 
+  requireAuth,
+  semanticAnalysisLimiter,
+  async (req, res) => {
+    // Semantic analysis logic
+  }
+);
+
+app.post('/api/applications/generate',
+  requireAuth,
+  applicationGenerationLimiter,
+  async (req, res) => {
+    // Application generation logic
+  }
+);
+```
+
+STEP 2.4: Track Usage in Database
+
+Add AI usage tracking table to schema:
+```typescript
+export const aiUsageLogs = pgTable('ai_usage_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  endpoint: text('endpoint').notNull(), // 'semantic_match', 'application_generation'
+  grantId: uuid('grant_id').references(() => grants.id),
+  companyId: uuid('company_id').references(() => companies.id),
+  tokensUsed: integer('tokens_used'),
+  costSek: numeric('cost_sek', { precision: 10, scale: 2 }),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+```
+
+Log usage after AI calls:
+```typescript
+// After Claude API call
+await db.insert(aiUsageLogs).values({
+  userId: req.user.id,
+  endpoint: 'semantic_match',
+  grantId: req.params.id,
+  companyId: req.body.companyId,
+  tokensUsed: response.usage?.output_tokens || 0,
+  costSek: ((response.usage?.output_tokens || 0) / 1000000) * 15, // Sonnet 4 pricing
+});
+```
+
+STEP 2.5: Show Rate Limit Status in Frontend
+
+Update your AI analysis button to show remaining quota:
+```typescript
+import { useState, useEffect } from 'react';
+
+export function SemanticAnalysisButton({ grantId, companyId }) {
+  const [loading, setLoading] = useState(false);
+  const [remaining, setRemaining] = useState<number | null>(null);
+
+  async function handleAnalyze() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/grants/${grantId}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId }),
+      });
+
+      // Check rate limit headers
+      const rateLimitRemaining = res.headers.get('X-RateLimit-Remaining');
+      if (rateLimitRemaining) {
+        setRemaining(parseInt(rateLimitRemaining));
+      }
+
+      if (res.status === 429) {
+        const error = await res.json();
+        alert(error.message);
+        return;
+      }
+
+      const data = await res.json();
+      // Display results
+    } catch (error) {
+      console.error('Analysis failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        onClick={handleAnalyze}
+        disabled={loading}
+        className="btn btn-primary"
+      >
+        {loading ? 'Analyserar...' : 'Kör AI-analys'}
+      </button>
+      
+      {remaining !== null && (
+        <p className="text-sm text-gray-500 mt-2">
+          {remaining} analyser kvar denna timme
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PRIORITY 3: EMAIL NOTIFICATIONS (RESEND SETUP)
+═══════════════════════════════════════════════════════════════════════════
+
+Resend is already installed. Just configure it.
+
+STEP 3.1: Configure Resend
+
+Add to .env (Replit Secrets):
+RESEND_API_KEY=re_your_api_key_here
+FROM_EMAIL=notifications@bidragai.se
+APP_URL=https://your-replit-url.repl.co
+
+Get API key from https://resend.com (free: 100 emails/day).
+
+STEP 3.2: Email Template Functions
+
+Create server/services/email.ts:
+```typescript
+import { Resend } from 'resend';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+const APP_URL = process.env.APP_URL || 'http://localhost:5173';
+
+export async function sendNewGrantEmail(
+  to: string,
+  grant: {
+    id: string;
+    title: string;
+    deadline: Date;
+  },
+  companyName: string,
+  matchScore: number
+) {
+  const { data, error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    to,
+    subject: `Nytt bidrag: ${grant.title}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h1 style="color: #3b82f6;">🎯 Nytt matchande bidrag!</h1>
+        
+        <p>Hej från BidragAI!</p>
+        
+        <p>Vi har hittat ett nytt bidrag som passar <strong>${companyName}</strong>:</p>
+        
+        <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h2 style="margin: 0 0 10px 0;">${grant.title}</h2>
+          <p style="margin: 0;">
+            <strong>Matchning:</strong> <span style="color: #10b981; font-size: 24px;">${matchScore}%</span>
+          </p>
+          <p style="margin: 10px 0 0 0;">
+            <strong>Deadline:</strong> ${new Date(grant.deadline).toLocaleDateString('sv-SE')}
+          </p>
+        </div>
+        
+        <a 
+          href="${APP_URL}/bidrag/${grant.id}" 
+          style="display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;"
+        >
+          Se bidragsdetaljer
+        </a>
+        
+        <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+          BidragAI - AI-driven bidragsplattform för svenska företag
+        </p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    console.error('Failed to send email:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function sendDeadlineReminder(
+  to: string,
+  grant: {
+    id: string;
+    title: string;
+    deadline: Date;
+  },
+  companyName: string,
+  daysUntilDeadline: number
+) {
+  const { data, error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    to,
+    subject: `⏰ ${daysUntilDeadline} dagar kvar: ${grant.title}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h1>⏰ Deadline närmar sig!</h1>
+        
+        <p>Hej!</p>
+        
+        <p>Påminnelse om att <strong>${grant.title}</strong> stänger om:</p>
+        
+        <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <p style="margin: 0; font-size: 32px; font-weight: bold; color: #92400e;">
+            ${daysUntilDeadline} dagar
+          </p>
+          <p style="margin: 10px 0 0 0;">
+            Deadline: ${new Date(grant.deadline).toLocaleDateString('sv-SE')}
+          </p>
+        </div>
+        
+        <p>Har du ansökt än? Skapa en ansökan med vår AI nu!</p>
+        
+        <a 
+          href="${APP_URL}/bidrag/${grant.id}" 
+          style="display: inline-block; background: #f59e0b; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;"
+        >
+          Ansök nu
+        </a>
+      </div>
+    `,
+  });
+
+  if (error) {
+    console.error('Failed to send reminder:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function sendWeeklyDigest(
+  to: string,
+  userName: string,
+  newGrants: any[],
+  upcomingDeadlines: any[]
+) {
+  const { data, error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    to,
+    subject: 'Din veckoöversikt från BidragAI',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h1>Veckoöversikt</h1>
+        
+        <p>Hej ${userName}!</p>
+        
+        <h2>📊 Denna vecka</h2>
+        
+        <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 15px 0;">
+          <p><strong>${newGrants.length}</strong> nya matchande bidrag</p>
+          <p><strong>${upcomingDeadlines.length}</strong> deadlines inom 7 dagar</p>
+        </div>
+        
+        ${newGrants.length > 0 ? `
+          <h3>Nya bidrag att kolla på:</h3>
+          <ul>
+            ${newGrants.slice(0, 5).map(grant => `
+              <li>
+                <a href="${APP_URL}/bidrag/${grant.id}">${grant.title}</a>
+                <span style="color: #10b981; font-weight: bold;"> ${grant.matchScore}%</span>
+              </li>
+            `).join('')}
+          </ul>
+        ` : ''}
+        
+        <a 
+          href="${APP_URL}/bidrag" 
+          style="display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;"
+        >
+          Se alla bidrag
+        </a>
+      </div>
+    `,
+  });
+
+  if (error) {
+    console.error('Failed to send digest:', error);
+    throw error;
+  }
+
+  return data;
+}
+```
+
+STEP 3.3: Create Notification Cron Endpoint
+
+Create server/routes/cron.ts:
+```typescript
+import express from 'express';
+import { sendNewGrantEmail, sendDeadlineReminder } from '../services/email';
+
+const router = express.Router();
+
+// Middleware to verify cron secret
+function verifyCronSecret(req, res, next) {
+  const secret = req.headers['authorization']?.replace('Bearer ', '');
+  
+  if (secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  next();
+}
+
+router.use(verifyCronSecret);
+
+// Daily notifications check
+router.get('/cron/notifications', async (req, res) => {
+  const db = req.app.get('db');
+  
+  try {
+    // Get grants created in last 24 hours
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    const newGrants = await db.query.grants.findMany({
+      where: and(
+        gte(grants.createdAt, yesterday),
+        eq(grants.status, 'open')
+      ),
+    });
+    
+    // Get all users with email notifications enabled
+    const usersWithProfiles = await db.query.users.findMany({
+      with: {
+        profile: true,
+        companies: true,
+      },
+    });
+    
+    let sentCount = 0;
+    
+    for (const grant of newGrants) {
+      for (const user of usersWithProfiles) {
+        // Skip if notifications disabled
+        if (!user.profile?.emailNotifications) continue;
+        
+        for (const company of user.companies) {
+          // Calculate basic match
+          const matchScore = calculateMatchScore(company, grant);
+          
+          if (matchScore >= 60) {
+            await sendNewGrantEmail(
+              user.email,
+              grant,
+              company.companyName,
+              matchScore
+            );
+            
+            // Log notification
+            await db.insert(notifications).values({
+              userId: user.id,
+              grantId: grant.id,
+              type: 'new_grant_match',
+            });
+            
+            sentCount++;
+          }
+        }
+      }
+    }
+    
+    // Check upcoming deadlines (7, 3, 1 days)
+    const today = new Date();
+    const deadlineChecks = [7, 3, 1];
+    
+    for (const days of deadlineChecks) {
+      const targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() + days);
+      targetDate.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const upcomingGrants = await db.query.grants.findMany({
+        where: and(
+          eq(grants.status, 'open'),
+          gte(grants.deadline, targetDate),
+          lte(grants.deadline, endOfDay)
+        ),
+      });
+      
+      for (const grant of upcomingGrants) {
+        for (const user of usersWithProfiles) {
+          if (!user.profile?.emailNotifications) continue;
+          
+          // Check if already notified in last 24h
+          const recentNotif = await db.query.notifications.findFirst({
+            where: and(
+              eq(notifications.userId, user.id),
+              eq(notifications.grantId, grant.id),
+              eq(notifications.type, 'deadline_reminder'),
+              gte(notifications.sentAt, yesterday)
+            ),
+          });
+          
+          if (!recentNotif && user.companies.length > 0) {
+            await sendDeadlineReminder(
+              user.email,
+              grant,
+              user.companies[0].companyName,
+              days
+            );
+            
+            await db.insert(notifications).values({
+              userId: user.id,
+              grantId: grant.id,
+              type: 'deadline_reminder',
+            });
+            
+            sentCount++;
+          }
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      notificationsSent: sentCount,
+      newGrants: newGrants.length,
+    });
+    
+  } catch (error) {
+    console.error('Notification cron failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+export default router;
+
+function calculateMatchScore(company, grant) {
+  // Simplified matching logic
+  let score = 50;
+  
+  if (grant.keywords?.some(k => 
+    company.description?.toLowerCase().includes(k.toLowerCase())
+  )) {
+    score += 20;
+  }
+  
+  if (grant.targetGroup?.includes(company.industry)) {
+    score += 30;
+  }
+  
+  return Math.min(100, score);
+}
+```
+
+STEP 3.4: Test Email Endpoint
+
+Create test route:
+```typescript
+router.get('/test/email', async (req, res) => {
+  const testEmail = req.query.email || 'test@example.com';
+  
+  try {
+    await sendNewGrantEmail(
+      testEmail,
+      {
+        id: 'test-123',
+        title: 'Test Bidrag',
+        deadline: new Date('2026-12-31'),
+      },
+      'Test AB',
+      85
+    );
+    
+    res.json({ success: true, message: `Email sent to ${testEmail}` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+```
+
+Test: `GET /api/test/email?email=your@email.com`
+
+═══════════════════════════════════════════════════════════════════════════
+PRIORITY 4: CRON JOB SETUP
+═══════════════════════════════════════════════════════════════════════════
+
+STEP 4.1: Add Cron Secret
+
+In Replit Secrets, add:
+CRON_SECRET=your_random_secure_string_32chars_minimum
+
+STEP 4.2: Setup External Cron Service
+
+Use https://cron-job.org (free):
+
+1. Sign up
+2. Create 3 jobs:
+
+**Job 1: Daily Scraping**
+- URL: `https://your-repl-name.repl.co/api/cron/scrape?frequency=daily`
+- Schedule: `0 8 * * *` (8 AM daily)
+- Headers: `Authorization: Bearer YOUR_CRON_SECRET`
+
+**Job 2: Daily Notifications**
+- URL: `https://your-repl-name.repl.co/api/cron/notifications`
+- Schedule: `0 9 * * *` (9 AM daily, after scraping)
+- Headers: `Authorization: Bearer YOUR_CRON_SECRET`
+
+**Job 3: Weekly Digest**
+- URL: `https://your-repl-name.repl.co/api/cron/weekly-digest`
+- Schedule: `0 8 * * 1` (8 AM every Monday)
+- Headers: `Authorization: Bearer YOUR_CRON_SECRET`
+
+STEP 4.3: Create Scraper Cron Endpoint
+
+Add to server/routes/cron.ts:
+```typescript
+router.get('/cron/scrape', async (req, res) => {
+  const frequency = req.query.frequency || 'daily';
+  
+  try {
+    // Trigger Python scrapers
+    const { exec } = require('child_process');
+    const util = require('util');
+    const execPromise = util.promisify(exec);
+    
+    const { stdout, stderr } = await execPromise(
+      'cd scrapers && python3 main.py --all'
+    );
+    
+    res.json({
+      success: true,
+      output: stdout,
+      errors: stderr || null,
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PRIORITY 5: DEPLOYMENT & PRODUCTION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════
+
+STEP 5.1: Environment Variables Checklist
+
+Verify all secrets are set in Replit:
+
+□ ANTHROPIC_API_KEY
+□ RESEND_API_KEY
+□ FROM_EMAIL
+□ APP_URL
+□ CRON_SECRET
+□ DATABASE_URL (auto-set by Replit)
+
+STEP 5.2: Security Checklist
+
+□ All API routes check auth with requireAuth middleware
+□ Rate limiting enabled on AI endpoints
+□ CRON_SECRET is strong and secret
+□ Database queries use Drizzle ORM (prevents SQL injection)
+□ User input is validated
+
+STEP 5.3: Performance Optimizations
+
+Add indexes to database (already in schema but verify):
+```typescript
+// In your schema file, ensure these indexes exist:
+export const companiesUserIdIndex = index('companies_user_id_idx').on(companies.userId);
+export const grantsDeadlineIndex = index('grants_deadline_idx').on(grants.deadline);
+export const grantsStatusIndex = index('grants_status_idx').on(grants.status);
+export const notificationsUserIdIndex = index('notifications_user_id_idx').on(notifications.userId);
+```
+
+STEP 5.4: Launch Checklist
+
+□ Auth working (can sign up, login, logout)
+□ Multi-user support (users see only their own data)
+□ Rate limiting active (test with 11 analyses)
+□ Emails sending (test endpoint works)
+□ Cron jobs configured (all 3 jobs set up)
+□ 379 grants still in database
+□ All existing features still work
+□ Error handling in place
+□ Database backups enabled (Replit auto-backs up)
+
+═══════════════════════════════════════════════════════════════════════════
+TESTING PROCEDURES
+═══════════════════════════════════════════════════════════════════════════
+
+Test these user flows:
+
+1. **Auth Flow**:
+   - Visit app → redirects to login
+   - Click "Logga in med Replit" → authenticates
+   - Redirects to dashboard
+   - Can see user menu
+   - Logout works
+
+2. **Multi-User**:
+   - Create account A, add company
+   - Create account B (different Replit user), add company
+   - Verify A cannot see B's companies
+   - Both can see same grants
+
+3. **Rate Limiting**:
+   - Run 10 semantic analyses → should work
+   - Run 11th → should get 429 error
+   - Wait 1 hour → should work again
+
+4. **Email**:
+   - Hit test email endpoint
+   - Verify email arrives
+   - Check email looks good on mobile
+
+5. **Cron (Manual)**:
+   - Call `/api/cron/notifications` with auth header
+   - Check notifications table for new entries
+   - Verify emails sent

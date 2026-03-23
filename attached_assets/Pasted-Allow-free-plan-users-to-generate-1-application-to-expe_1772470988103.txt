@@ -1,0 +1,61 @@
+Allow free plan users to generate 1 application to experience the 
+core product before requiring Pro upgrade.
+
+CURRENT BEHAVIOR: Any attempt to generate an application on the free plan
+hits a paywall immediately (before the user experiences the wizard).
+
+NEW BEHAVIOR: 
+- Free users can complete the full application wizard ONCE
+- On completion, they see the generated content
+- Export (DOCX/PDF) still requires Pro
+- A banner shows: "Exportera din ansökan — uppgradera till Pro"
+- Second attempt → paywall with message: "Du har använt din gratis ansökan. 
+  Uppgradera för obegränsad tillgång."
+
+IMPLEMENTATION:
+
+1. In the database, add tracking for free trial usage.
+   Check if users table has a field like free_application_used (boolean).
+   If not, add it: ALTER TABLE users ADD COLUMN free_application_used 
+   BOOLEAN DEFAULT FALSE;
+   And update the Drizzle schema accordingly.
+
+2. In server/routes.ts, find the application generation endpoint 
+   (POST /api/applications or similar).
+   Modify the plan check:
+   
+   BEFORE (current):
+     if (user.plan === 'free') return 403 paywall error
+   
+   AFTER:
+     if (user.plan === 'free') {
+       if (user.free_application_used) {
+         return 403 with message "Gratis provansökan redan använd"
+       }
+       // Allow generation, mark as used after success
+     }
+   
+   After successful generation for a free user:
+     UPDATE users SET free_application_used = true WHERE id = user.id
+
+3. In the application wizard frontend (grant-apply.tsx or similar):
+   After the AI generates content (step 4), if user is on free plan:
+   - Show the generated content normally (so they see the value)
+   - Replace the export buttons with a Pro upgrade banner:
+   
+   ┌─────────────────────────────────────────────┐
+   │ 🎉 Din ansökan är genererad!                │
+   │                                             │
+   │ Exportera som DOCX eller PDF med Pro-planen │
+   │                                             │
+   │ [Uppgradera till Pro →]  [Visa priser]      │
+   └─────────────────────────────────────────────┘
+
+4. In applications list (/ansokan), show free-trial application 
+   with a "Pro krävs för export" badge instead of export button.
+
+After implementing:
+- Test that a free user can generate exactly 1 application
+- Test that second attempt shows paywall
+- Test that Pro users are unaffected
+- Verify free_application_used is set to true after first generation

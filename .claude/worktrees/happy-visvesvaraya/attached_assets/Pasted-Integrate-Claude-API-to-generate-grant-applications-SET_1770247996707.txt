@@ -1,0 +1,116 @@
+Integrate Claude API to generate grant applications.
+SETUP:
+	1.	Add environment variable: ANTHROPIC_API_KEY
+	2.	Install: npm install @anthropic-ai/sdk
+	3.	Create lib/claude.ts: import Anthropic from '@anthropic-ai/sdk';
+
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+export async function generateApplication(
+  grant: Grant,
+  company: Company,
+  previousApplications?: string[] // For learning
+) {
+  const system = `Du är expert på svenska företagsbidrag. 
+  Din uppgift är att skriva en övertygande ansökan baserat på:
+  - Företagets information
+  - Bidragets krav
+  - Tidigare godkända ansökningar (om tillgängliga)
+  
+  Skriv professionellt på svenska med tydlig struktur.`;
+  
+  const prompt = `
+  FÖRETAGSINFORMATION:
+  Namn: ${company.company_name}
+  Bransch: ${company.industry}
+  Antal anställda: ${company.employees}
+  Beskrivning: ${company.description}
+  
+  BIDRAG ATT SÖKA:
+  Namn: ${grant.title}
+  Beskrivning: ${grant.description}
+  Krav: ${JSON.stringify(grant.eligibility_criteria)}
+  Krav på ansökan: ${JSON.stringify(grant.application_requirements)}
+  
+  ${previousApplications ? `EXEMPEL PÅ GODKÄNDA ANSÖKNINGAR:\n${previousApplications.join('\n\n')}` : ''}
+  
+  Skriv en komplett ansökan som:
+  1. Tydligt visar hur företaget uppfyller kraven
+  2. Är övertygande och välformulerad
+  3. Följer strukturen som krävs
+  4. Är på korrekt svenska utan AI-känsla
+  `;
+  
+  const message = await client.messages.create({
+    model: 'claude-sonnet-4-5-20250929',
+    max_tokens: 4000,
+    system: system,
+    messages: [{ role: 'user', content: prompt }],
+  });
+  
+  return message.content[0].text;
+}
+PAGES:
+	1.	app/grants/[id]/apply/page.tsx:
+	∙	“Generate Application” page
+	∙	Show:
+	∙	Grant summary
+	∙	Company profile summary
+	∙	Match score
+	∙	Button: “Generate with AI”
+	∙	Loading state while generating
+	∙	After generation:
+	∙	Show generated text in editable textarea
+	∙	Word count
+	∙	“Regenerate” button
+	∙	“Save Draft” button
+	∙	“Download as PDF” button (bonus)
+	∙	Estimated cost (based on token usage)
+API ROUTES:
+	1.	app/api/applications/generate/route.ts: import { generateApplication } from '@/lib/claude';
+
+export async function POST(request: Request) {
+  const { grantId, companyId } = await request.json();
+  
+  // Fetch grant and company from DB
+  const grant = await getGrant(grantId);
+  const company = await getCompany(companyId);
+  
+  // Optional: Fetch similar successful applications
+  // const examples = await getSimilarApplications(grant.source_name);
+  
+  const applicationText = await generateApplication(grant, company);
+  
+  // Save to applications table as draft
+  const application = await createApplication({
+    company_id: companyId,
+    grant_id: grantId,
+    generated_content: applicationText,
+    ai_model_used: 'claude-sonnet-4-5',
+    status: 'draft',
+  });
+  
+  return Response.json({ 
+    application,
+    token_usage: 'estimated based on length' 
+  });
+}
+2.	app/api/applications/[id]/route.ts:
+	∙	PUT: Update application (when user edits)
+	∙	DELETE: Delete draft
+	3.	app/applications/page.tsx:
+	∙	List all user’s applications
+	∙	Tabs: Drafts, Submitted
+	∙	Each showing: grant name, company, date, status
+COMPONENTS:
+	1.	components/applications/ApplicationEditor.tsx:
+	∙	Rich text editor for generated application
+	∙	Auto-save
+	∙	Character/word count
+	∙	Export buttons
+	2.	components/applications/CostEstimator.tsx:
+	∙	Show estimated AI cost based on token usage
+	∙	“Costs approximately 0.15 SEK to generate”
+Implement AI application generation with Claude integration.

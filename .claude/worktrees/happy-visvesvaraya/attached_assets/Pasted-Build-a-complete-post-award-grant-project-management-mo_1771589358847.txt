@@ -1,0 +1,1272 @@
+Build a complete post-award grant project management module for GetGrant.ai.
+This is a self-contained feature that lets users track everything after a grant
+is approved: milestones, deliverables, reports, budget, and team tasks.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1: DATABASE SCHEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add all of the following to shared/schema.ts and run npm run db:push.
+```typescript
+// Core project record — one per approved grant
+export const grantProjects = pgTable('grant_projects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: varchar('user_id').notNull(),
+  applicationId: uuid('application_id').references(() => applications.id),
+  grantId: varchar('grant_id'),
+  companyId: varchar('company_id').notNull(),
+  
+  // Grant details
+  title: varchar('title').notNull(),
+  funder: varchar('funder').notNull(),
+  approvedAmountSek: integer('approved_amount_sek'),
+  grantAgreementRef: varchar('grant_agreement_ref'),  // funder's reference number
+  reportingContactName: varchar('reporting_contact_name'),
+  reportingContactEmail: varchar('reporting_contact_email'),
+  funderPortalUrl: varchar('funder_portal_url'),      // link to funder's reporting system
+  
+  // Timeline
+  projectStartDate: date('project_start_date'),
+  projectEndDate: date('project_end_date'),
+  
+  // Status
+  status: varchar('status').default('active'),
+  // active | on_hold | completed | cancelled
+  healthStatus: varchar('health_status').default('on_track'),
+  // on_track | at_risk | delayed | blocked
+  
+  // Co-funding tracking
+  coFundingRequired: boolean('co_funding_required').default(false),
+  coFundingPercentage: integer('co_funding_percentage'),  // e.g. 50 = 50%
+  coFundingAmountSek: integer('co_funding_amount_sek'),
+  
+  // Internal notes
+  notes: text('notes'),
+  internalTags: varchar('internal_tags').array().default('[]'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Project milestones and deliverables
+export const projectMilestones = pgTable('project_milestones', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => grantProjects.id),
+  
+  title: varchar('title').notNull(),
+  description: text('description'),
+  order: integer('order').default(0),
+  
+  // Dates
+  dueDate: date('due_date').notNull(),
+  completedAt: timestamp('completed_at'),
+  
+  // Status
+  status: varchar('status').default('pending'),
+  // pending | in_progress | completed | delayed | waived
+  
+  // Deliverable
+  deliverableType: varchar('deliverable_type'),
+  // report | demo | prototype | publication | dataset | presentation | other
+  deliverableDescription: text('deliverable_description'),
+  deliverableUrl: varchar('deliverable_url'),         // link to submitted deliverable
+  deliverableFileKey: varchar('deliverable_file_key'),// if stored internally
+  
+  // Funder confirmation
+  funderApproved: boolean('funder_approved'),
+  funderApprovedAt: timestamp('funder_approved_at'),
+  funderFeedback: text('funder_feedback'),
+  
+  // Budget unlocked by this milestone (for milestone-based grant releases)
+  budgetReleaseAmountSek: integer('budget_release_amount_sek'),
+  budgetReleasedAt: timestamp('budget_released_at'),
+  
+  // Responsible person
+  assignedToEmail: varchar('assigned_to_email'),
+  assignedToName: varchar('assigned_to_name'),
+  
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Progress and financial reports
+export const projectReports = pgTable('project_reports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => grantProjects.id),
+  
+  reportType: varchar('report_type').notNull(),
+  // progress | interim | financial | final | ad_hoc
+  title: varchar('title').notNull(),                  // e.g. "Interim Report 1 — Q2 2026"
+  periodStart: date('period_start'),                  // reporting period
+  periodEnd: date('period_end'),
+  
+  // Dates
+  dueDate: date('due_date'),
+  submittedAt: timestamp('submitted_at'),
+  funderDeadline: date('funder_deadline'),            // hard deadline from funder
+  
+  // Status
+  status: varchar('status').default('upcoming'),
+  // upcoming | drafting | in_review | submitted | approved | rejected | revision_needed
+  
+  // Content
+  content: text('content'),                           // main report body (markdown)
+  executiveSummary: text('executive_summary'),
+  financialSummary: text('financial_summary'),
+  attachmentUrls: jsonb('attachment_urls').default('[]'),
+  // [{ name: string, url: string, uploadedAt: string }]
+  
+  // AI generation metadata
+  aiGenerated: boolean('ai_generated').default(false),
+  aiGeneratedAt: timestamp('ai_generated_at'),
+  lastEditedBy: varchar('last_edited_by'),
+  
+  // Funder response
+  funderFeedback: text('funder_feedback'),
+  funderApprovedAt: timestamp('funder_approved_at'),
+  revisionRequestedAt: timestamp('revision_requested_at'),
+  revisionNotes: text('revision_notes'),
+  
+  // Submission tracking
+  submissionMethod: varchar('submission_method'),
+  // email | portal | postal | other
+  submissionConfirmationRef: varchar('submission_confirmation_ref'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Budget tracking by category
+export const projectBudgetCategories = pgTable('project_budget_categories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => grantProjects.id),
+  
+  category: varchar('category').notNull(),
+  // personnel | equipment | subcontractors | travel | overhead | 
+  // materials | ip_costs | dissemination | other
+  categoryLabel: varchar('category_label'),           // custom display name if needed
+  
+  // Amounts in SEK
+  budgetedAmountSek: integer('budgeted_amount_sek').notNull(),
+  grantCoveredAmountSek: integer('grant_covered_amount_sek'),  // portion covered by grant
+  coFundingAmountSek: integer('co_funding_amount_sek'),        // portion from co-funding
+  spentAmountSek: integer('spent_amount_sek').default(0),
+  committedAmountSek: integer('committed_amount_sek').default(0), // purchase orders etc
+  
+  notes: text('notes'),
+  order: integer('order').default(0),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Individual budget transactions / expenses
+export const projectExpenses = pgTable('project_expenses', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => grantProjects.id),
+  categoryId: uuid('category_id').references(() => projectBudgetCategories.id),
+  
+  description: varchar('description').notNull(),
+  amountSek: integer('amount_sek').notNull(),
+  expenseDate: date('expense_date').notNull(),
+  
+  expenseType: varchar('expense_type'),
+  // invoice | salary | travel_claim | purchase | other
+  supplierName: varchar('supplier_name'),
+  invoiceRef: varchar('invoice_ref'),
+  isEligible: boolean('is_eligible').default(true),  // grant-eligible expense?
+  eligibilityNote: text('eligibility_note'),
+  
+  receiptUrl: varchar('receipt_url'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Project team members and their roles
+export const projectTeamMembers = pgTable('project_team_members', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => grantProjects.id),
+  
+  name: varchar('name').notNull(),
+  email: varchar('email'),
+  role: varchar('role').notNull(),
+  // project_manager | principal_investigator | researcher | developer |
+  // financial_officer | external_consultant | other
+  roleDescription: text('role_description'),
+  
+  // Time allocation
+  allocationPercentage: integer('allocation_percentage'),  // % of working time
+  startDate: date('start_date'),
+  endDate: date('end_date'),
+  
+  // Cost tracking (for personnel budget category)
+  monthlyCostSek: integer('monthly_cost_sek'),
+  isExternal: boolean('is_external').default(false),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Activity log — immutable audit trail
+export const projectActivityLog = pgTable('project_activity_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => grantProjects.id),
+  userId: varchar('user_id').notNull(),
+  userName: varchar('user_name').notNull(),
+  
+  activityType: varchar('activity_type').notNull(),
+  // milestone_completed | report_submitted | expense_added | 
+  // status_changed | budget_updated | note_added | member_added |
+  // report_approved | milestone_delayed | document_uploaded
+  
+  description: text('description').notNull(),           // human-readable log entry
+  metadata: jsonb('metadata').default('{}'),            // structured event data
+  
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Project documents (uploaded files)
+export const projectDocuments = pgTable('project_documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => grantProjects.id),
+  
+  name: varchar('name').notNull(),
+  description: text('description'),
+  documentType: varchar('document_type'),
+  // grant_agreement | progress_report | financial_report | invoice |
+  // correspondence | deliverable | other
+  
+  fileUrl: varchar('file_url').notNull(),
+  fileSize: integer('file_size'),                       // bytes
+  mimeType: varchar('mime_type'),
+  
+  uploadedBy: varchar('uploaded_by').notNull(),
+  uploadedByName: varchar('uploaded_by_name').notNull(),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Risks and issues register
+export const projectRisks = pgTable('project_risks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => grantProjects.id),
+  
+  title: varchar('title').notNull(),
+  description: text('description'),
+  riskType: varchar('risk_type'),
+  // technical | financial | timeline | compliance | partner | other
+  
+  probability: varchar('probability'),                  // low | medium | high
+  impact: varchar('impact'),                            // low | medium | high
+  riskScore: integer('risk_score'),                     // computed: probability × impact (1-9)
+  
+  status: varchar('status').default('open'),            // open | mitigated | closed | accepted
+  mitigationPlan: text('mitigation_plan'),
+  mitigatedAt: timestamp('mitigated_at'),
+  
+  assignedToEmail: varchar('assigned_to_email'),
+  dueDate: date('due_date'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2: BACKEND API
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create server/routes/projects.ts with all endpoints below.
+All endpoints require authentication. All project operations verify
+the project belongs to the authenticated user.
+
+## 2.1 Project CRUD
+GET /api/projects
+Returns all projects for the user with computed fields.
+Response:
+[{
+id, title, funder, status, healthStatus,
+approvedAmountSek, projectStartDate, projectEndDate,
+grantAgreementRef,
+progress: {
+milestonesTotal: number,
+milestonesCompleted: number,
+percentComplete: number
+},
+budget: {
+totalBudgetedSek: number,
+totalSpentSek: number,
+percentSpent: number,
+isOverBudget: boolean
+},
+nextMilestone: {
+title: string,
+dueDate: string,
+daysUntilDue: number,
+isOverdue: boolean
+} | null,
+nextReport: {
+title: string,
+dueDate: string,
+daysUntilDue: number
+} | null,
+urgencyLevel: 'critical' | 'warning' | 'ok'
+// critical = milestone/report overdue or due < 7 days
+// warning = due within 30 days
+// ok = all clear
+}]
+POST /api/projects
+Create a project.
+Body: {
+title: string,
+funder: string,
+approvedAmountSek?: number,
+projectStartDate?: string,
+projectEndDate?: string,
+grantAgreementRef?: string,
+reportingContactName?: string,
+reportingContactEmail?: string,
+funderPortalUrl?: string,
+coFundingRequired?: boolean,
+coFundingPercentage?: number,
+applicationId?: string,           // link to existing application
+grantId?: string,
+notes?: string
+}
+After creation, log activity: "Project created"
+GET /api/projects/:id
+Full project with all relations.
+Response: project + milestones (ordered) + reports +
+budgetCategories + teamMembers + recentActivity (last 20) +
+documents + risks
+PUT /api/projects/:id
+Update project fields.
+Log activity: "Project updated: [changed fields]"
+DELETE /api/projects/:id
+Soft delete — set status to 'cancelled'.
+Log activity: "Project cancelled"
+POST /api/projects/from-application/:applicationId
+Create project pre-filled from application data.
+
+Fetch application + grant data
+Pre-fill: title (from grant title), funder (from grant source),
+approvedAmountSek (ask user — not known from application),
+projectStartDate, projectEndDate (infer from grant deadline if available)
+Create default milestones based on grant source:
+
+Vinnova: ["Kickoff meeting", "6-month progress report",
+"12-month interim report", "Final report & presentation"]
+Tillväxtverket: ["Project start documentation", "Midterm review",
+"Final report", "Outcome documentation"]
+Generic: ["Project kickoff", "Interim milestone", "Final report"]
+
+
+Create default budget categories based on grant source
+Return the created project
+
+
+## 2.2 Milestones
+POST /api/projects/:id/milestones
+Body: { title, description?, dueDate, deliverableType?,
+deliverableDescription?, assignedToEmail?, assignedToName?,
+budgetReleaseAmountSek?, order? }
+Log activity: "Milestone added: [title]"
+PUT /api/projects/:id/milestones/:milestoneId
+Update milestone fields.
+Auto-detect if status changed to 'delayed' (dueDate passed, not completed).
+Log activity if status changed.
+POST /api/projects/:id/milestones/:milestoneId/complete
+Body: { deliverableUrl?: string, notes?: string }
+Sets: status='completed', completedAt=now()
+Triggers:
+
+Activity log: "Milestone completed: [title]"
+Check if this triggers a budget release — if budgetReleaseAmountSek set,
+note it in the activity log
+Recalculate project progress %
+If project healthStatus was 'delayed', check if now back on track
+
+DELETE /api/projects/:id/milestones/:milestoneId
+Only allowed if status is 'pending'. Log activity.
+POST /api/projects/:id/milestones/reorder
+Body: { orderedIds: string[] }
+Updates order field for all milestones in one transaction.
+
+## 2.3 Reports
+GET /api/projects/:id/reports
+Returns all reports ordered by dueDate ascending.
+Includes: status, daysUntilDue, isOverdue
+POST /api/projects/:id/reports
+Body: { reportType, title, dueDate?, funderDeadline?,
+periodStart?, periodEnd?, submissionMethod? }
+Log activity: "Report scheduled: [title]"
+PUT /api/projects/:id/reports/:reportId
+Update report fields (title, dates, content, status).
+Log activity when status changes.
+POST /api/projects/:id/reports/:reportId/generate-draft
+AI-assisted draft generation (see Part 3).
+Body: { includeFinancials?: boolean, customInstructions?: string }
+Returns: { content: string, executiveSummary: string,
+financialSummary?: string, generatedAt: string }
+Saves result to report.content, sets aiGenerated=true.
+Log activity: "AI draft generated for: [report title]"
+POST /api/projects/:id/reports/:reportId/submit
+Body: { submissionConfirmationRef?: string, notes?: string }
+Sets: status='submitted', submittedAt=now()
+Log activity: "Report submitted: [title]"
+POST /api/projects/:id/reports/:reportId/funder-response
+Body: { approved: boolean, feedback?: string, revisionNotes?: string }
+If approved: sets status='approved', funderApprovedAt=now()
+If rejected: sets status='revision_needed', revisionNotes, revisionRequestedAt=now()
+Log activity accordingly.
+
+## 2.4 Budget
+GET /api/projects/:id/budget
+Returns all categories with computed totals:
+{
+categories: [{
+id, category, categoryLabel,
+budgetedAmountSek, grantCoveredAmountSek, coFundingAmountSek,
+spentAmountSek, committedAmountSek,
+remainingAmountSek,       // budgeted - spent - committed
+percentSpent: number,
+isOverBudget: boolean,
+recentExpenses: Expense[] // last 5
+}],
+summary: {
+totalBudgetedSek: number,
+totalGrantAmountSek: number,
+totalCoFundingSek: number,
+totalSpentSek: number,
+totalCommittedSek: number,
+totalRemainingAmountSek: number,
+percentSpent: number,
+burnRateMonthly: number,  // avg monthly spend so far
+projectedEndBalance: number // if burn rate continues
+}
+}
+POST /api/projects/:id/budget/categories
+Body: { category, categoryLabel?, budgetedAmountSek,
+grantCoveredAmountSek?, coFundingAmountSek?, order? }
+PUT /api/projects/:id/budget/categories/:categoryId
+Update category amounts.
+POST /api/projects/:id/budget/categories/:categoryId/expenses
+Add an expense transaction.
+Body: { description, amountSek, expenseDate, expenseType?,
+supplierName?, invoiceRef?, isEligible?, eligibilityNote? }
+Updates: category.spentAmountSek += amountSek
+Log activity: "Expense recorded: [description] — [amount] SEK"
+GET /api/projects/:id/budget/expenses
+Query params: ?categoryId=, ?startDate=, ?endDate=, ?isEligible=
+Returns paginated expense list.
+DELETE /api/projects/:id/budget/expenses/:expenseId
+Reverses the spentAmountSek update.
+Log activity: "Expense deleted: [description]"
+POST /api/projects/:id/budget/initialize
+Initialize standard budget categories from template.
+Body: { source: 'vinnova' | 'tillvaxtverket' | 'energimyndigheten' | 'generic' }
+Standard Vinnova categories:
+
+Personnel (typically 60% of budget)
+Equipment & Infrastructure (15%)
+External Services/Subcontractors (10%)
+Overhead (15%)
+
+Standard generic categories:
+
+Personnel
+Equipment
+Travel & Subsistence
+Subcontractors
+Materials & Consumables
+Dissemination & Communication
+Overhead
+Other
+
+
+## 2.5 Team
+GET /api/projects/:id/team
+Returns all team members with computed personnel cost.
+POST /api/projects/:id/team
+Body: { name, email?, role, roleDescription?,
+allocationPercentage?, startDate?, endDate?,
+monthlyCostSek?, isExternal? }
+Log activity: "Team member added: [name] — [role]"
+PUT /api/projects/:id/team/:memberId
+Update member details.
+DELETE /api/projects/:id/team/:memberId
+Log activity: "Team member removed: [name]"
+GET /api/projects/:id/team/cost-projection
+Computes total personnel cost over project duration:
+{
+members: [{
+name, role, allocationPercentage, monthlyCostSek,
+projectMonths: number,
+totalCostSek: number
+}],
+totalPersonnelCostSek: number,
+comparedToBudget: {
+budgetedSek: number,
+variance: number,
+isOverBudget: boolean
+}
+}
+
+## 2.6 Documents
+GET /api/projects/:id/documents
+Returns all documents grouped by documentType.
+POST /api/projects/:id/documents
+Body: { name, description?, documentType, fileUrl, fileSize?, mimeType? }
+Log activity: "Document uploaded: [name]"
+DELETE /api/projects/:id/documents/:documentId
+Log activity: "Document deleted: [name]"
+
+## 2.7 Risks
+GET /api/projects/:id/risks
+Returns risks ordered by riskScore descending.
+POST /api/projects/:id/risks
+Body: { title, description?, riskType?, probability, impact,
+mitigationPlan?, assignedToEmail?, dueDate? }
+Compute riskScore: { low:1, medium:2, high:3 }[probability] ×
+{ low:1, medium:2, high:3 }[impact]
+Log activity: "Risk identified: [title] (score: [score])"
+PUT /api/projects/:id/risks/:riskId
+Update risk. If status changes to 'mitigated', set mitigatedAt=now().
+Log activity.
+DELETE /api/projects/:id/risks/:riskId
+
+## 2.8 Activity & Health
+GET /api/projects/:id/activity
+Query params: ?limit=50&before=timestamp
+Returns paginated activity log, newest first.
+POST /api/projects/:id/health-check
+Run automated health assessment.
+Checks:
+
+Any milestones overdue? → at_risk or delayed
+Any reports overdue? → at_risk
+Budget burn rate too high (>120% of expected)? → at_risk
+Any open high-score risks? → at_risk
+All good? → on_track
+Updates project.healthStatus.
+Returns: {
+newHealthStatus: string,
+issues: string[],
+recommendations: string[]
+}
+
+POST /api/projects/:id/notes
+Add a quick note to the project.
+Body: { content: string }
+Saves to project.notes (appends with timestamp).
+Log activity: "Note added"
+
+## 2.9 Dashboard aggregation
+GET /api/projects/dashboard
+Returns aggregated view across all user's projects:
+{
+summary: {
+totalProjects: number,
+activeProjects: number,
+totalApprovedAmountSek: number,
+totalSpentSek: number
+},
+urgent: [{
+projectId, projectTitle, issue: string,
+daysUntil: number, type: 'milestone' | 'report'
+}],
+recentActivity: ActivityLog[],  // last 10 across all projects
+upcomingDeadlines: [{           // next 10 upcoming deadlines across all projects
+projectId, projectTitle, type: 'milestone' | 'report',
+title, dueDate, daysUntil
+}]
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3: AI REPORT GENERATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create server/services/reportGenerator.ts:
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+
+const FUNDER_REPORT_STYLES: Record<string, string> = {
+  vinnova: `
+    Vinnova progress reports should:
+    - Be written in Swedish
+    - Use formal but clear language
+    - Structure: Sammanfattning → Genomförda aktiviteter → Resultat → 
+      Avvikelser och åtgärder → Nästa period → Ekonomisk redovisning
+    - Reference the original project goals and show measurable progress
+    - Use TRL (Technology Readiness Level) language for technical projects
+    - Quantify outputs wherever possible (number of tests, prototypes, users, etc.)
+    - Keep to 2-4 pages for progress reports, 5-8 for interim/final
+  `,
+  tillvaxtverket: `
+    Tillväxtverket reports should:
+    - Be written in Swedish
+    - Focus on regional impact and job creation
+    - Structure: Projektöversikt → Aktiviteter → Effekter och resultat → 
+      Ekonomisk redovisning → Fortsatt arbete
+    - Include concrete numbers: jobs created/secured, companies reached,
+      participants trained, etc.
+    - Reference the regional development strategy alignment
+    - Highlight sustainability aspects
+  `,
+  energimyndigheten: `
+    Energimyndigheten reports should:
+    - Be written in Swedish  
+    - Emphasize energy/climate measurables: kWh saved, CO2 reduced, efficiency %
+    - Structure: Teknisk rapport → Energiberäkningar → Marknadspotential → 
+      Ekonomi → Nästa steg
+    - Include TRL progression
+    - Reference Swedish energy transition goals (Klimatmålen)
+  `,
+  generic: `
+    Report should:
+    - Match the language of the grant (Swedish for Swedish funders, English for EU)
+    - Be professional and factual
+    - Structure: Executive Summary → Activities Completed → Results → 
+      Challenges & Mitigations → Next Steps → Financial Overview
+    - Be specific — avoid vague statements, use numbers
+  `
+};
+
+export async function generateProjectReport(
+  project: GrantProject,
+  report: ProjectReport,
+  milestones: ProjectMilestone[],
+  budgetCategories: ProjectBudgetCategory[],
+  teamMembers: ProjectTeamMember[],
+  originalApplication: Application | null,
+  options: {
+    includeFinancials: boolean;
+    customInstructions?: string;
+  }
+): Promise<{ content: string; executiveSummary: string; financialSummary?: string }> {
+  const client = new Anthropic();
+  
+  const completedMilestones = milestones.filter(m => m.status === 'completed');
+  const pendingMilestones = milestones.filter(m => m.status === 'pending' || m.status === 'in_progress');
+  const delayedMilestones = milestones.filter(m => m.status === 'delayed');
+  
+  // Budget summary
+  const totalBudgeted = budgetCategories.reduce((sum, c) => sum + (c.budgetedAmountSek || 0), 0);
+  const totalSpent = budgetCategories.reduce((sum, c) => sum + (c.spentAmountSek || 0), 0);
+  const budgetText = budgetCategories
+    .map(c => `${c.categoryLabel || c.category}: ${c.spentAmountSek?.toLocaleString('sv-SE')} / ${c.budgetedAmountSek?.toLocaleString('sv-SE')} SEK (${Math.round((c.spentAmountSek || 0) / (c.budgetedAmountSek || 1) * 100)}%)`)
+    .join('\n');
+  
+  // Original goals from application
+  const originalGoals = originalApplication?.sections?.find(
+    s => s.sectionKey === 'expected_results' || s.sectionKey === 'project_description'
+  )?.content || '';
+  
+  // Funder-specific style
+  const funderKey = project.funder.toLowerCase().replace(/[^a-z]/g, '');
+  const style = FUNDER_REPORT_STYLES[funderKey] || FUNDER_REPORT_STYLES.generic;
+  
+  const prompt = `You are writing a ${report.reportType} grant progress report.
+
+PROJECT DETAILS:
+Title: ${project.title}
+Funder: ${project.funder}
+Grant amount: ${project.approvedAmountSek?.toLocaleString('sv-SE')} SEK
+Reference: ${project.grantAgreementRef || 'Not specified'}
+Project period: ${project.projectStartDate} to ${project.projectEndDate}
+Report period: ${report.periodStart || 'project start'} to ${report.periodEnd || 'report date'}
+Report type: ${report.reportType}
+
+TEAM (${teamMembers.length} members):
+${teamMembers.map(m => `- ${m.name}: ${m.role} (${m.allocationPercentage || '?'}% allocation)`).join('\n')}
+
+COMPLETED MILESTONES (${completedMilestones.length}/${milestones.length}):
+${completedMilestones.map(m => 
+  `- ${m.title} [completed ${m.completedAt ? new Date(m.completedAt).toLocaleDateString('sv-SE') : ''}]
+   ${m.description || ''}
+   ${m.deliverableDescription ? `Deliverable: ${m.deliverableDescription}` : ''}
+   ${m.funderApproved ? '✓ Approved by funder' : ''}`
+).join('\n') || 'None yet'}
+
+UPCOMING/IN-PROGRESS MILESTONES:
+${pendingMilestones.map(m => `- ${m.title} [due ${m.dueDate}]`).join('\n') || 'None'}
+
+DELAYED MILESTONES:
+${delayedMilestones.map(m => `- ${m.title} [was due ${m.dueDate}] — ${m.notes || 'No notes'}`).join('\n') || 'None'}
+
+BUDGET STATUS:
+${budgetText}
+Total: ${totalSpent.toLocaleString('sv-SE')} / ${totalBudgeted.toLocaleString('sv-SE')} SEK (${Math.round(totalSpent / totalBudgeted * 100)}% spent)
+
+${originalGoals ? `ORIGINAL PROJECT GOALS (from application):
+${originalGoals}` : ''}
+
+${options.customInstructions ? `ADDITIONAL INSTRUCTIONS:
+${options.customInstructions}` : ''}
+
+STYLE REQUIREMENTS:
+${style}
+
+Generate the full report now. Output as JSON:
+{
+  "executiveSummary": "2-3 paragraph summary (this goes at the top)",
+  "content": "Full report body in markdown format",
+  "financialSummary": ${options.includeFinancials ? '"3-4 paragraph financial narrative"' : 'null'}
+}
+
+Be specific and factual. Reference actual milestone names and dates. 
+Acknowledge any delays honestly with explanations. Do NOT invent data.
+If something is unknown, note it as "to be updated" rather than fabricating.`;
+
+  const response = await client.messages.create({
+    model: 'claude-opus-4-5',
+    max_tokens: 3000,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  
+  const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+  
+  try {
+    const result = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return {
+      content: result.content || '',
+      executiveSummary: result.executiveSummary || '',
+      financialSummary: result.financialSummary || undefined
+    };
+  } catch {
+    // If JSON parse fails, return the raw text as content
+    return {
+      content: text,
+      executiveSummary: text.split('\n').slice(0, 3).join('\n')
+    };
+  }
+}
+
+// Health check logic
+export function assessProjectHealth(
+  project: GrantProject,
+  milestones: ProjectMilestone[],
+  reports: ProjectReport[],
+  budgetCategories: ProjectBudgetCategory[]
+): { healthStatus: string; issues: string[]; recommendations: string[] } {
+  const today = new Date();
+  const issues: string[] = [];
+  const recommendations: string[] = [];
+  
+  // Check overdue milestones
+  const overdueMilestones = milestones.filter(m => 
+    m.status !== 'completed' && m.status !== 'waived' &&
+    new Date(m.dueDate) < today
+  );
+  if (overdueMilestones.length > 0) {
+    issues.push(`${overdueMilestones.length} overdue milestone(s): ${overdueMilestones.map(m => m.title).join(', ')}`);
+    recommendations.push('Update delayed milestones with new expected completion dates');
+  }
+  
+  // Check upcoming milestone urgency (< 14 days)
+  const urgentMilestones = milestones.filter(m => {
+    const daysUntil = Math.ceil((new Date(m.dueDate).getTime() - today.getTime()) / 86400000);
+    return m.status !== 'completed' && daysUntil >= 0 && daysUntil <= 14;
+  });
+  if (urgentMilestones.length > 0) {
+    issues.push(`${urgentMilestones.length} milestone(s) due within 14 days`);
+  }
+  
+  // Check overdue reports
+  const overdueReports = reports.filter(r =>
+    r.status !== 'submitted' && r.status !== 'approved' &&
+    r.dueDate && new Date(r.dueDate) < today
+  );
+  if (overdueReports.length > 0) {
+    issues.push(`${overdueReports.length} overdue report(s): ${overdueReports.map(r => r.title).join(', ')}`);
+    recommendations.push('Submit overdue reports as soon as possible — contact funder if extension needed');
+  }
+  
+  // Check budget burn rate
+  if (project.projectStartDate && project.projectEndDate) {
+    const totalDays = Math.ceil(
+      (new Date(project.projectEndDate).getTime() - new Date(project.projectStartDate).getTime()) / 86400000
+    );
+    const elapsedDays = Math.ceil(
+      (today.getTime() - new Date(project.projectStartDate).getTime()) / 86400000
+    );
+    const expectedBurnPercent = (elapsedDays / totalDays) * 100;
+    
+    const totalBudgeted = budgetCategories.reduce((sum, c) => sum + (c.budgetedAmountSek || 0), 0);
+    const totalSpent = budgetCategories.reduce((sum, c) => sum + (c.spentAmountSek || 0), 0);
+    const actualBurnPercent = totalBudgeted > 0 ? (totalSpent / totalBudgeted) * 100 : 0;
+    
+    if (actualBurnPercent > expectedBurnPercent * 1.25) {
+      issues.push(`Budget burn rate is ${Math.round(actualBurnPercent)}% but project is only ${Math.round(expectedBurnPercent)}% through its timeline`);
+      recommendations.push('Review spending — at current rate, budget may run out before project end');
+    }
+  }
+  
+  // Determine health status
+  let healthStatus = 'on_track';
+  if (overdueReports.length > 0 || overdueMilestones.length > 1) {
+    healthStatus = 'delayed';
+  } else if (overdueMilestones.length === 1 || urgentMilestones.length > 0 || issues.length > 0) {
+    healthStatus = 'at_risk';
+  }
+  
+  if (issues.length === 0) {
+    recommendations.push('Project is on track — keep up the good work!');
+  }
+  
+  return { healthStatus, issues, recommendations };
+}
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 4: SCHEDULED JOBS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add to server/jobs/projectHealthJob.ts — run daily at 07:00 Stockholm:
+```typescript
+// Daily health check job
+export const projectHealthJob = new CronJob('0 7 * * *', async () => {
+  const activeProjects = await db.query.grantProjects.findMany({
+    where: eq(grantProjects.status, 'active'),
+    with: { milestones: true, reports: true, budgetCategories: true }
+  });
+  
+  for (const project of activeProjects) {
+    const { healthStatus, issues } = assessProjectHealth(
+      project,
+      project.milestones,
+      project.reports,
+      project.budgetCategories
+    );
+    
+    // Update health status if changed
+    if (healthStatus !== project.healthStatus) {
+      await db.update(grantProjects)
+        .set({ healthStatus, updatedAt: new Date() })
+        .where(eq(grantProjects.id, project.id));
+    }
+    
+    // Send notification emails for urgent issues
+    if (issues.length > 0) {
+      const user = await getUserById(project.userId);
+      
+      // Check if we already notified today (avoid spam)
+      const lastNotified = await getLastNotificationDate(project.id, 'health_alert');
+      const hoursSinceLast = lastNotified 
+        ? (Date.now() - lastNotified.getTime()) / 3600000 
+        : 999;
+      
+      if (hoursSinceLast > 23) {
+        await sendProjectHealthEmail(user, project, issues);
+        await recordNotification(project.id, 'health_alert');
+      }
+    }
+  }
+}, null, true, 'Europe/Stockholm');
+```
+
+Email template for project health alerts:
+Subject: ⚠️ Action needed — [project title]
+[Project title] needs your attention:
+[List of issues, each as a bullet point]
+Quick actions:
+[Link to project] → [Link to add milestone update] → [Link to draft report]
+GetGrant.ai Project Tracker
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 5: FRONTEND — PAGE STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create these pages and components. Use the existing design system
+(shadcn/ui, Tailwind, Lucide icons). All text in Swedish by default
+since this is a Swedish grant platform.
+
+## Page: /projects (project list)
+```tsx
+// client/src/pages/projects.tsx
+
+// Layout:
+// - Header: "Mina projekt" + [+ Lägg till godkänt bidrag] button
+// - Stats row: Total projects | Total approved amount | Active milestones | Urgent items
+// - Project cards grid (2 cols on desktop, 1 on mobile)
+
+// Project card design:
+// ┌──────────────────────────────────────────────────────┐
+// │ 🏢 Vinnova Innovationsprojekt          [on_track ✅] │
+// │ 500 000 SEK  |  Mar 2026 – Feb 2027                  │
+// │ Ref: 2026-00123                                      │
+// │                                                      │
+// │ Milstolpar  ████████░░  3 av 5 klara                 │
+// │ Budget      ██████░░░░  60% förbrukad                │
+// │                                                      │
+// │ ⚠️ Nästa: Halvtidsrapport — 14 dagar kvar            │
+// │                                                      │
+// │ [Öppna projekt →]                                    │
+// └──────────────────────────────────────────────────────┘
+
+// Health status badge colors:
+// on_track → green
+// at_risk → yellow  
+// delayed → red
+// on_hold → gray
+
+// Empty state:
+// Illustration + "Inga projekt ännu"
+// "När ditt bidrag godkänns, skapa ett projekt för att hålla koll 
+//  på milstolpar, rapporter och budget."
+// [+ Skapa ditt första projekt]
+```
+
+## Page: /projects/:id (project detail)
+
+Use a tabbed layout with these tabs:
+
+**Tab 1 — Översikt (Overview)**
+Show:
+
+Project header: title, funder, amount, dates, ref number, health badge
+Quick stats row: % milestones done, % budget spent, days remaining,
+open risks count
+"Nästa åtgärd" card — most urgent upcoming item highlighted
+Recent activity feed (last 10 entries)
+Notes section (editable textarea, saves on blur)
+
+
+**Tab 2 — Milstolpar (Milestones)**
+Show:
+
+Visual timeline: horizontal or vertical, color-coded by status
+Milestone list below timeline:
+Each milestone shows:
+
+Status icon (pending ⬜ / in_progress 🔄 / completed ✅ / delayed ⚠️)
+Title + due date
+Assignee (if set)
+Deliverable type badge
+[Mark complete] button if pending/in_progress
+[Edit] [Delete] options
+
+
+[+ Lägg till milstolpe] button opens inline form:
+Title* | Due date* | Deliverable type | Assignee | Budget release | Description
+Drag to reorder milestones (use @dnd-kit/core: npm install @dnd-kit/core @dnd-kit/sortable)
+
+Mark complete flow:
+Opens small modal:
+"Markera som klar"
+Deliverable URL (optional): [____________________]
+Notes: [textarea]
+[Markera klar]
+After completing, show confetti animation (use canvas-confetti:
+npm install canvas-confetti) and update progress bar with smooth animation.
+
+**Tab 3 — Rapporter (Reports)**
+Show:
+
+Report list ordered by due date:
+Each report card shows:
+Status badge | Report title | Due date | Days until / overdue
+Status colors:
+upcoming → gray
+drafting → blue
+in_review → purple
+submitted → yellow
+approved → green
+revision_needed → red
+[+ Schemalägg rapport] button
+For each report with status 'upcoming' or 'drafting':
+[Skriv utkast med AI] button
+
+AI Draft Generation modal:
+"Generera rapportutkast med AI"
+Reporting period: [start date] to [end date]
+Include financial section: [toggle]
+Custom instructions (optional): [textarea]
+"AI:n kommer använda dina milstolpar och budgetdata som underlag."
+[Generera →]
+Show ProgressDialog while generating (15-30 seconds).
+After generation:
+
+Show full report in an editable textarea
+[Spara utkast] [Kopiera] [Skriv ut]
+Status auto-updates to 'drafting'
+
+Report detail view (click on a report):
+Full editable view with:
+
+Title (editable)
+Period dates
+Executive summary (separate field)
+Main content (rich textarea or markdown)
+Financial summary (if included)
+Attachment list with [Upload] button
+Submit button with confirmation modal
+
+
+**Tab 4 — Budget**
+Show:
+
+Budget summary header:
+Total approved: X SEK | Spent: Y SEK (Z%) | Remaining: W SEK
+Burn rate: ~A SEK/month | Projected end balance: ±B SEK
+Category table:
+Category | Budgeterat | Godkänt bidrag | Medfinansiering | Förbrukat | Committed | Kvar | %
+Each row expandable → shows recent expenses for that category
+[+ Lägg till kostnad] per category
+[Initiera budgetkategorier] button (if no categories yet) → picks template
+Expense log below table:
+Date | Description | Category | Amount | Type | [Delete]
+[+ Registrera kostnad] opens form:
+Beskrivning* | Belopp (SEK)* | Datum* | Kategori* | Typ | Leverantör | Fakturanr
+Stödberättigad: [Ja/Nej] + Kommentar om Nej
+Budget chart: stacked bar chart per category showing
+spent vs committed vs remaining
+(use recharts, already installed)
+
+
+**Tab 5 — Team**
+Show:
+
+Team member cards:
+Avatar (initials) | Name | Role | Allocation % | Monthly cost
+[Edit] [Remove]
+[+ Lägg till teammedlem] form:
+Namn* | E-post | Roll* | Rollbeskrivning | Andel (%) | Månadskostnad (SEK)
+Extern konsult: [checkbox]
+Period: [startdatum] to [slutdatum]
+Personnel cost projection table:
+Member | Allocation | Monthly cost | Project months | Total cost
+TOTAL: X SEK vs Y SEK budgeted
+Color total row red if over budget.
+
+
+**Tab 6 — Risker (Risks)**
+Show:
+
+Risk matrix (3×3 grid): impact vs probability
+Plot each risk as a dot in the matrix, colored by risk score
+Risk list below matrix:
+Each risk shows:
+Risk score badge (color: 1-3 green, 4-6 yellow, 7-9 red)
+Title | Type | Status | Mitigation plan preview
+[Edit] [Mark as mitigated] [Close]
+[+ Identifiera risk] form:
+Titel* | Beskrivning | Typ* | Sannolikhet* | Konsekvens* | Åtgärdsplan
+Ansvarig e-post | Förfallodatum
+Risk score auto-computed and shown.
+If no risks:
+"Inga identifierade risker — proaktiv riskhantering ökar chansen
+att leverera projektet framgångsrikt."
+
+
+**Tab 7 — Dokument (Documents)**
+Show:
+
+Document list grouped by type:
+Grant agreement | Reports | Invoices | Deliverables | Correspondence | Other
+Each document: Icon | Name | Uploaded | [Download] [Delete]
+[+ Ladda upp dokument] → file picker
+After file selected:
+Dokumentnamn | Typ (dropdown) | Beskrivning (optional)
+[Ladda upp]
+Note: For v1, store file URLs manually (paste a link).
+Full file upload can be a v2 feature.
+Show a text field: "Fil-URL eller länk till dokumentet"
+This avoids needing file storage infrastructure for v1.
+
+
+**Tab 8 — Aktivitet (Activity)**
+Show full activity log:
+
+Filter by type: All | Milestones | Reports | Budget | Team | Other
+Each entry: timestamp | user avatar/name | description
+Paginated, 20 per page
+"Load more" button at bottom
+
+
+## Component: ProjectSetupModal
+```tsx
+// Shown when user clicks [+ Lägg till godkänt bidrag] 
+// or [✅ Markera som godkänt] from an application
+
+// Step 1 — Basic info
+"🎉 Grattis till godkänt bidrag!"
+"Sätt upp projektuppföljning för att hålla koll på leveranser och rapporter."
+
+Projektnamn*: [pre-filled from grant title if available]
+Finansiär*: [pre-filled from grant source]
+Godkänt belopp (SEK)*: [______]
+Startdatum*: [date picker]
+Slutdatum*: [date picker]
+Bidragsreferens: [______] (e.g. 2026-00123)
+Rapportkontakt (namn): [______]
+Rapportkontakt (e-post): [______]
+Funderarens rapportportal: [URL]
+
+Medfinansiering krävs: [toggle]
+  If yes: Andel (%): [__] Belopp: [__] SEK
+
+[Nästa →]
+
+// Step 2 — Quick setup
+"Vill du initiera med standardkonfiguration?"
+
+[✅] Lägg till standardmilstolpar för [Funder]
+[✅] Initiera budgetkategorier
+[✅] Schemalägg standardrapporter
+
+(These are pre-configured based on the funder)
+
+[Skapa projekt →]
+
+// After creation: redirect to /projects/:id on the Milestolpar tab
+// Show a brief onboarding tooltip: 
+// "Börja med att lägga till dina milstolpar och registrera teamet"
+```
+
+## Component: "Mark as Approved" button
+
+Add to the application detail page (/applications/:id):
+```tsx
+// Show this button for applications with status 'submitted' or 'pending'
+<Button 
+  variant="outline" 
+  className="text-green-600 border-green-600 hover:bg-green-50"
+  onClick={() => setShowApprovalModal(true)}
+>
+  <CheckCircle2 size={16} className="mr-2" />
+  Markera som godkänt
+</Button>
+
+// Opens ProjectSetupModal pre-filled with application data
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 6: NAVIGATION & INTEGRATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Add "Projekt" to the main navigation bar between "Ansökningar" and 
+   "Profil". Show a red badge with count of urgent items if >0.
+
+2. On the main dashboard, add a "Projekt" section below the grants section:
+   - Show up to 3 active projects with health status
+   - "Se alla projekt →" link
+   - If no projects: "Har du fått ett bidrag godkänt? Sätt upp 
+     projektuppföljning." [+ Skapa projekt]
+
+3. On the deadline calendar (/calendar), include project milestones and 
+   report deadlines alongside grant application deadlines.
+   Color coding: grant deadlines = blue, project milestones = purple, 
+   reports = orange.
+
+4. Existing notification system: extend to send reminders for:
+   - Project milestone due in 30/14/7/1 days
+   - Project report due in 30/14/7/1 days
+   - Milestone marked as delayed (instant notification)
+   - Report approved by funder (instant notification)
+   Reuse the existing notification preferences settings.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 7: SEED DATA FOR TESTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create a seed endpoint for development only:
+POST /api/dev/seed-project (only active when NODE_ENV !== 'production')
+
+Creates a realistic test project:
+- Vinnova Innovationsprojekt, 750,000 SEK, Mar 2026 – Feb 2027
+- 5 milestones (2 completed, 1 in progress, 2 pending)
+- 2 reports (1 submitted, 1 upcoming overdue)
+- Budget categories with some spending recorded
+- 3 team members
+- 2 risks (1 open, 1 mitigated)
+- 15 activity log entries
+- 3 documents
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 8: TESTING CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Run through ALL of these after implementation:
+
+DATABASE
+- [ ] All 8 tables created successfully (npm run db:push, no errors)
+- [ ] Foreign key constraints work (can't add milestone to non-existent project)
+
+PROJECT CRUD
+- [ ] Create project manually — all fields save correctly
+- [ ] Create project from application — pre-fills correctly
+- [ ] Default milestones created for Vinnova project
+- [ ] Default budget categories initialized correctly
+- [ ] Project list shows progress %, next deadline, urgency level
+- [ ] Edit project fields — saves and reflects immediately
+- [ ] Project deletion sets status to 'cancelled' (not hard deleted)
+
+MILESTONES
+- [ ] Add milestone with all fields
+- [ ] Drag to reorder — order persists after page reload
+- [ ] Mark complete — progress bar updates, confetti shows
+- [ ] Milestone overdue → status auto-updates to 'delayed' on health check
+- [ ] Budget release field — appears in activity log when milestone completed
+
+REPORTS
+- [ ] Schedule report — appears in list
+- [ ] AI draft generation — generates within 30 seconds
+- [ ] Generated content references actual milestone names (not generic)
+- [ ] Vinnova project → Swedish language report generated
+- [ ] Save draft → content persists after page reload
+- [ ] Submit report → status changes to 'submitted'
+- [ ] Funder approved → status changes to 'approved', notification sent
+- [ ] Revision needed → status changes, revision notes saved
+
+BUDGET
+- [ ] Initialize budget categories from Vinnova template
+- [ ] Add expense → spentAmountSek updates on category
+- [ ] Delete expense → spentAmountSek reverses correctly
+- [ ] Burn rate calculation correct (test with known values)
+- [ ] Over-budget category shown in red
+- [ ] Budget chart renders correctly with multiple categories
+
+TEAM
+- [ ] Add team member → appears in list
+- [ ] Personnel cost projection calculates correctly
+- [ ] Over budget → total row shown in red
+
+RISKS
+- [ ] Risk score computed correctly (probability × impact)
+- [ ] Risk matrix plots risks in correct cell
+- [ ] Mark as mitigated → status updates, mitigatedAt saved
+- [ ] High-score risks (7-9) shown in red
+
+DOCUMENTS
+- [ ] Add document with URL → appears in list grouped by type
+- [ ] Delete document → removed from list
+
+HEALTH CHECK
+- [ ] Health check API endpoint runs and updates healthStatus
+- [ ] On-track project: no issues reported
+- [ ] Project with overdue milestone: at_risk or delayed status
+- [ ] Daily cron job runs without errors
+
+ACTIVITY LOG
+- [ ] Every action (complete milestone, add expense, etc.) adds log entry
+- [ ] Activity log shows in correct order (newest first)
+- [ ] Filter by activity type works
+
+NAVIGATION
+- [ ] "Projekt" link in nav bar
+- [ ] Urgent badge shows correct count
+- [ ] Dashboard project section shows active projects
+- [ ] Calendar shows project milestones and reports
+
+NOTIFICATIONS
+- [ ] Email sent when milestone due in 7 days
+- [ ] Email sent when report due in 14 days
+- [ ] No duplicate emails (hourly rate limit works)
+
+MARK AS APPROVED (from application)
+- [ ] Button appears on submitted applications
+- [ ] Modal pre-fills from application data
+- [ ] Creates project and redirects to /projects/:id
+
+SEED DATA
+- [ ] /api/dev/seed-project creates realistic test project
+- [ ] All tabs show data correctly with seed project

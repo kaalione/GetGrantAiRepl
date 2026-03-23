@@ -1,0 +1,376 @@
+Build an AI-powered grant application writing module for GetGrant.ai.
+
+## Overview
+Users select a grant, answer a few questions about their project, and the AI generates 
+a complete draft application tailored to that specific grant's requirements and 
+evaluation criteria.
+
+## Backend: New API endpoints
+
+Create `server/routes/applications.ts` with these endpoints:
+
+### POST /api/applications/generate
+Generate a draft application for a specific grant.
+
+Request body:
+{
+  grantId: string,
+  companyProfile: {
+    name: string,
+    description: string,
+    sector: string,
+    employees: number,
+    revenue?: number,
+    founded?: number,
+    region: string
+  },
+  projectDescription: string,      // 200-1000 chars, what they want to do
+  projectGoals: string,             // expected outcomes
+  projectBudget: number,            // total project budget in SEK
+  requestedAmount: number,          // amount applying for
+  previousExperience?: string       // relevant prior work
+}
+
+Response:
+{
+  applicationId: string,
+  grantId: string,
+  grantTitle: string,
+  sections: [
+    {
+      sectionKey: string,           // e.g. "project_description"
+      sectionTitle: string,         // e.g. "Projektbeskrivning"
+      content: string,              // AI-generated text
+      wordCount: number,
+      maxWords?: number,            // from grant template if known
+      evaluationCriteria?: string   // what judges look for in this section
+    }
+  ],
+  overallScore?: number,            // estimated fit score 0-100
+  warnings: string[],               // e.g. "Budget exceeds maximum grant amount"
+  generatedAt: string
+}
+
+### GET /api/applications/:id
+Retrieve a saved application draft.
+
+### PUT /api/applications/:id/section/:sectionKey
+Update a specific section (user edits).
+
+Request body: { content: string }
+
+### POST /api/applications/:id/regenerate-section
+Regenerate a specific section with new instructions.
+
+Request body: { sectionKey: string, instructions: string }
+
+### GET /api/applications/templates/:grantSource
+Get the application template for a specific grant source.
+
+## Database schema
+
+Add to schema.ts:
+```typescript
+export const applications = pgTable('applications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: varchar('user_id').notNull(),
+  grantId: varchar('grant_id').notNull(),
+  status: varchar('status').default('draft'), // draft | submitted | archived
+  sections: jsonb('sections').notNull(),
+  companySnapshot: jsonb('company_snapshot').notNull(),
+  projectData: jsonb('project_data').notNull(),
+  overallScore: integer('overall_score'),
+  warnings: jsonb('warnings').default('[]'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+```
+
+## AI Service: server/services/applicationWriter.ts
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+
+const GRANT_TEMPLATES: Record<string, GrantTemplate> = {
+  vinnova: {
+    sections: [
+      {
+        key: 'background_and_need',
+        title: 'Bakgrund och behov',
+        description: 'Beskriv problemet eller behovet som projektet adresserar',
+        maxWords: 500,
+        evaluationCriteria: 'Relevance to Swedish innovation needs, clarity of problem statement, market size'
+      },
+      {
+        key: 'project_description',
+        title: 'Projektbeskrivning',
+        description: 'Beskriv vad projektet ska göra och hur',
+        maxWords: 800,
+        evaluationCriteria: 'Technical feasibility, innovation level (TRL), methodology'
+      },
+      {
+        key: 'expected_results',
+        title: 'Förväntade resultat och effekter',
+        description: 'Vilka konkreta resultat förväntas och vilken samhällsnytta skapas',
+        maxWords: 400,
+        evaluationCriteria: 'Measurable outcomes, societal impact, commercialization potential'
+      },
+      {
+        key: 'team_and_capacity',
+        title: 'Projektparter och kapacitet',
+        description: 'Beskriv teamet och deras relevanta erfarenhet',
+        maxWords: 300,
+        evaluationCriteria: 'Team competence, collaboration, relevant track record'
+      },
+      {
+        key: 'budget_motivation',
+        title: 'Budget och motivering',
+        description: 'Specificera kostnader och motivera dem',
+        maxWords: 300,
+        evaluationCriteria: 'Cost efficiency, realistic budget, co-financing'
+      }
+    ]
+  },
+  tillvaxtverket: {
+    sections: [
+      {
+        key: 'company_description',
+        title: 'Företagsbeskrivning',
+        description: 'Beskriv företaget, dess verksamhet och marknadsposition',
+        maxWords: 400,
+        evaluationCriteria: 'Company maturity, market validation, growth potential'
+      },
+      {
+        key: 'project_purpose',
+        title: 'Projektets syfte och mål',
+        description: 'Vad ska projektet uppnå och varför är det viktigt',
+        maxWords: 500,
+        evaluationCriteria: 'Alignment with regional growth goals, job creation potential'
+      },
+      {
+        key: 'implementation_plan',
+        title: 'Genomförandeplan',
+        description: 'Hur ska projektet genomföras, tidplan och milstolpar',
+        maxWords: 600,
+        evaluationCriteria: 'Realistic timeline, clear milestones, risk management'
+      },
+      {
+        key: 'sustainability',
+        title: 'Hållbarhet och långsiktighet',
+        description: 'Hur säkras resultaten efter projektets slut',
+        maxWords: 300,
+        evaluationCriteria: 'Long-term viability, environmental sustainability'
+      }
+    ]
+  },
+  generic: {
+    sections: [
+      {
+        key: 'executive_summary',
+        title: 'Executive Summary',
+        description: 'Brief overview of the project and funding request',
+        maxWords: 300,
+        evaluationCriteria: 'Clarity, compelling case, key differentiators'
+      },
+      {
+        key: 'problem_and_solution',
+        title: 'Problem & Solution',
+        description: 'What problem does this solve and how',
+        maxWords: 600,
+        evaluationCriteria: 'Problem validation, solution uniqueness, market fit'
+      },
+      {
+        key: 'impact',
+        title: 'Expected Impact',
+        description: 'Measurable outcomes and broader societal value',
+        maxWords: 400,
+        evaluationCriteria: 'Quantified impact, sustainability, scalability'
+      },
+      {
+        key: 'team',
+        title: 'Team',
+        description: 'Why this team can deliver',
+        maxWords: 300,
+        evaluationCriteria: 'Relevant expertise, track record, commitment'
+      },
+      {
+        key: 'budget',
+        title: 'Budget Overview',
+        description: 'How funds will be used',
+        maxWords: 300,
+        evaluationCriteria: 'Efficiency, transparency, leverage of grant funds'
+      }
+    ]
+  }
+};
+
+export async function generateApplication(
+  grant: Grant,
+  companyProfile: CompanyProfile,
+  projectData: ProjectData
+): Promise<GeneratedApplication> {
+  const client = new Anthropic();
+  
+  // Determine which template to use based on grant source
+  const sourceKey = grant.source.toLowerCase();
+  const template = GRANT_TEMPLATES[sourceKey] || GRANT_TEMPLATES.generic;
+  
+  const sections = [];
+  
+  // Generate each section with a targeted prompt
+  for (const sectionTemplate of template.sections) {
+    const prompt = buildSectionPrompt(
+      grant, 
+      companyProfile, 
+      projectData, 
+      sectionTemplate
+    );
+    
+    const response = await client.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    
+    const content = response.content[0].type === 'text' 
+      ? response.content[0].text 
+      : '';
+    
+    sections.push({
+      sectionKey: sectionTemplate.key,
+      sectionTitle: sectionTemplate.title,
+      content: content.trim(),
+      wordCount: content.split(' ').length,
+      maxWords: sectionTemplate.maxWords,
+      evaluationCriteria: sectionTemplate.evaluationCriteria
+    });
+  }
+  
+  // Generate overall warnings
+  const warnings = generateWarnings(grant, companyProfile, projectData);
+  
+  return { sections, warnings };
+}
+
+function buildSectionPrompt(
+  grant: Grant,
+  company: CompanyProfile, 
+  project: ProjectData,
+  section: SectionTemplate
+): string {
+  return `You are an expert Swedish grant application writer. Write the "${section.title}" 
+section for a grant application.
+
+GRANT INFORMATION:
+- Grant: ${grant.title}
+- Funder: ${grant.source}
+- Grant description: ${grant.description}
+- Max amount: ${grant.maxAmount ? `${grant.maxAmount} SEK` : 'Not specified'}
+- Deadline: ${grant.deadline || 'Not specified'}
+
+COMPANY INFORMATION:
+- Company: ${company.name}
+- Sector: ${company.sector}
+- Description: ${company.description}
+- Employees: ${company.employees}
+- Region: ${company.region}
+${company.revenue ? `- Annual revenue: ${company.revenue} SEK` : ''}
+
+PROJECT INFORMATION:
+- Project description: ${project.projectDescription}
+- Goals: ${project.projectGoals}
+- Total budget: ${project.projectBudget} SEK
+- Requested amount: ${project.requestedAmount} SEK
+${project.previousExperience ? `- Relevant experience: ${project.previousExperience}` : ''}
+
+SECTION INSTRUCTIONS:
+- Section to write: ${section.title}
+- What this section should cover: ${section.description}
+- Max length: ${section.maxWords || 500} words
+- Evaluation criteria (what judges look for): ${section.evaluationCriteria}
+
+WRITING REQUIREMENTS:
+- Write in Swedish if the grant is from a Swedish agency (Vinnova, Tillväxtverket, 
+  Energimyndigheten, etc.), otherwise write in English
+- Be specific and use concrete numbers where possible
+- Align the language with what grant evaluators want to see
+- Do NOT use generic filler phrases — every sentence should add value
+- Do NOT exceed the word limit
+- Write in first person plural ("Vi planerar..." / "Our project will...")
+- Output ONLY the section text, no headers or meta-commentary
+
+Write the section now:`;
+}
+```
+
+## Frontend: New page client/src/pages/apply.tsx
+
+Create a 4-step wizard:
+
+**Step 1 — Select grant**
+- Show the grant the user clicked "Apply" from (pre-selected)
+- Display grant summary: title, funder, deadline, max amount
+- Show match score and why it matched (pulls from existing matching data)
+
+**Step 2 — Company profile**
+- Pre-fill from user's saved profile if available
+- Fields: company name, description (textarea), sector (dropdown using 
+  existing sector list), employees (number), annual revenue (optional), 
+  region (dropdown), founded year (optional)
+- "Save to profile" checkbox
+
+**Step 3 — Project information**
+- Project description (textarea, 200-1000 chars, live character count)
+- Project goals (textarea, what will be achieved)
+- Total project budget (SEK, number input)
+- Requested amount (SEK, auto-validates against grant max)
+- Previous relevant experience (optional textarea)
+
+**Step 4 — Generated application**
+- Show loading state: "Generating your application... this takes about 30 seconds"
+- Animated progress with messages like "Analyzing grant criteria...", 
+  "Writing project description...", "Reviewing for compliance..."
+- Once generated, show each section as an editable card:
+  - Section title
+  - Word count / max words indicator (green if under, red if over)
+  - Evaluation criteria shown as subtle hint text
+  - Editable textarea with the AI content
+  - "Regenerate this section" button (opens modal for custom instructions)
+- Warnings banner at top if any (e.g. "Your requested amount exceeds the grant maximum")
+- Bottom bar: "Copy all", "Download as PDF", "Download as Word (.docx)"
+
+## Export functionality
+
+Add `server/services/exportApplication.ts`:
+
+**PDF export**: Use `pdfkit` npm package to generate a formatted PDF
+**Word export**: Use `docx` npm package to generate a .docx file
+
+Both exports should include:
+- Header: Grant name, company name, generated date
+- Each section with its title as a heading
+- Page numbers
+- Footer: "Generated by GetGrant.ai"
+
+## Navigation integration
+
+Add "Apply with AI" button to:
+1. Grant detail page (`/grants/:id`) — primary CTA button
+2. Bookmarked grants list
+3. Match results — "Apply" action next to each match
+
+Route: `/apply?grantId=:id`
+
+## Database migration
+
+Run: `npm run db:push` after adding the applications table to schema.ts
+
+## Testing checklist
+- [ ] Generate application for a Vinnova grant — verify Swedish output
+- [ ] Generate application for an EU grant — verify English output  
+- [ ] Section regeneration with custom instructions works
+- [ ] Word count limits enforced in UI
+- [ ] PDF export downloads correctly
+- [ ] Word export downloads correctly
+- [ ] Warnings appear when requested amount > grant maximum
+- [ ] Company profile saves and pre-fills on next use
+- [ ] Application saves to database and can be retrieved

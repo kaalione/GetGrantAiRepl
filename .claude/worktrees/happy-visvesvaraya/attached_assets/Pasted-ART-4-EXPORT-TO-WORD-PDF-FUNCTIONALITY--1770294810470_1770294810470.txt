@@ -1,0 +1,1138 @@
+ART 4: EXPORT TO WORD/PDF FUNCTIONALITY
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Users can download applications as .docx or .pdf for submission.
+
+STEP 4.1: Install Dependencies
+```bash
+npm install docx pdfkit
+```
+
+STEP 4.2: Create Export Service
+
+Create server/services/export.ts:
+```typescript
+import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from 'docx';
+import PDFDocument from 'pdfkit';
+
+interface ApplicationData {
+  grantTitle: string;
+  companyName: string;
+  content: string;
+  generatedAt: Date;
+}
+
+export async function exportToDocx(application: ApplicationData): Promise<Buffer> {
+  // Split content into paragraphs
+  const paragraphs = application.content.split('\n\n').filter(p => p.trim());
+  
+  const doc = new Document({
+    sections: [{
+      properties: {
+        page: {
+          margin: {
+            top: 1440, // 1 inch = 1440 twips
+            right: 1440,
+            bottom: 1440,
+            left: 1440,
+          },
+        },
+      },
+      children: [
+        // Title
+        new Paragraph({
+          text: application.grantTitle,
+          heading: HeadingLevel.TITLE,
+          alignment: AlignmentType.CENTER,
+          spacing: {
+            after: 400,
+          },
+        }),
+
+        // Company name
+        new Paragraph({
+          text: `Ansökan från ${application.companyName}`,
+          alignment: AlignmentType.CENTER,
+          spacing: {
+            after: 400,
+          },
+        }),
+
+        // Date
+        new Paragraph({
+          text: new Date(application.generatedAt).toLocaleDateString('sv-SE', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }),
+          alignment: AlignmentType.CENTER,
+          spacing: {
+            after: 800,
+          },
+          style: {
+            font: {
+              color: '666666',
+              size: 20,
+            },
+          },
+        }),
+
+        // Main content
+        ...paragraphs.map(para => {
+          // Check if paragraph is a heading (starts with #)
+          const isHeading = para.trim().startsWith('#');
+          const text = isHeading ? para.replace(/^#+\s*/, '') : para;
+
+          return new Paragraph({
+            text: text,
+            heading: isHeading ? HeadingLevel.HEADING_1 : undefined,
+            spacing: {
+              before: isHeading ? 400 : 200,
+              after: 200,
+            },
+          });
+        }),
+
+        // Footer
+        new Paragraph({
+          text: '',
+          spacing: { before: 800 },
+        }),
+        new Paragraph({
+          text: 'Genererad med BidragAI',
+          alignment: AlignmentType.CENTER,
+          style: {
+            font: {
+              color: '999999',
+              size: 18,
+            },
+          },
+        }),
+      ],
+    }],
+  });
+
+  return await Packer.toBuffer(doc);
+}
+
+export async function exportToPdf(application: ApplicationData): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: {
+        top: 72,
+        bottom: 72,
+        left: 72,
+        right: 72,
+      },
+    });
+
+    // Collect PDF data
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    // Title
+    doc.fontSize(24)
+       .font('Helvetica-Bold')
+       .text(application.grantTitle, { align: 'center' });
+
+    doc.moveDown();
+
+    // Company
+    doc.fontSize(14)
+       .font('Helvetica')
+       .text(`Ansökan från ${application.companyName}`, { align: 'center' });
+
+    doc.moveDown();
+
+    // Date
+    doc.fontSize(10)
+       .fillColor('#666666')
+       .text(
+         new Date(application.generatedAt).toLocaleDateString('sv-SE', {
+           year: 'numeric',
+           month: 'long',
+           day: 'numeric',
+         }),
+         { align: 'center' }
+       );
+
+    doc.moveDown(2);
+    doc.fillColor('#000000');
+
+    // Content
+    const paragraphs = application.content.split('\n\n').filter(p => p.trim());
+
+    paragraphs.forEach(para => {
+      const isHeading = para.trim().startsWith('#');
+      const text = isHeading ? para.replace(/^#+\s*/, '') : para;
+
+      if (isHeading) {
+        doc.fontSize(16)
+           .font('Helvetica-Bold')
+           .text(text, { align: 'left' });
+        doc.moveDown(0.5);
+      } else {
+        doc.fontSize(12)
+           .font('Helvetica')
+           .text(text, {
+             align: 'justify',
+             lineGap: 4,
+           });
+        doc.moveDown();
+      }
+    });
+
+    // Footer
+    doc.fontSize(10)
+       .fillColor('#999999')
+       .text('Genererad med BidragAI', {
+         align: 'center',
+       });
+
+    doc.end();
+  });
+}
+```
+
+STEP 4.3: Create Export Routes
+
+Add to server/routes/applications.ts:
+```typescript
+import { exportToDocx, exportToPdf } from '../services/export';
+
+// Export as DOCX
+router.get('/applications/:id/export/docx', requireAuth, async (req, res) => {
+  try {
+    const application = await db.query.applications.findFirst({
+      where: and(
+        eq(applications.id, req.params.id),
+        eq(applications.companyId, req.user.companyId) // Verify ownership
+      ),
+      with: {
+        grant: true,
+        company: true,
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    const buffer = await exportToDocx({
+      grantTitle: application.grant.title,
+      companyName: application.company.companyName,
+      content: application.generatedContent,
+      generatedAt: application.createdAt,
+    });
+
+    const filename = `ansokan-${application.grant.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.docx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    
+    res.send(buffer);
+  } catch (error) {
+    console.error('Export error:', error);
+    res.status(500).json({ error: 'Export failed' });
+  }
+});
+
+// Export as PDF
+router.get('/applications/:id/export/pdf', requireAuth, async (req, res) => {
+  try {
+    const application = await db.query.applications.findFirst({
+      where: and(
+        eq(applications.id, req.params.id),
+        eq(applications.companyId, req.user.companyId)
+      ),
+      with: {
+        grant: true,
+        company: true,
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    const buffer = await exportToPdf({
+      grantTitle: application.grant.title,
+      companyName: application.company.companyName,
+      content: application.generatedContent,
+      generatedAt: application.createdAt,
+    });
+
+    const filename = `ansokan-${application.grant.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    
+    res.send(buffer);
+  } catch (error) {
+    console.error('Export error:', error);
+    res.status(500).json({ error: 'Export failed' });
+  }
+});
+```
+
+STEP 4.4: Add Export Buttons to Frontend
+
+Update src/pages/ApplicationEdit.tsx:
+```typescript
+import { Download, FileText, File } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+export function ApplicationEdit({ applicationId }: { applicationId: string }) {
+  // ... existing code ...
+
+  async function handleExport(format: 'docx' | 'pdf') {
+    try {
+      const response = await fetch(`/api/applications/${applicationId}/export/${format}`);
+      
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      // Trigger download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ansokan-${applicationId}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success(`Ansökan exporterad som ${format.toUpperCase()}`);
+    } catch (error) {
+      toast.error('Kunde inte exportera ansökan');
+    }
+  }
+
+  return (
+    <div className="container mx-auto p-6">
+      {/* ... existing content ... */}
+
+      <div className="flex gap-2 mb-6">
+        <Button onClick={handleSave}>
+          Spara ändringar
+        </Button>
+
+        {/* Export Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">
+              <Download className="mr-2 h-4 w-4" />
+              Exportera
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem onClick={() => handleExport('docx')}>
+              <FileText className="mr-2 h-4 w-4" />
+              Word (.docx)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleExport('pdf')}>
+              <File className="mr-2 h-4 w-4" />
+              PDF (.pdf)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* ... other buttons ... */}
+      </div>
+
+      {/* ... rest of component ... */}
+    </div>
+  );
+}
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PART 5: PRICING & MONETIZATION (STRIPE INTEGRATION)
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Implement tiered pricing with Stripe for payments.
+
+STEP 5.1: Install Stripe
+```bash
+npm install stripe @stripe/stripe-js
+```
+
+STEP 5.2: Setup Stripe
+
+1. Go to https://stripe.com and create account
+2. Get API keys from dashboard
+3. Add to .env (Replit Secrets):
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+STEP 5.3: Create Stripe Products & Prices
+
+In Stripe dashboard, create:
+
+**Free Plan:**
+- Not needed in Stripe (default)
+
+**Pro Plan:**
+- Product name: "BidragAI Pro"
+- Price: 299 SEK/month
+- Recurring: Monthly
+- Copy Price ID (e.g., price_1ABC...)
+
+**Enterprise Plan:**
+- Product name: "BidragAI Enterprise"
+- Price: 2999 SEK/month
+- Recurring: Monthly
+- Copy Price ID
+
+STEP 5.4: Add Plan to Database Schema
+
+Update your schema:
+```typescript
+export const profiles = pgTable('profiles', {
+  // ... existing fields ...
+  plan: text('plan').default('free'), // 'free', 'pro', 'enterprise'
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  subscriptionStatus: text('subscription_status'), // 'active', 'canceled', 'past_due'
+  subscriptionEndsAt: timestamp('subscription_ends_at'),
+});
+```
+
+Run migration:
+```bash
+npm run db:push
+```
+
+STEP 5.5: Create Stripe Service
+
+Create server/services/stripe.ts:
+```typescript
+import Stripe from 'stripe';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2023-10-16',
+});
+
+export const PRICE_IDS = {
+  pro: process.env.STRIPE_PRO_PRICE_ID!,
+  enterprise: process.env.STRIPE_ENTERPRISE_PRICE_ID!,
+};
+
+export async function createCheckoutSession(
+  userId: string,
+  userEmail: string,
+  priceId: string,
+  successUrl: string,
+  cancelUrl: string
+) {
+  const session = await stripe.checkout.sessions.create({
+    customer_email: userEmail,
+    client_reference_id: userId,
+    mode: 'subscription',
+    payment_method_types: ['card'],
+    line_items: [
+      {
+        price: priceId,
+        quantity: 1,
+      },
+    ],
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    metadata: {
+      userId,
+    },
+  });
+
+  return session;
+}
+
+export async function createCustomerPortalSession(
+  customerId: string,
+  returnUrl: string
+) {
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customerId,
+    return_url: returnUrl,
+  });
+
+  return session;
+}
+
+export async function cancelSubscription(subscriptionId: string) {
+  await stripe.subscriptions.cancel(subscriptionId);
+}
+
+export async function getSubscription(subscriptionId: string) {
+  return await stripe.subscriptions.retrieve(subscriptionId);
+}
+
+export { stripe };
+```
+
+STEP 5.6: Create Checkout Routes
+
+Create server/routes/billing.ts:
+```typescript
+import express from 'express';
+import { requireAuth } from '../middleware/auth';
+import { createCheckoutSession, createCustomerPortalSession, PRICE_IDS } from '../services/stripe';
+
+const router = express.Router();
+
+// Create checkout session
+router.post('/billing/checkout', requireAuth, async (req, res) => {
+  try {
+    const { plan } = req.body; // 'pro' or 'enterprise'
+
+    if (!['pro', 'enterprise'].includes(plan)) {
+      return res.status(400).json({ error: 'Invalid plan' });
+    }
+
+    const priceId = PRICE_IDS[plan];
+
+    const session = await createCheckoutSession(
+      req.user.id,
+      req.user.email,
+      priceId,
+      `${process.env.APP_URL}/dashboard?checkout=success`,
+      `${process.env.APP_URL}/pricing?checkout=canceled`
+    );
+
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error('Checkout error:', error);
+    res.status(500).json({ error: 'Failed to create checkout session' });
+  }
+});
+
+// Create customer portal session (for managing subscription)
+router.post('/billing/portal', requireAuth, async (req, res) => {
+  try {
+    const profile = await db.query.profiles.findFirst({
+      where: eq(profiles.userId, req.user.id),
+    });
+
+    if (!profile?.stripeCustomerId) {
+      return res.status(400).json({ error: 'No active subscription' });
+    }
+
+    const session = await createCustomerPortalSession(
+      profile.stripeCustomerId,
+      `${process.env.APP_URL}/dashboard`
+    );
+
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error('Portal error:', error);
+    res.status(500).json({ error: 'Failed to create portal session' });
+  }
+});
+
+// Webhook to handle Stripe events
+router.post('/billing/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'] as string;
+
+  try {
+    const event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
+
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const userId = session.metadata?.userId;
+
+        if (!userId) break;
+
+        // Update user profile with subscription
+        await db.update(profiles)
+          .set({
+            plan: session.metadata.plan || 'pro',
+            stripeCustomerId: session.customer as string,
+            stripeSubscriptionId: session.subscription as string,
+            subscriptionStatus: 'active',
+          })
+          .where(eq(profiles.userId, userId));
+
+        break;
+      }
+
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as Stripe.Subscription;
+
+        await db.update(profiles)
+          .set({
+            subscriptionStatus: subscription.status,
+            subscriptionEndsAt: new Date(subscription.current_period_end * 1000),
+            ...(subscription.status === 'canceled' && { plan: 'free' }),
+          })
+          .where(eq(profiles.stripeSubscriptionId, subscription.id));
+
+        break;
+      }
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(400).send(`Webhook Error: ${error.message}`);
+  }
+});
+
+export default router;
+```
+
+STEP 5.7: Create Pricing Page
+
+Create src/pages/Pricing.tsx:
+```typescript
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CheckCircle, Sparkles, Crown, Rocket } from 'lucide-react';
+import { toast } from 'sonner';
+
+export function Pricing() {
+  const [loading, setLoading] = useState<string | null>(null);
+
+  async function handleUpgrade(plan: 'pro' | 'enterprise') {
+    setLoading(plan);
+    try {
+      const res = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
+
+      const data = await res.json();
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL');
+      }
+    } catch (error) {
+      toast.error('Kunde inte starta betalning');
+      setLoading(null);
+    }
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-16">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-16">
+          <h1 className="text-4xl md:text-5xl font-bold mb-4">
+            Enkel prissättning
+          </h1>
+          <p className="text-xl text-gray-600 dark:text-gray-300">
+            Börja gratis, uppgradera när du behöver mer
+          </p>
+        </div>
+
+        {/* Pricing Cards */}
+        <div className="grid md:grid-cols-3 gap-8">
+          {/* Free */}
+          <Card className="border-2 border-gray-200 dark:border-gray-700">
+            <CardHeader>
+              <div className="flex items-center gap-2 mb-2">
+                <Rocket className="h-5 w-5 text-gray-500" />
+                <span className="text-sm font-semibold text-gray-500">GRATIS</span>
+              </div>
+              <CardTitle className="text-3xl font-bold">
+                0 kr<span className="text-lg text-gray-500">/mån</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <ul className="space-y-3">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>Se alla 379+ bidrag</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>Basic regelbaserad matchning</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>3 AI semantic analyser/månad</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>1 AI-genererad ansökan/månad</span>
+                </li>
+                <li className="flex items-start gap-2 text-gray-500">
+                  <CheckCircle className="h-5 w-5 text-gray-300 mt-0.5" />
+                  <span className="line-through">Email notiser</span>
+                </li>
+                <li className="flex items-start gap-2 text-gray-500">
+                  <CheckCircle className="h-5 w-5 text-gray-300 mt-0.5" />
+                  <span className="line-through">Export till Word/PDF</span>
+                </li>
+              </ul>
+
+              <Button variant="outline" className="w-full" disabled>
+                Nuvarande plan
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Pro - Featured */}
+          <Card className="border-2 border-blue-500 dark:border-blue-400 relative scale-105 shadow-2xl">
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white text-sm font-bold shadow-lg">
+              POPULÄRAST
+            </div>
+            <CardHeader className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="h-5 w-5 text-blue-600" />
+                <span className="text-sm font-semibold text-blue-600">PRO</span>
+              </div>
+              <CardTitle className="text-3xl font-bold">
+                299 kr<span className="text-lg text-gray-500">/mån</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-6">
+              <ul className="space-y-3">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span className="font-medium">Allt i Free</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>100 AI semantic analyser/månad</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>25 AI-genererade ansökningar/månad</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>Email notiser för nya bidrag</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>Deadline påminnelser</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>Export till Word & PDF</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>Prioriterad support</span>
+                </li>
+              </ul>
+
+              <Button
+                className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+                onClick={() => handleUpgrade('pro')}
+                disabled={loading !== null}
+              >
+                {loading === 'pro' ? 'Laddar...' : 'Uppgradera till Pro'}
+              </Button>
+
+              <p className="text-xs text-center text-gray-500">
+                Betala med kort • Avsluta när som helst
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Enterprise */}
+          <Card className="border-2 border-purple-200 dark:border-purple-700">
+            <CardHeader>
+              <div className="flex items-center gap-2 mb-2">
+                <Crown className="h-5 w-5 text-purple-600" />
+                <span className="text-sm font-semibold text-purple-600">ENTERPRISE</span>
+              </div>
+              <CardTitle className="text-3xl font-bold">
+                2 999 kr<span className="text-lg text-gray-500">/mån</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <ul className="space-y-3">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span className="font-medium">Allt i Pro</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>Obegränsad AI-användning</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>Team samarbete (5 användare)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>Custom scraper källor</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>Dedicated account manager</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>API access</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <span>White-label option</span>
+                </li>
+              </ul>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => handleUpgrade('enterprise')}
+                disabled={loading !== null}
+              >
+                {loading === 'enterprise' ? 'Laddar...' : 'Kontakta oss'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* FAQ Section */}
+        <div className="mt-24 max-w-3xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-12">
+            Vanliga frågor
+          </h2>
+
+          <div className="space-y-6">
+            <details className="group">
+              <summary className="flex justify-between items-center cursor-pointer p-4 rounded-lg bg-gray-50 dark:bg-gray-800 font-semibold">
+                Kan jag avsluta när som helst?
+                <span className="group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p className="p-4 text-gray-600 dark:text-gray-400">
+                Ja, du kan avsluta din prenumeration när som helst. Ingen bindningstid.
+              </p>
+            </details>
+
+            <details className="group">
+              <summary className="flex justify-between items-center cursor-pointer p-4 rounded-lg bg-gray-50 dark:bg-gray-800 font-semibold">
+                Vad händer om jag går över min kvot?
+                <span className="group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p className="p-4 text-gray-600 dark:text-gray-400">
+                Du får en notis när du närmar dig din kvot. Om du går över kan du uppgradera eller vänta till nästa månad.
+              </p>
+            </details>
+
+            <details className="group">
+              <summary className="flex justify-between items-center cursor-pointer p-4 rounded-lg bg-gray-50 dark:bg-gray-800 font-semibold">
+                Finns det någon rabatt för årsbetalning?
+                <span className="group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p className="p-4 text-gray-600 dark:text-gray-400">
+                Kontakta oss på hello@bidragai.se för årspriser och enterprise-rabatter.
+              </p>
+            </details>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+STEP 5.8: Add Plan Checking Middleware
+
+Update server/middleware/auth.ts to include plan checking:
+```typescript
+export function requirePlan(minPlan: 'pro' | 'enterprise') {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const profile = await db.query.profiles.findFirst({
+      where: eq(profiles.userId, req.user.id),
+    });
+
+    const planHierarchy = {
+      free: 0,
+      pro: 1,
+      enterprise: 2,
+    };
+
+    const userPlanLevel = planHierarchy[profile?.plan || 'free'];
+    const requiredPlanLevel = planHierarchy[minPlan];
+
+    if (userPlanLevel < requiredPlanLevel) {
+      return res.status(402).json({
+        error: 'Upgrade required',
+        message: `Denna funktion kräver ${minPlan.toUpperCase()}-plan`,
+        upgradeUrl: '/pricing',
+        currentPlan: profile?.plan || 'free',
+        requiredPlan: minPlan,
+      });
+    }
+
+    next();
+  };
+}
+```
+
+Apply to routes:
+```typescript
+// Require Pro for email notifications
+router.post('/notifications/enable', requireAuth, requirePlan('pro'), async (req, res) => {
+  // Enable notifications
+});
+
+// Require Pro for export
+router.get('/applications/:id/export/:format', requireAuth, requirePlan('pro'), async (req, res) => {
+  // Export logic
+});
+```
+
+STEP 5.9: Show Upgrade Prompts in UI
+
+When users hit limits, show upgrade prompt:
+```typescript
+function UpgradePrompt({ feature, requiredPlan }: { feature: string; requiredPlan: string }) {
+  return (
+    <Card className="border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20">
+      <CardContent className="p-6 text-center">
+        <Crown className="h-12 w-12 text-amber-600 mx-auto mb-4" />
+        <h3 className="text-xl font-bold mb-2">Uppgradera till {requiredPlan}</h3>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
+          {feature} kräver {requiredPlan}-plan
+        </p>
+        <Button
+          className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
+          onClick={() => window.location.href = '/pricing'}
+        >
+          Se priser
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PART 6: APPLICATION TRACKING & "ALREADY APPLIED" STATUS
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Track application lifecycle and show which grants user has applied to.
+
+STEP 6.1: Update Application Schema
+
+Add more status fields:
+```typescript
+export const applications = pgTable('applications', {
+  // ... existing fields ...
+  status: text('status').default('draft'), // 'draft', 'ready', 'submitted', 'under_review', 'approved', 'rejected', 'withdrawn'
+  submittedAt: timestamp('submitted_at'),
+  submissionMethod: text('submission_method'), // 'bidragai', 'manual', 'external'
+  reviewedAt: timestamp('reviewed_at'),
+  approvedAmount: numeric('approved_amount', { precision: 12, scale: 2 }),
+  notes: text('notes'),
+});
+```
+
+STEP 6.2: Add Status Change Endpoint
+```typescript
+router.patch('/applications/:id/status', requireAuth, async (req, res) => {
+  try {
+    const { status, notes, approvedAmount } = req.body;
+
+    const application = await db.query.applications.findFirst({
+      where: and(
+        eq(applications.id, req.params.id),
+        eq(applications.companyId, req.user.companyId)
+      ),
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    const updates: any = { status };
+
+    if (status === 'submitted') {
+      updates.submittedAt = new Date();
+    }
+
+    if (status === 'approved' || status === 'rejected') {
+      updates.reviewedAt = new Date();
+    }
+
+    if (approvedAmount) {
+      updates.approvedAmount = approvedAmount;
+    }
+
+    if (notes) {
+      updates.notes = notes;
+    }
+
+    const [updated] = await db.update(applications)
+      .set(updates)
+      .where(eq(applications.id, req.params.id))
+      .returning();
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Status update error:', error);
+    res.status(500).json({ error: 'Failed to update status' });
+  }
+});
+```
+
+STEP 6.3: Show "Already Applied" Badge on Grant Cards
+
+Update src/components/GrantCard.tsx:
+```typescript
+import { Badge } from '@/components/ui/badge';
+import { CheckCircle, Clock, XCircle } from 'lucide-react';
+
+interface GrantCardProps {
+  grant: Grant;
+  application?: Application; // Optional - if user has applied
+}
+
+export function GrantCard({ grant, application }: GrantCardProps) {
+  function getStatusBadge() {
+    if (!application) return null;
+
+    const badges = {
+      draft: { icon: Clock, label: 'Utkast', color: 'bg-gray-100 text-gray-700' },
+      submitted: { icon: Clock, label: 'Inskickad', color: 'bg-blue-100 text-blue-700' },
+      under_review: { icon: Clock, label: 'Under granskning', color: 'bg-yellow-100 text-yellow-700' },
+      approved: { icon: CheckCircle, label: 'Beviljad ✓', color: 'bg-green-100 text-green-700' },
+      rejected: { icon: XCircle, label: 'Nekad', color: 'bg-red-100 text-red-700' },
+    };
+
+    const badge = badges[application.status];
+    if (!badge) return null;
+
+    const Icon = badge.icon;
+
+    return (
+      <Badge className={badge.color}>
+        <Icon className="h-3 w-3 mr-1" />
+        {badge.label}
+      </Badge>
+    );
+  }
+
+  return (
+    <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+      <CardHeader>
+        <div className="flex justify-between items-start mb-2">
+          <CardTitle className="text-lg">{grant.title}</CardTitle>
+          {getStatusBadge()}
+        </div>
+        {/* ... rest of card ... */}
+      </CardHeader>
+    </Card>
+  );
+}
+```
+
+STEP 6.4: Add Success Tracking Dashboard
+
+Create src/pages/Analytics.tsx:
+```typescript
+export function Analytics() {
+  const [stats, setStats] = useState({
+    totalApplications: 0,
+    submitted: 0,
+    approved: 0,
+    rejected: 0,
+    successRate: 0,
+    totalApproved: 0,
+    avgApprovedAmount: 0,
+  });
+
+  useEffect(() => {
+    fetch('/api/analytics/success-stats')
+      .then(res => res.json())
+      .then(setStats);
+  }, []);
+
+  return (
+    <div className="container mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-8">Din Success Rate</h1>
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-gray-600">Totalt ansökningar</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold">{stats.totalApplications}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-gray-600">Inskickade</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold text-blue-600">{stats.submitted}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-green-50 dark:bg-green-900/20">
+          <CardHeader>
+            <CardTitle className="text-sm text-gray-600">Beviljade</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold text-green-600">{stats.approved}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-gray-600">Success Rate</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold text-green-600">
+              {stats.successRate}%
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {stats.approved > 0 && (
+        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+              Grattis! Du har beviljats bidrag
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-5xl font-bold text-green-600 mb-2">
+              {stats.totalApproved.toLocaleString('sv-SE')} SEK
+            </div>
+            <p className="text-gray-600 dark:text-gray-400">
+              Totalt beviljat från {stats.approved} bidrag
+            </p>
+            {stats.avgApprovedAmount > 0 && (
+              <p className="text-sm text-gray-500 mt-2">
+                Genomsnitt: {stats.avgApprovedAmount.toLocaleString('sv-SE')} SEK per bidrag
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

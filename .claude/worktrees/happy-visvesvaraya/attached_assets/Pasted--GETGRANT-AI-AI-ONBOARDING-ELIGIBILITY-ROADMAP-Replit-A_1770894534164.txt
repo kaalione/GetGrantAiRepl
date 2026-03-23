@@ -1,0 +1,1308 @@
+# 🚀 GETGRANT.AI — AI ONBOARDING + ELIGIBILITY ROADMAP
+## Replit Agent Prompt — Two major features in one implementation
+## Prerequisites: Eligibility extraction (getgrant-eligibility-extraction-prompt.md) should be implemented first
+
+```
+You are adding two major features to GetGrant.ai that dramatically improve
+the user experience: (1) AI-powered company onboarding that auto-fills
+company profiles from a URL or org number, and (2) an Eligibility Roadmap
+that gamifies the path to becoming eligible for grants.
+
+══════════════════════════════════════════════════════════════════
+EXISTING SYSTEM — READ CAREFULLY BEFORE STARTING
+══════════════════════════════════════════════════════════════════
+
+TECH STACK:
+- Backend: Express.js + PostgreSQL + Drizzle ORM
+- Frontend: React + TypeScript + Vite + Tailwind CSS + shadcn/ui
+- AI: Anthropic Claude API (@anthropic-ai/sdk, ANTHROPIC_API_KEY set)
+- Auth: Replit Auth
+- Scrapers: Python in /scrapers/ directory
+
+EXISTING TABLES (relevant ones):
+- profiles: userId, plan, etc.
+- companies: id, userId, company_name, org_number, industry, description, 
+  employees, revenue, location, founded_year, focus_areas, website_url
+- grants: id, title, description, eligibility, eligibility_criteria (JSONB),
+  target_groups, keywords, status, deadline, amount_min, amount_max,
+  source_name, organization, category, url
+
+EXISTING FEATURES:
+- Company profile form (manual entry)
+- Grant search with filters
+- AI semantic matching (Claude-based, 0-100 score)
+- AI application generation
+- Subscription tiers (free/pro/enterprise)
+- Progress tracker for onboarding
+- Deadline urgency alerts
+
+IMPORTANT: The eligibility_criteria JSONB field on grants should already
+be populated with structured data from the eligibility extraction pipeline
+(implemented separately). This feature DEPENDS on that data. The structure is:
+
+```json
+{
+  "company_types": ["aktiebolag", "enskild_firma"],
+  "company_sizes": {
+    "min_employees": null,
+    "max_employees": 250,
+    "size_category": ["micro", "small", "medium"],
+    "description": "Små och medelstora företag"
+  },
+  "revenue": {
+    "max_turnover_msek": 500,
+    "description": ""
+  },
+  "geography": {
+    "regions": ["hela_sverige"],
+    "counties": [],
+    "eu_countries": false,
+    "description": ""
+  },
+  "sectors": ["tech", "cleantech"],
+  "company_age": {
+    "min_years": null,
+    "max_years": 5,
+    "description": ""
+  },
+  "collaboration_required": {
+    "required": false,
+    "partner_types": [],
+    "description": ""
+  },
+  "other_requirements": [],
+  "who_cannot_apply": [],
+  "funding_details": {
+    "co_financing_required": true,
+    "co_financing_percentage": 50,
+    "description": ""
+  },
+  "confidence_score": 0.85
+}
+```
+
+══════════════════════════════════════════════════════════════════════════
+FEATURE 1: AI-POWERED COMPANY ONBOARDING
+══════════════════════════════════════════════════════════════════════════
+
+WHAT IT DOES:
+User enters their company URL (e.g., www.mittforetag.se) or org number
+(e.g., 559123-4567). The system:
+1. Fetches and analyzes the website content using Claude
+2. Looks up public company data (org number, employees, revenue, etc.)
+3. Presents a pre-filled company profile for the user to review and confirm
+4. Reduces onboarding from "fill in 15 fields" to "confirm and click save"
+
+USER FLOW:
+┌─────────────────────────────────────────────┐
+│  Skapa företagsprofil                        │
+│                                              │
+│  Ange din webbadress eller organisationsnr:  │
+│  ┌────────────────────────────┐              │
+│  │ www.mittforetag.se         │  [Analysera] │
+│  └────────────────────────────┘              │
+│                                              │
+│  ── ELLER fyll i manuellt ──                 │
+│  [Hoppa till formuläret →]                   │
+└─────────────────────────────────────────────┘
+         │
+         ▼  (AI analyzing...)
+┌─────────────────────────────────────────────┐
+│  Vi hittade ditt företag! ✓                  │
+│                                              │
+│  Företagsnamn:  [Mitt Företag AB        ] ✎  │
+│  Org.nr:        [559123-4567            ] ✎  │
+│  Bransch:       [Tech / SaaS            ] ✎  │
+│  Anställda:     [12                     ] ✎  │
+│  Omsättning:    [8 500 000 SEK          ] ✎  │
+│  Plats:         [Stockholm              ] ✎  │
+│  Grundat:       [2020                   ] ✎  │
+│  Beskrivning:   [AI-driven plattform    ] ✎  │
+│  Fokusområden:  [AI, SaaS, B2B         ] ✎  │
+│                                              │
+│  ⚠️ Granska och justera innan du sparar      │
+│                                              │
+│  [Spara profil]  [Redigera mer]              │
+└─────────────────────────────────────────────┘
+
+══════════════════════════════════════════════════════════════════
+TASK 1.1: ADD org_type FIELD TO COMPANIES TABLE
+══════════════════════════════════════════════════════════════════
+
+The company profile needs an org_type field for eligibility matching.
+Add this via a Drizzle migration:
+
+```typescript
+// In your schema file (db/schema.ts or similar)
+// Add to the companies table definition:
+
+org_type: text('org_type'),  // "aktiebolag", "enskild_firma", "handelsbolag", etc.
+website_url: text('website_url'),  // May already exist — check first
+founded_year: integer('founded_year'),  // May already exist — check first
+```
+
+Run migration:
+```bash
+npm run db:push
+```
+
+══════════════════════════════════════════════════════════════════
+TASK 1.2: CREATE COMPANY RESEARCH SERVICE
+══════════════════════════════════════════════════════════════════
+
+Create: server/services/companyResearch.ts
+
+This service does TWO things:
+1. Fetches the company website and analyzes it with Claude
+2. Looks up public Swedish company data
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+interface CompanyProfile {
+  company_name: string;
+  org_number: string | null;
+  org_type: string | null;
+  industry: string;
+  description: string;
+  employees: number | null;
+  revenue: number | null;  // SEK
+  location: string;
+  founded_year: number | null;
+  focus_areas: string[];
+  website_url: string;
+  confidence: number;  // How confident the AI is (0-1)
+  data_sources: string[];  // Which sources provided data
+}
+
+/**
+ * STEP 1: Fetch website content
+ * Use a simple HTTP fetch — no need for Playwright here since we just
+ * need text content, not rendered JS.
+ */
+async function fetchWebsiteContent(url: string): Promise<string> {
+  // Normalize URL
+  let normalizedUrl = url.trim();
+  if (!normalizedUrl.startsWith('http')) {
+    normalizedUrl = 'https://' + normalizedUrl;
+  }
+  
+  try {
+    const response = await fetch(normalizedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; GetGrant.ai/1.0; company-research)',
+        'Accept': 'text/html',
+        'Accept-Language': 'sv,en',
+      },
+      signal: AbortSignal.timeout(10000),  // 10 second timeout
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const html = await response.text();
+    
+    // Strip HTML tags, scripts, styles — keep just text
+    const textContent = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+      .replace(/<header[\s\S]*?<\/header>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Return first 5000 chars (enough for Claude to analyze)
+    return textContent.substring(0, 5000);
+    
+  } catch (error) {
+    console.error(`Failed to fetch ${normalizedUrl}:`, error);
+    return '';
+  }
+}
+
+/**
+ * STEP 2: Look up Swedish company data from public sources
+ * 
+ * Option A (Recommended): Use Allabolag.se or similar free API
+ * Option B: Use Bolagsverket's API (requires registration)
+ * Option C: Scrape basic info from Google
+ * 
+ * For MVP, we'll try fetching from allabolag.se (public data).
+ * If that fails, Claude will do its best with just the website.
+ */
+async function lookupSwedishCompanyData(query: string): Promise<Partial<CompanyProfile>> {
+  // query can be org number (559123-4567) or company name
+  const isOrgNumber = /^\d{6}-?\d{4}$/.test(query.trim());
+  
+  try {
+    // Try allabolag.se — it has public company data
+    // NOTE: This is a scraping approach. For production, consider
+    // using Bolagsverket's official API or a commercial service.
+    
+    const searchUrl = isOrgNumber
+      ? `https://www.allabolag.se/${query.replace('-', '')}`
+      : `https://www.allabolag.se/find/what/${encodeURIComponent(query)}`;
+    
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; GetGrant.ai/1.0)',
+        'Accept': 'text/html',
+        'Accept-Language': 'sv',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    
+    if (!response.ok) {
+      return {};
+    }
+    
+    const html = await response.text();
+    
+    // Extract basic company info from the page
+    // NOTE: These selectors may need updating if allabolag changes their site
+    const data: Partial<CompanyProfile> = {};
+    
+    // Company name
+    const nameMatch = html.match(/<h1[^>]*>(.*?)<\/h1>/i);
+    if (nameMatch) data.company_name = nameMatch[1].replace(/<[^>]+>/g, '').trim();
+    
+    // Org number
+    const orgMatch = html.match(/(\d{6}-\d{4})/);
+    if (orgMatch) data.org_number = orgMatch[1];
+    
+    // Revenue (omsättning)
+    const revMatch = html.match(/Omsättning[:\s]*(\d[\d\s]*)\s*(tkr|TSEK|MSEK|kr)/i);
+    if (revMatch) {
+      const amount = parseInt(revMatch[1].replace(/\s/g, ''));
+      const unit = revMatch[2].toLowerCase();
+      if (unit === 'tkr' || unit === 'tsek') data.revenue = amount * 1000;
+      else if (unit === 'msek') data.revenue = amount * 1000000;
+      else data.revenue = amount;
+    }
+    
+    // Employees
+    const empMatch = html.match(/Anställda[:\s]*(\d+)/i);
+    if (empMatch) data.employees = parseInt(empMatch[1]);
+    
+    // Location/Kommun
+    const locMatch = html.match(/Kommun[:\s]*([\wåäöÅÄÖ\s]+)/i);
+    if (locMatch) data.location = locMatch[1].trim();
+    
+    // Registration year
+    const yearMatch = html.match(/Registrerad[:\s]*(\d{4})/i);
+    if (yearMatch) data.founded_year = parseInt(yearMatch[1]);
+    
+    // Company form
+    const formMatch = html.match(/Bolagsform[:\s]*([\wåäöÅÄÖ\s]+)/i);
+    if (formMatch) {
+      const form = formMatch[1].trim().toLowerCase();
+      if (form.includes('aktiebolag')) data.org_type = 'aktiebolag';
+      else if (form.includes('enskild firma') || form.includes('enskild näringsidkare')) data.org_type = 'enskild_firma';
+      else if (form.includes('handelsbolag')) data.org_type = 'handelsbolag';
+      else if (form.includes('kommanditbolag')) data.org_type = 'kommanditbolag';
+      else if (form.includes('ekonomisk förening')) data.org_type = 'ekonomisk_forening';
+      else if (form.includes('ideell förening')) data.org_type = 'ideell_forening';
+    }
+    
+    return data;
+    
+  } catch (error) {
+    console.error('Company lookup failed:', error);
+    return {};
+  }
+}
+
+/**
+ * STEP 3: Use Claude to analyze website content and build company profile
+ */
+async function analyzeWithClaude(
+  websiteContent: string,
+  publicData: Partial<CompanyProfile>,
+  websiteUrl: string
+): Promise<CompanyProfile> {
+  
+  const prompt = `Du analyserar ett svenskt företags webbplats för att skapa en företagsprofil.
+
+WEBBPLATSINNEHÅLL (från ${websiteUrl}):
+${websiteContent || '(Kunde inte hämta webbplatsinnehåll)'}
+
+PUBLIK BOLAGSDATA (från offentliga register):
+${JSON.stringify(publicData, null, 2)}
+
+Skapa en komplett företagsprofil baserat på ovanstående. Svara ENBART med JSON (inga backticks, ingen annan text):
+
+{
+  "company_name": "Företagsnamn AB",
+  "org_number": "559123-4567 eller null",
+  "org_type": "aktiebolag|enskild_firma|handelsbolag|kommanditbolag|ekonomisk_forening|ideell_forening|stiftelse|null",
+  "industry": "Kort branschbeskrivning på svenska (max 50 tecken)",
+  "description": "2-3 meningar som beskriver vad företaget gör, på svenska. Basera på webbplatsinnehållet.",
+  "employees": null,
+  "revenue": null,
+  "location": "Stad/kommun",
+  "founded_year": null,
+  "focus_areas": ["område1", "område2", "område3"],
+  "website_url": "${websiteUrl}",
+  "confidence": 0.0
+}
+
+REGLER:
+- Använd publik bolagsdata för hårda fakta (org.nr, anställda, omsättning, plats)
+- Använd webbplatsinnehållet för mjuka fakta (beskrivning, bransch, fokusområden)
+- Om info saknas, sätt null (siffror) eller tom sträng
+- confidence: 0.0-1.0 baserat på hur mycket info du kunde extrahera
+- focus_areas: max 5 relevanta nyckelord för bidragsmatchning
+- revenue i SEK (inte TSEK eller MSEK)
+- GISSA INTE siffror — om du inte har data, sätt null`;
+
+  try {
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    
+    const responseText = message.content[0].type === 'text' 
+      ? message.content[0].text : '';
+    
+    let cleanJson = responseText.trim()
+      .replace(/^```json?\s*/i, '')
+      .replace(/\s*```$/i, '');
+    
+    const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON in response');
+    
+    const profile = JSON.parse(jsonMatch[0]) as CompanyProfile;
+    
+    // Merge: prefer public data over AI guesses for factual fields
+    if (publicData.org_number) profile.org_number = publicData.org_number;
+    if (publicData.employees) profile.employees = publicData.employees;
+    if (publicData.revenue) profile.revenue = publicData.revenue;
+    if (publicData.location) profile.location = publicData.location;
+    if (publicData.founded_year) profile.founded_year = publicData.founded_year;
+    if (publicData.org_type) profile.org_type = publicData.org_type;
+    if (publicData.company_name) profile.company_name = publicData.company_name;
+    
+    // Track data sources
+    profile.data_sources = [];
+    if (websiteContent) profile.data_sources.push('website');
+    if (Object.keys(publicData).length > 0) profile.data_sources.push('public_records');
+    profile.data_sources.push('ai_analysis');
+    
+    return profile;
+    
+  } catch (error) {
+    console.error('Claude analysis failed:', error);
+    // Return whatever we have from public data
+    return {
+      company_name: publicData.company_name || '',
+      org_number: publicData.org_number || null,
+      org_type: publicData.org_type || null,
+      industry: '',
+      description: '',
+      employees: publicData.employees || null,
+      revenue: publicData.revenue || null,
+      location: publicData.location || '',
+      founded_year: publicData.founded_year || null,
+      focus_areas: [],
+      website_url: websiteUrl,
+      confidence: 0.1,
+      data_sources: ['public_records'],
+    };
+  }
+}
+
+/**
+ * MAIN FUNCTION: Research a company from URL or org number
+ */
+export async function researchCompany(input: string): Promise<CompanyProfile> {
+  const trimmed = input.trim();
+  const isOrgNumber = /^\d{6}-?\d{4}$/.test(trimmed);
+  const isUrl = trimmed.includes('.') && !isOrgNumber;
+  
+  let websiteContent = '';
+  let publicData: Partial<CompanyProfile> = {};
+  let websiteUrl = '';
+  
+  if (isUrl) {
+    // Input is a URL
+    websiteUrl = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+    
+    // Fetch website in parallel with company lookup
+    const [content, lookup] = await Promise.all([
+      fetchWebsiteContent(websiteUrl),
+      lookupSwedishCompanyData(trimmed),  // Try searching by domain name
+    ]);
+    
+    websiteContent = content;
+    publicData = lookup;
+    
+  } else if (isOrgNumber) {
+    // Input is an org number
+    publicData = await lookupSwedishCompanyData(trimmed);
+    
+    // If we found a website from public data, fetch it too
+    if (publicData.website_url) {
+      websiteUrl = publicData.website_url;
+      websiteContent = await fetchWebsiteContent(websiteUrl);
+    }
+    
+  } else {
+    // Input is probably a company name — try looking it up
+    publicData = await lookupSwedishCompanyData(trimmed);
+  }
+  
+  // Analyze everything with Claude
+  return analyzeWithClaude(websiteContent, publicData, websiteUrl || trimmed);
+}
+```
+
+══════════════════════════════════════════════════════════════════
+TASK 1.3: CREATE API ENDPOINT
+══════════════════════════════════════════════════════════════════
+
+Add endpoint: POST /api/company/research
+
+```typescript
+// In your routes file (server/routes.ts or similar)
+
+import { researchCompany } from './services/companyResearch';
+
+// POST /api/company/research
+// Body: { input: "www.mittforetag.se" } OR { input: "559123-4567" }
+router.post('/company/research', requireAuth, async (req, res) => {
+  const { input } = req.body;
+  
+  if (!input || input.trim().length < 3) {
+    return res.status(400).json({ error: 'Ange en webbadress eller organisationsnummer' });
+  }
+  
+  try {
+    const profile = await researchCompany(input);
+    res.json({ success: true, profile });
+  } catch (error) {
+    console.error('Company research failed:', error);
+    res.status(500).json({ error: 'Kunde inte analysera företaget. Försök igen.' });
+  }
+});
+```
+
+══════════════════════════════════════════════════════════════════
+TASK 1.4: CREATE SMART ONBOARDING UI
+══════════════════════════════════════════════════════════════════
+
+Update or create the company profile creation page. The key UX principle:
+Start with the AI research step, then show editable pre-filled form.
+
+Create component: client/src/components/SmartOnboarding.tsx
+
+The component should have these states:
+1. INPUT — User enters URL or org number
+2. ANALYZING — Loading spinner with "Analyserar ditt företag..."
+3. REVIEW — Pre-filled form with all fields editable
+4. SAVING — Saving to database
+5. DONE — Success, redirect to grants
+
+```tsx
+// SmartOnboarding.tsx — Key structure (implement with your existing UI patterns)
+
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, Globe, Hash, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
+
+type OnboardingState = 'input' | 'analyzing' | 'review' | 'saving' | 'done';
+
+export function SmartOnboarding() {
+  const [state, setState] = useState<OnboardingState>('input');
+  const [input, setInput] = useState('');
+  const [profile, setProfile] = useState<any>(null);
+  const [error, setError] = useState('');
+
+  async function handleResearch() {
+    if (!input.trim()) return;
+    setState('analyzing');
+    setError('');
+    
+    try {
+      const res = await fetch('/api/company/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: input.trim() }),
+      });
+      
+      const data = await res.json();
+      
+      if (data.success && data.profile) {
+        setProfile(data.profile);
+        setState('review');
+      } else {
+        setError(data.error || 'Kunde inte hitta företaget');
+        setState('input');
+      }
+    } catch (err) {
+      setError('Något gick fel. Försök igen.');
+      setState('input');
+    }
+  }
+
+  async function handleSave() {
+    setState('saving');
+    try {
+      const res = await fetch('/api/companies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      });
+      
+      if (res.ok) {
+        setState('done');
+        // Redirect to grants page after brief delay
+        setTimeout(() => window.location.href = '/grants', 1500);
+      } else {
+        setError('Kunde inte spara. Försök igen.');
+        setState('review');
+      }
+    } catch (err) {
+      setError('Något gick fel.');
+      setState('review');
+    }
+  }
+
+  // STATE 1: INPUT
+  if (state === 'input') {
+    return (
+      <div className="max-w-lg mx-auto space-y-6">
+        <div className="text-center space-y-2">
+          <Sparkles className="w-12 h-12 mx-auto text-blue-500" />
+          <h1 className="text-2xl font-bold">Skapa din företagsprofil</h1>
+          <p className="text-gray-500">
+            Ange din webbadress eller organisationsnummer så fyller AI:n i profilen åt dig
+          </p>
+        </div>
+        
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex gap-2">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="www.mittforetag.se eller 559123-4567"
+                onKeyDown={(e) => e.key === 'Enter' && handleResearch()}
+                className="flex-1"
+              />
+              <Button onClick={handleResearch} disabled={!input.trim()}>
+                <Sparkles className="w-4 h-4 mr-2" />
+                Analysera
+              </Button>
+            </div>
+            
+            {error && (
+              <div className="flex items-center gap-2 text-red-600 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        
+        <div className="text-center">
+          <Button variant="ghost" onClick={() => setState('review')}>
+            Fyll i manuellt istället →
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // STATE 2: ANALYZING
+  if (state === 'analyzing') {
+    return (
+      <div className="max-w-lg mx-auto text-center space-y-4 py-12">
+        <Loader2 className="w-12 h-12 mx-auto animate-spin text-blue-500" />
+        <h2 className="text-xl font-semibold">Analyserar ditt företag...</h2>
+        <p className="text-gray-500">
+          Vi hämtar information från er webbplats och offentliga register
+        </p>
+      </div>
+    );
+  }
+
+  // STATE 3: REVIEW (editable pre-filled form)
+  // STATE 4: SAVING (same as review but with loading state on save button)
+  if (state === 'review' || state === 'saving') {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="text-center space-y-2">
+          {profile?.confidence > 0.5 && (
+            <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-full text-sm">
+              <CheckCircle2 className="w-4 h-4" />
+              Vi hittade ditt företag! Granska och justera nedan.
+            </div>
+          )}
+          <h1 className="text-2xl font-bold">Företagsprofil</h1>
+        </div>
+        
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            {/* Render editable fields for each profile property */}
+            {/* company_name, org_number, org_type (select), industry, 
+                employees, revenue, location, founded_year, description (textarea),
+                focus_areas (tag input), website_url */}
+            
+            {/* IMPORTANT: Make org_type a <Select> with these options:
+                aktiebolag, enskild_firma, handelsbolag, kommanditbolag,
+                ekonomisk_forening, ideell_forening, stiftelse */}
+            
+            {/* Show data source badges: "🌐 Webbplats" "📋 Offentliga register" "🤖 AI-analys" */}
+            
+            <div className="flex gap-3 pt-4">
+              <Button onClick={handleSave} disabled={state === 'saving'} className="flex-1">
+                {state === 'saving' ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sparar...</>
+                ) : (
+                  'Spara profil'
+                )}
+              </Button>
+              <Button variant="outline" onClick={() => setState('input')}>
+                Börja om
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // STATE 5: DONE
+  return (
+    <div className="max-w-lg mx-auto text-center space-y-4 py-12">
+      <CheckCircle2 className="w-16 h-16 mx-auto text-green-500" />
+      <h2 className="text-2xl font-bold">Profil skapad!</h2>
+      <p className="text-gray-500">Nu hittar vi bidrag som passar ditt företag...</p>
+    </div>
+  );
+}
+```
+
+IMPORTANT UI DETAILS:
+- The org_type field MUST be a select/dropdown, not free text
+- Revenue should be displayed in SEK with thousands separator
+- Focus areas should be a tag-input component (type and press enter to add)
+- Show a confidence indicator: green (>0.7), yellow (0.4-0.7), red (<0.4)
+- If AI couldn't find much, show "Vi kunde inte hitta all information automatiskt. 
+  Fyll gärna i resten manuellt." instead of error
+
+══════════════════════════════════════════════════════════════════
+TASK 1.5: INTEGRATE INTO EXISTING ONBOARDING FLOW
+══════════════════════════════════════════════════════════════════
+
+Replace or update your existing company creation page to use SmartOnboarding
+as the default entry point. Keep the manual form as fallback.
+
+Update the onboarding step in your progress tracker:
+- "Skapa företagsprofil" → "Skapa företagsprofil (30 sek med AI)"
+
+Update the empty state on dashboard:
+- Current: "Lägg till ditt företag"  
+- New: "Klistra in din webbadress — AI fyller i resten"
+
+══════════════════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════════════════
+FEATURE 2: ELIGIBILITY ROADMAP (GAMIFIED PATH TO ELIGIBILITY)
+══════════════════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════════════════
+
+WHAT IT DOES:
+Instead of just showing "you don't qualify", the system shows a checklist
+of what the company needs to do to BECOME eligible. Grants are categorized
+into three tiers: "Ready to apply", "Almost there", "Requires changes".
+
+DEPENDS ON:
+- Structured eligibility_criteria on grants (from eligibility extraction pipeline)
+- Company profile with org_type, employees, revenue, location, etc.
+
+══════════════════════════════════════════════════════════════════
+TASK 2.1: CREATE ELIGIBILITY CHECKER SERVICE
+══════════════════════════════════════════════════════════════════
+
+Create: server/services/eligibilityChecker.ts
+
+```typescript
+export interface EligibilityCheck {
+  criterionName: string;        // "Företagsstorlek", "Geografi", etc.
+  status: 'met' | 'not_met' | 'unknown' | 'partially_met';
+  description: string;          // Human readable explanation
+  requirement: string;          // What the grant requires
+  currentValue: string;         // What the company has
+  actionRequired: string | null; // What to do to become eligible (null if met)
+  category: 'hard' | 'soft';   // Hard = blocking, Soft = nice-to-have
+  icon: string;                 // Emoji for frontend display
+}
+
+export interface EligibilityResult {
+  grantId: string;
+  grantTitle: string;
+  overallStatus: 'eligible' | 'almost_eligible' | 'not_eligible';
+  score: number;                // 0-100
+  checksCompleted: number;
+  checksPassed: number;
+  checks: EligibilityCheck[];
+  nextSteps: string[];          // Top 3 actionable things to do
+  estimatedTimeToEligible: string | null;  // e.g., "2-4 veckor"
+}
+
+export function checkEligibility(
+  company: {
+    org_type: string | null;
+    employees: number | null;
+    revenue: number | null;
+    location: string | null;
+    founded_year: number | null;
+    industry: string | null;
+    description: string | null;
+  },
+  grant: {
+    id: string;
+    title: string;
+    eligibility_criteria: any;  // The JSONB
+  }
+): EligibilityResult {
+  const criteria = grant.eligibility_criteria;
+  const checks: EligibilityCheck[] = [];
+  
+  if (!criteria || criteria.confidence_score < 0.2) {
+    return {
+      grantId: grant.id,
+      grantTitle: grant.title,
+      overallStatus: 'eligible',  // Can't say no if we don't know
+      score: 50,
+      checksCompleted: 0,
+      checksPassed: 0,
+      checks: [],
+      nextSteps: ['Kontrollera behörighetskraven direkt hos bidragsgivaren'],
+      estimatedTimeToEligible: null,
+    };
+  }
+  
+  // ── CHECK 1: ORGANIZATION TYPE ──
+  if (criteria.company_types?.length > 0) {
+    const companyType = company.org_type;
+    const isMatch = !companyType || criteria.company_types.includes(companyType) || criteria.company_types.includes('all');
+    
+    checks.push({
+      criterionName: 'Organisationsform',
+      status: !companyType ? 'unknown' : isMatch ? 'met' : 'not_met',
+      description: isMatch 
+        ? `${formatOrgType(companyType)} är godkänd organisationsform`
+        : `Kräver ${criteria.company_types.map(formatOrgType).join(' eller ')}`,
+      requirement: criteria.company_types.map(formatOrgType).join(', '),
+      currentValue: companyType ? formatOrgType(companyType) : 'Ej angiven',
+      actionRequired: !companyType 
+        ? 'Ange organisationsform i din profil'
+        : isMatch ? null : 'Din organisationsform uppfyller inte kravet. Kontrollera med bidragsgivaren om undantag finns.',
+      category: 'hard',
+      icon: '🏢',
+    });
+  }
+  
+  // ── CHECK 2: COMPANY SIZE ──
+  if (criteria.company_sizes?.max_employees || criteria.company_sizes?.min_employees) {
+    const emp = company.employees;
+    let status: EligibilityCheck['status'] = 'unknown';
+    let actionRequired: string | null = null;
+    
+    if (emp !== null && emp !== undefined) {
+      const maxOk = !criteria.company_sizes.max_employees || emp <= criteria.company_sizes.max_employees;
+      const minOk = !criteria.company_sizes.min_employees || emp >= criteria.company_sizes.min_employees;
+      status = (maxOk && minOk) ? 'met' : 'not_met';
+      
+      if (!maxOk) actionRequired = `Ditt företag har ${emp} anställda, max ${criteria.company_sizes.max_employees} tillåtet`;
+      if (!minOk) actionRequired = `Ditt företag har ${emp} anställda, minst ${criteria.company_sizes.min_employees} krävs`;
+    } else {
+      actionRequired = 'Ange antal anställda i din profil';
+    }
+    
+    checks.push({
+      criterionName: 'Företagsstorlek',
+      status,
+      description: criteria.company_sizes.description || `Max ${criteria.company_sizes.max_employees} anställda`,
+      requirement: criteria.company_sizes.description || 'Se detaljer',
+      currentValue: emp !== null ? `${emp} anställda` : 'Ej angiven',
+      actionRequired,
+      category: 'hard',
+      icon: '👥',
+    });
+  }
+  
+  // ── CHECK 3: GEOGRAPHY ──
+  if (criteria.geography?.regions?.length > 0 && !criteria.geography.regions.includes('hela_sverige') && !criteria.geography.regions.includes('eu')) {
+    const loc = company.location?.toLowerCase() || '';
+    const isMatch = loc && criteria.geography.regions.some((r: string) => loc.includes(r));
+    
+    checks.push({
+      criterionName: 'Geografi',
+      status: !loc ? 'unknown' : isMatch ? 'met' : 'not_met',
+      description: criteria.geography.description || `Kräver företag i ${criteria.geography.regions.join(', ')}`,
+      requirement: criteria.geography.description || criteria.geography.regions.join(', '),
+      currentValue: company.location || 'Ej angiven',
+      actionRequired: !loc
+        ? 'Ange var ditt företag finns i din profil'
+        : isMatch ? null : `Bidraget riktar sig till ${criteria.geography.description || criteria.geography.regions.join(', ')}`,
+      category: 'hard',
+      icon: '📍',
+    });
+  }
+  
+  // ── CHECK 4: SECTORS/INDUSTRY ──
+  if (criteria.sectors?.length > 0 && !criteria.sectors.includes('all')) {
+    const ind = company.industry?.toLowerCase() || '';
+    const desc = company.description?.toLowerCase() || '';
+    const combinedText = `${ind} ${desc}`;
+    const isMatch = criteria.sectors.some((s: string) => combinedText.includes(s));
+    
+    checks.push({
+      criterionName: 'Bransch',
+      status: !ind ? 'unknown' : isMatch ? 'met' : 'partially_met',
+      description: `Riktar sig till: ${criteria.sectors.join(', ')}`,
+      requirement: criteria.sectors.join(', '),
+      currentValue: company.industry || 'Ej angiven',
+      actionRequired: !ind
+        ? 'Ange bransch i din profil'
+        : isMatch ? null : 'Din bransch matchar inte helt. Kontrollera om ditt projekt ändå kan passa.',
+      category: 'soft',
+      icon: '🏭',
+    });
+  }
+  
+  // ── CHECK 5: COMPANY AGE ──
+  if (criteria.company_age?.max_years || criteria.company_age?.min_years) {
+    const age = company.founded_year ? (new Date().getFullYear() - company.founded_year) : null;
+    let status: EligibilityCheck['status'] = 'unknown';
+    let actionRequired: string | null = null;
+    
+    if (age !== null) {
+      const maxOk = !criteria.company_age.max_years || age <= criteria.company_age.max_years;
+      const minOk = !criteria.company_age.min_years || age >= criteria.company_age.min_years;
+      status = (maxOk && minOk) ? 'met' : 'not_met';
+      
+      if (!maxOk) actionRequired = `Ditt företag är ${age} år, max ${criteria.company_age.max_years} år tillåtet`;
+      if (!minOk) actionRequired = `Ditt företag är ${age} år, minst ${criteria.company_age.min_years} år krävs`;
+    } else {
+      actionRequired = 'Ange grundningsår i din profil';
+    }
+    
+    checks.push({
+      criterionName: 'Företagsålder',
+      status,
+      description: criteria.company_age.description || '',
+      requirement: criteria.company_age.description || 'Se detaljer',
+      currentValue: age !== null ? `${age} år (grundat ${company.founded_year})` : 'Ej angiven',
+      actionRequired,
+      category: 'hard',
+      icon: '📅',
+    });
+  }
+  
+  // ── CHECK 6: COLLABORATION REQUIRED ──
+  if (criteria.collaboration_required?.required) {
+    checks.push({
+      criterionName: 'Samarbetskrav',
+      status: 'not_met',  // We don't track this in company profile yet
+      description: criteria.collaboration_required.description || 'Kräver samarbetspartner',
+      requirement: `Partner behövs: ${criteria.collaboration_required.partner_types?.join(', ') || 'Se detaljer'}`,
+      currentValue: 'Ej bekräftat',
+      actionRequired: `Hitta en samarbetspartner: ${criteria.collaboration_required.partner_types?.join(', ') || 'Se bidragsvillkoren'}. Tips: Kontakta RISE, KTH Innovation eller lokala science parks.`,
+      category: 'hard',
+      icon: '🤝',
+    });
+  }
+  
+  // ── CHECK 7: CO-FINANCING ──
+  if (criteria.funding_details?.co_financing_required) {
+    checks.push({
+      criterionName: 'Medfinansiering',
+      status: 'unknown',  // Can't check this automatically
+      description: criteria.funding_details.description || `${criteria.funding_details.co_financing_percentage}% medfinansiering krävs`,
+      requirement: `${criteria.funding_details.co_financing_percentage || '?'}% egen insats`,
+      currentValue: 'Ej bekräftat',
+      actionRequired: `Säkerställ att ni kan medfinansiera ${criteria.funding_details.co_financing_percentage || '?'}% av projektbudgeten med egna medel eller annan finansiering.`,
+      category: 'soft',
+      icon: '💰',
+    });
+  }
+  
+  // ── CHECK 8: OTHER REQUIREMENTS ──
+  if (criteria.other_requirements?.length > 0) {
+    criteria.other_requirements.forEach((req: string, i: number) => {
+      checks.push({
+        criterionName: `Övrigt krav ${i + 1}`,
+        status: 'unknown',
+        description: req,
+        requirement: req,
+        currentValue: 'Ej bekräftat',
+        actionRequired: `Kontrollera: ${req}`,
+        category: 'soft',
+        icon: '📋',
+      });
+    });
+  }
+  
+  // ── CALCULATE OVERALL RESULT ──
+  const checksCompleted = checks.length;
+  const checksPassed = checks.filter(c => c.status === 'met').length;
+  const checksUnknown = checks.filter(c => c.status === 'unknown').length;
+  const checksFailed = checks.filter(c => c.status === 'not_met').length;
+  const hardFails = checks.filter(c => c.status === 'not_met' && c.category === 'hard').length;
+  
+  let overallStatus: EligibilityResult['overallStatus'];
+  let score: number;
+  
+  if (checksCompleted === 0) {
+    overallStatus = 'eligible';
+    score = 50;
+  } else if (hardFails > 0) {
+    overallStatus = 'not_eligible';
+    score = Math.round((checksPassed / checksCompleted) * 100);
+  } else if (checksFailed === 0 && checksUnknown <= 1) {
+    overallStatus = 'eligible';
+    score = Math.round(((checksPassed + checksUnknown * 0.5) / checksCompleted) * 100);
+  } else {
+    overallStatus = 'almost_eligible';
+    score = Math.round(((checksPassed + checksUnknown * 0.5) / checksCompleted) * 100);
+  }
+  
+  // ── GENERATE NEXT STEPS ──
+  const nextSteps = checks
+    .filter(c => c.actionRequired && c.status !== 'met')
+    .sort((a, b) => {
+      // Prioritize: unknown profile fields first, then hard fails, then soft
+      if (a.status === 'unknown' && b.status !== 'unknown') return -1;
+      if (b.status === 'unknown' && a.status !== 'unknown') return 1;
+      if (a.category === 'hard' && b.category === 'soft') return -1;
+      if (b.category === 'hard' && a.category === 'soft') return 1;
+      return 0;
+    })
+    .slice(0, 3)
+    .map(c => c.actionRequired!);
+  
+  // Estimate time
+  let estimatedTimeToEligible: string | null = null;
+  if (overallStatus === 'almost_eligible') {
+    const unknownCount = checks.filter(c => c.status === 'unknown').length;
+    if (unknownCount > 0 && hardFails === 0) {
+      estimatedTimeToEligible = '5 minuter (fyll i profilen)';
+    } else {
+      estimatedTimeToEligible = '2-4 veckor';
+    }
+  }
+  
+  return {
+    grantId: grant.id,
+    grantTitle: grant.title,
+    overallStatus,
+    score,
+    checksCompleted,
+    checksPassed,
+    checks,
+    nextSteps,
+    estimatedTimeToEligible,
+  };
+}
+
+function formatOrgType(type: string | null): string {
+  if (!type) return 'Okänd';
+  const map: Record<string, string> = {
+    'aktiebolag': 'Aktiebolag (AB)',
+    'enskild_firma': 'Enskild firma',
+    'handelsbolag': 'Handelsbolag (HB)',
+    'kommanditbolag': 'Kommanditbolag (KB)',
+    'ekonomisk_forening': 'Ekonomisk förening',
+    'ideell_forening': 'Ideell förening',
+    'stiftelse': 'Stiftelse',
+    'kommun': 'Kommun',
+    'region': 'Region',
+    'universitet': 'Universitet/Högskola',
+  };
+  return map[type] || type;
+}
+```
+
+══════════════════════════════════════════════════════════════════
+TASK 2.2: CREATE API ENDPOINT FOR ELIGIBILITY CHECK
+══════════════════════════════════════════════════════════════════
+
+Add endpoint: GET /api/grants/:id/eligibility
+
+```typescript
+import { checkEligibility } from './services/eligibilityChecker';
+
+// GET /api/grants/:id/eligibility
+// Returns detailed eligibility breakdown for the user's company
+router.get('/grants/:id/eligibility', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  
+  // Get user's company
+  const company = await db.query.companies.findFirst({
+    where: eq(companies.userId, req.user.id),
+  });
+  
+  if (!company) {
+    return res.status(400).json({ error: 'Skapa en företagsprofil först' });
+  }
+  
+  // Get grant with eligibility criteria
+  const grant = await db.query.grants.findFirst({
+    where: eq(grants.id, id),
+  });
+  
+  if (!grant) {
+    return res.status(404).json({ error: 'Bidrag hittades inte' });
+  }
+  
+  const result = checkEligibility(company, grant);
+  res.json(result);
+});
+
+// GET /api/grants/eligibility-overview
+// Returns eligibility status for all open grants — used on dashboard
+router.get('/grants/eligibility-overview', requireAuth, async (req, res) => {
+  const company = await db.query.companies.findFirst({
+    where: eq(companies.userId, req.user.id),
+  });
+  
+  if (!company) {
+    return res.json({ eligible: [], almost: [], not_eligible: [] });
+  }
+  
+  const openGrants = await db.select().from(grants)
+    .where(eq(grants.status, 'open'))
+    .limit(200);
+  
+  const eligible: any[] = [];
+  const almost: any[] = [];
+  const notEligible: any[] = [];
+  
+  for (const grant of openGrants) {
+    const result = checkEligibility(company, grant);
+    const summary = {
+      grantId: grant.id,
+      grantTitle: grant.title,
+      source: grant.source_name,
+      deadline: grant.deadline,
+      score: result.score,
+      checksPassed: result.checksPassed,
+      checksTotal: result.checksCompleted,
+      nextSteps: result.nextSteps.slice(0, 1),
+    };
+    
+    if (result.overallStatus === 'eligible') eligible.push(summary);
+    else if (result.overallStatus === 'almost_eligible') almost.push(summary);
+    else notEligible.push(summary);
+  }
+  
+  // Sort each tier by score descending
+  eligible.sort((a, b) => b.score - a.score);
+  almost.sort((a, b) => b.score - a.score);
+  
+  res.json({
+    eligible,
+    almost,
+    not_eligible: notEligible,
+    counts: {
+      eligible: eligible.length,
+      almost: almost.length,
+      not_eligible: notEligible.length,
+    }
+  });
+});
+```
+
+══════════════════════════════════════════════════════════════════
+TASK 2.3: CREATE ELIGIBILITY ROADMAP UI COMPONENTS
+══════════════════════════════════════════════════════════════════
+
+Create these frontend components:
+
+1. EligibilityChecklist — Shows on grant detail page
+2. EligibilityDashboard — Shows on main dashboard  
+3. EligibilityProgressBar — Reusable progress indicator
+
+Key UI patterns:
+
+```tsx
+// EligibilityChecklist.tsx — For grant detail page
+// Shows each criterion as a checkable item with status icon
+
+// Visual structure:
+// ┌────────────────────────────────────────────┐
+// │ Behörighet för "Innovationsbidrag Vinnova" │
+// │                                            │
+// │ ████████████░░░░ 75% — Nästan behörig      │
+// │                                            │
+// │ ✅ Organisationsform — Aktiebolag godkänd  │
+// │ ✅ Företagsstorlek — 12 av max 250         │
+// │ ❌ Samarbetskrav — Akademisk partner krävs │
+// │    → Tips: Kontakta KTH Innovation         │
+// │ ❓ Medfinansiering — 50% krävs             │
+// │    → Säkerställ budget                     │
+// │                                            │
+// │ 📋 Nästa steg:                             │
+// │ 1. Hitta akademisk samarbetspartner        │
+// │ 2. Säkerställ 50% medfinansiering          │
+// │                                            │
+// │ ⏱️ Estimerad tid: 2-4 veckor               │
+// └────────────────────────────────────────────┘
+
+// Status icons mapping:
+// met → ✅ (green check)
+// not_met → ❌ (red X)  
+// unknown → ❓ (yellow question, clickable to fill in profile)
+// partially_met → ⚠️ (yellow warning)
+
+// IMPORTANT: When status is "unknown" and the missing info is in the
+// company profile, show a LINK to edit profile. Example:
+// ❓ Företagsstorlek — Ej angiven
+//    → [Uppdatera din profil] för att se om du uppfyller kravet
+```
+
+```tsx
+// EligibilityDashboard.tsx — For main dashboard
+// Groups grants into three tiers with progress indicators
+
+// Visual structure:
+// ┌──────────────────────────────────────────────────┐
+// │ Dina bidragsmöjligheter                          │
+// │                                                  │
+// │ 🟢 Redo att söka (23 bidrag)                     │
+// │ ┌────────────────────────────────────────────┐  │
+// │ │ • Klimatinvestering Vinnova    Deadline: 3v │  │
+// │ │ • Digitaliseringsbidrag        Deadline: 2m │  │
+// │ │ [Visa alla →]                               │  │
+// │ └────────────────────────────────────────────┘  │
+// │                                                  │
+// │ 🟡 Nästan där (8 bidrag)                         │
+// │ ┌────────────────────────────────────────────┐  │
+// │ │ • EIC Accelerator   ██████░░ 75% behörig   │  │
+// │ │   → Hitta akademisk partner                │  │
+// │ │ • Innovationsfonden ████░░░░ 50% behörig   │  │
+// │ │   → Ange antal anställda i profil          │  │
+// │ │ [Visa alla →]                               │  │
+// │ └────────────────────────────────────────────┘  │
+// │                                                  │
+// │ 🔴 Kräver förändring (15 bidrag)                 │
+// │ [Visa alla →]                                    │
+// └──────────────────────────────────────────────────┘
+```
+
+GAMIFICATION ELEMENTS TO IMPLEMENT:
+
+1. **Progress bar per grant** — Shows % of criteria met
+   - Green: 80-100%, Yellow: 50-79%, Red: 0-49%
+   - Animate when criteria changes from not_met to met
+
+2. **"Profile completeness" score** on dashboard
+   - "Din profil är 60% komplett — fyll i resterande fält för bättre matchning"
+   - Each empty field reduces completeness
+   - Completing fields triggers confetti or success animation
+
+3. **Notification when becoming eligible**
+   - When user updates profile and a grant moves from "almost" to "eligible":
+   - Show toast: "🎉 Du uppfyller nu kraven för [Bidragsnamn]!"
+   - Optional: Send email notification
+
+4. **Dashboard counter badges**
+   - "23 bidrag redo" (green badge)
+   - "8 bidrag nästan inom räckhåll" (yellow badge)
+   - Numbers update in real-time as profile is completed
+
+══════════════════════════════════════════════════════════════════
+TASK 2.4: INTEGRATE INTO GRANT LISTING & DETAIL PAGES
+══════════════════════════════════════════════════════════════════
+
+Update existing grant cards in the listing page:
+
+- Add small eligibility indicator next to each grant card:
+  🟢 = eligible, 🟡 = almost, 🔴 = not eligible
+- On hover/click, show quick summary: "3 av 4 krav uppfyllda"
+
+Update grant detail page:
+- Add EligibilityChecklist component ABOVE the existing match score section
+- Show roadmap alongside existing match analysis
+- Add CTA button: "Vad behöver jag göra?" that scrolls to checklist
+
+══════════════════════════════════════════════════════════════════
+IMPLEMENTATION ORDER
+══════════════════════════════════════════════════════════════════
+
+FEATURE 1 (AI Onboarding):
+1. Add org_type to schema + migrate (Task 1.1)
+2. Create companyResearch service (Task 1.2)
+3. Create API endpoint (Task 1.3)
+4. Build SmartOnboarding UI (Task 1.4)
+5. Integrate into existing flow (Task 1.5)
+6. TEST: Enter URL → get pre-filled profile → save → verify in DB
+
+FEATURE 2 (Eligibility Roadmap):
+7. Create eligibilityChecker service (Task 2.1)
+8. Create API endpoints (Task 2.2)
+9. Build frontend components (Task 2.3)
+10. Integrate into grant listing + detail pages (Task 2.4)
+11. TEST: View grant → see checklist → update profile → see checklist change
+
+══════════════════════════════════════════════════════════════════
+TESTING CHECKLIST
+══════════════════════════════════════════════════════════════════
+
+FEATURE 1 — AI ONBOARDING:
+□ Enter URL → AI analyzes → profile pre-filled
+□ Enter org number → company data found → profile pre-filled
+□ Enter invalid URL → graceful error, manual form shown
+□ All fields editable after AI fills them
+□ org_type dropdown works with all options
+□ Revenue displayed with thousands separator
+□ Focus areas tag input works
+□ Profile saves correctly to database
+□ "Skip to manual" flow works
+□ Data sources shown (website, public records, AI)
+
+FEATURE 2 — ELIGIBILITY ROADMAP:
+□ Grant detail page shows eligibility checklist
+□ ✅/❌/❓/⚠️ icons display correctly
+□ Progress bar shows correct percentage
+□ "Next steps" are actionable and make sense
+□ "Unknown" criteria link to profile edit
+□ Dashboard shows three tiers (eligible/almost/not eligible)
+□ Counts are correct
+□ Updating profile changes eligibility status
+□ Grants without eligibility_criteria show gracefully
+□ Empty company profile shows "Skapa profil först"
+
+COST ESTIMATION:
+- AI Onboarding: ~$0.005 per company research (one Claude call)
+- Eligibility Roadmap: $0 (no AI calls, purely rule-based matching)
+- At 100 signups/month: ~$0.50/month for onboarding AI
+
+══════════════════════════════════════════════════════════════════
+EDGE CASES TO HANDLE
+══════════════════════════════════════════════════════════════════
+
+1. Company website is behind login/auth → Show "Kunde inte nå webbplatsen"
+2. Company has no website → Allow org number only
+3. Org number not found → Show "Hittade inte bolaget. Kontrollera numret."
+4. Website is in English → Claude handles this fine, translates to Swedish
+5. Very new company (no public data yet) → AI fills from website only
+6. Company with multiple branches → Use HQ location from public data
+7. Grant has no eligibility_criteria yet → Show "Behörighetsinformation 
+   saknas för detta bidrag. Kontrollera hos bidragsgivaren."
+8. Company profile is completely empty → Show "Fyll i profilen för att 
+   se din behörighet" with prominent CTA
+```

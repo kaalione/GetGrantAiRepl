@@ -1,0 +1,105 @@
+3 — Add coverage stats to the admin UI
+The admin Settings page already has the matching test card. Add an Eligibility Coverage card directly above it so the admin can see per-source coverage at a glance and trigger re-extraction without touching the database.
+ 
+1
+Add EligibilityCoverageCard component to the admin Settings page
+File: client/src/pages/admin/Settings.tsx (or wherever the admin dashboard lives).
+Add this component above the existing MatchingTestCard.
+ 
+// EligibilityCoverageCard — add to admin Settings page
+function EligibilityCoverageCard() {
+ const { data: stats, isLoading, refetch } =
+   useQuery({ queryKey: ['eligibility-coverage'],
+     queryFn: () => fetch('/api/admin/eligibility/coverage').then(r => r.json())
+   });
+ 
+ const [reextracting, setReextracting] = useState(false);
+ 
+ const totalGrants = stats?.reduce((s, r) => s + Number(r.total), 0) ?? 0;
+ const totalGood   = stats?.reduce((s, r) => s + Number(r.high_conf), 0) ?? 0;
+ const overallPct  = totalGrants > 0
+   ? Math.round((totalGood / totalGrants) * 100) : 0;
+ 
+ const handleReextract = async (sourceName?: string) => {
+   setReextracting(true);
+   await fetch('/api/admin/eligibility/reextract-low-confidence', {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({ sourceName, maxGrants: 200, threshold: 0.3 })
+   });
+   setTimeout(() => { setReextracting(false); refetch(); }, 3000);
+ };
+ 
+ return (
+   <Card>
+     <CardHeader>
+       <CardTitle>Eligibility Coverage</CardTitle>
+       <CardDescription>
+         Structured eligibility extracted for {overallPct}% of open grants
+         ({totalGood} / {totalGrants})
+       </CardDescription>
+     </CardHeader>
+     <CardContent>
+       {/* Overall progress bar */}
+       <div className='mb-4'>
+         <Progress value={overallPct} className='h-3' />
+         <p className='text-xs text-muted-foreground mt-1'>
+           Target: 70%+ for good score differentiation
+         </p>
+       </div>
+ 
+       {/* Per-source table — show bottom 10 by coverage */}
+       <table className='w-full text-sm'>
+         <thead>
+           <tr className='text-muted-foreground text-xs'>
+             <th className='text-left py-1'>Source</th>
+             <th className='text-right'>Total</th>
+             <th className='text-right'>Good</th>
+             <th className='text-right'>Coverage</th>
+             <th></th>
+           </tr>
+         </thead>
+         <tbody>
+           {stats?.slice(0, 15).map(row => (
+             <tr key={row.source_name} className='border-t'>
+               <td className='py-1.5 font-medium truncate max-w-[200px]'>
+                 {row.source_name}
+               </td>
+               <td className='text-right text-muted-foreground'>{row.total}</td>
+               <td className='text-right'>{row.high_conf}</td>
+               <td className='text-right'>
+                 <Badge variant={
+                   row.pct_good >= 70 ? 'default' :
+                   row.pct_good >= 40 ? 'secondary' : 'destructive'
+                 }>
+                   {row.pct_good}%
+                 </Badge>
+               </td>
+               <td className='text-right pl-2'>
+                 {row.pct_good < 70 && (
+                   <Button size='xs' variant='ghost'
+                     onClick={() => handleReextract(row.source_name)}
+                     disabled={reextracting}>
+                     Retry
+                   </Button>
+                 )}
+               </td>
+             </tr>
+           ))}
+         </tbody>
+       </table>
+ 
+       <div className='flex gap-2 mt-4'>
+         <Button onClick={() => handleReextract()} disabled={reextracting}
+           variant='outline' size='sm'>
+           {reextracting ? 'Running...' : 'Re-extract all low-confidence'}
+         </Button>
+         <Button onClick={() => refetch()} variant='ghost' size='sm'>
+           Refresh stats
+         </Button>
+       </div>
+     </CardContent>
+   </Card>
+ );
+}
+ 

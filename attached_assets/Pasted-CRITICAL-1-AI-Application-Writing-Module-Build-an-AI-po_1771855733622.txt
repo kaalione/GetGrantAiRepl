@@ -1,0 +1,648 @@
+CRITICAL 1: AI Application Writing Module
+Build an AI-powered grant application writing module for GetGrant.ai.
+
+## Overview
+Users select a grant, answer a few questions about their project, and the AI generates 
+a complete draft application tailored to that specific grant's requirements and 
+evaluation criteria.
+
+## Backend: New API endpoints
+
+Create `server/routes/applications.ts` with these endpoints:
+
+### POST /api/applications/generate
+Generate a draft application for a specific grant.
+
+Request body:
+{
+  grantId: string,
+  companyProfile: {
+    name: string,
+    description: string,
+    sector: string,
+    employees: number,
+    revenue?: number,
+    founded?: number,
+    region: string
+  },
+  projectDescription: string,      // 200-1000 chars, what they want to do
+  projectGoals: string,             // expected outcomes
+  projectBudget: number,            // total project budget in SEK
+  requestedAmount: number,          // amount applying for
+  previousExperience?: string       // relevant prior work
+}
+
+Response:
+{
+  applicationId: string,
+  grantId: string,
+  grantTitle: string,
+  sections: [
+    {
+      sectionKey: string,           // e.g. "project_description"
+      sectionTitle: string,         // e.g. "Projektbeskrivning"
+      content: string,              // AI-generated text
+      wordCount: number,
+      maxWords?: number,            // from grant template if known
+      evaluationCriteria?: string   // what judges look for in this section
+    }
+  ],
+  overallScore?: number,            // estimated fit score 0-100
+  warnings: string[],               // e.g. "Budget exceeds maximum grant amount"
+  generatedAt: string
+}
+
+### GET /api/applications/:id
+Retrieve a saved application draft.
+
+### PUT /api/applications/:id/section/:sectionKey
+Update a specific section (user edits).
+
+Request body: { content: string }
+
+### POST /api/applications/:id/regenerate-section
+Regenerate a specific section with new instructions.
+
+Request body: { sectionKey: string, instructions: string }
+
+### GET /api/applications/templates/:grantSource
+Get the application template for a specific grant source.
+
+## Database schema
+
+Add to schema.ts:
+```typescript
+export const applications = pgTable('applications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: varchar('user_id').notNull(),
+  grantId: varchar('grant_id').notNull(),
+  status: varchar('status').default('draft'), // draft | submitted | archived
+  sections: jsonb('sections').notNull(),
+  companySnapshot: jsonb('company_snapshot').notNull(),
+  projectData: jsonb('project_data').notNull(),
+  overallScore: integer('overall_score'),
+  warnings: jsonb('warnings').default('[]'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+```
+
+## AI Service: server/services/applicationWriter.ts
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+
+const GRANT_TEMPLATES: Record<string, GrantTemplate> = {
+  vinnova: {
+    sections: [
+      {
+        key: 'background_and_need',
+        title: 'Bakgrund och behov',
+        description: 'Beskriv problemet eller behovet som projektet adresserar',
+        maxWords: 500,
+        evaluationCriteria: 'Relevance to Swedish innovation needs, clarity of problem statement, market size'
+      },
+      {
+        key: 'project_description',
+        title: 'Projektbeskrivning',
+        description: 'Beskriv vad projektet ska göra och hur',
+        maxWords: 800,
+        evaluationCriteria: 'Technical feasibility, innovation level (TRL), methodology'
+      },
+      {
+        key: 'expected_results',
+        title: 'Förväntade resultat och effekter',
+        description: 'Vilka konkreta resultat förväntas och vilken samhällsnytta skapas',
+        maxWords: 400,
+        evaluationCriteria: 'Measurable outcomes, societal impact, commercialization potential'
+      },
+      {
+        key: 'team_and_capacity',
+        title: 'Projektparter och kapacitet',
+        description: 'Beskriv teamet och deras relevanta erfarenhet',
+        maxWords: 300,
+        evaluationCriteria: 'Team competence, collaboration, relevant track record'
+      },
+      {
+        key: 'budget_motivation',
+        title: 'Budget och motivering',
+        description: 'Specificera kostnader och motivera dem',
+        maxWords: 300,
+        evaluationCriteria: 'Cost efficiency, realistic budget, co-financing'
+      }
+    ]
+  },
+  tillvaxtverket: {
+    sections: [
+      {
+        key: 'company_description',
+        title: 'Företagsbeskrivning',
+        description: 'Beskriv företaget, dess verksamhet och marknadsposition',
+        maxWords: 400,
+        evaluationCriteria: 'Company maturity, market validation, growth potential'
+      },
+      {
+        key: 'project_purpose',
+        title: 'Projektets syfte och mål',
+        description: 'Vad ska projektet uppnå och varför är det viktigt',
+        maxWords: 500,
+        evaluationCriteria: 'Alignment with regional growth goals, job creation potential'
+      },
+      {
+        key: 'implementation_plan',
+        title: 'Genomförandeplan',
+        description: 'Hur ska projektet genomföras, tidplan och milstolpar',
+        maxWords: 600,
+        evaluationCriteria: 'Realistic timeline, clear milestones, risk management'
+      },
+      {
+        key: 'sustainability',
+        title: 'Hållbarhet och långsiktighet',
+        description: 'Hur säkras resultaten efter projektets slut',
+        maxWords: 300,
+        evaluationCriteria: 'Long-term viability, environmental sustainability'
+      }
+    ]
+  },
+  generic: {
+    sections: [
+      {
+        key: 'executive_summary',
+        title: 'Executive Summary',
+        description: 'Brief overview of the project and funding request',
+        maxWords: 300,
+        evaluationCriteria: 'Clarity, compelling case, key differentiators'
+      },
+      {
+        key: 'problem_and_solution',
+        title: 'Problem & Solution',
+        description: 'What problem does this solve and how',
+        maxWords: 600,
+        evaluationCriteria: 'Problem validation, solution uniqueness, market fit'
+      },
+      {
+        key: 'impact',
+        title: 'Expected Impact',
+        description: 'Measurable outcomes and broader societal value',
+        maxWords: 400,
+        evaluationCriteria: 'Quantified impact, sustainability, scalability'
+      },
+      {
+        key: 'team',
+        title: 'Team',
+        description: 'Why this team can deliver',
+        maxWords: 300,
+        evaluationCriteria: 'Relevant expertise, track record, commitment'
+      },
+      {
+        key: 'budget',
+        title: 'Budget Overview',
+        description: 'How funds will be used',
+        maxWords: 300,
+        evaluationCriteria: 'Efficiency, transparency, leverage of grant funds'
+      }
+    ]
+  }
+};
+
+export async function generateApplication(
+  grant: Grant,
+  companyProfile: CompanyProfile,
+  projectData: ProjectData
+): Promise<GeneratedApplication> {
+  const client = new Anthropic();
+  
+  // Determine which template to use based on grant source
+  const sourceKey = grant.source.toLowerCase();
+  const template = GRANT_TEMPLATES[sourceKey] || GRANT_TEMPLATES.generic;
+  
+  const sections = [];
+  
+  // Generate each section with a targeted prompt
+  for (const sectionTemplate of template.sections) {
+    const prompt = buildSectionPrompt(
+      grant, 
+      companyProfile, 
+      projectData, 
+      sectionTemplate
+    );
+    
+    const response = await client.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    
+    const content = response.content[0].type === 'text' 
+      ? response.content[0].text 
+      : '';
+    
+    sections.push({
+      sectionKey: sectionTemplate.key,
+      sectionTitle: sectionTemplate.title,
+      content: content.trim(),
+      wordCount: content.split(' ').length,
+      maxWords: sectionTemplate.maxWords,
+      evaluationCriteria: sectionTemplate.evaluationCriteria
+    });
+  }
+  
+  // Generate overall warnings
+  const warnings = generateWarnings(grant, companyProfile, projectData);
+  
+  return { sections, warnings };
+}
+
+function buildSectionPrompt(
+  grant: Grant,
+  company: CompanyProfile, 
+  project: ProjectData,
+  section: SectionTemplate
+): string {
+  return `You are an expert Swedish grant application writer. Write the "${section.title}" 
+section for a grant application.
+
+GRANT INFORMATION:
+- Grant: ${grant.title}
+- Funder: ${grant.source}
+- Grant description: ${grant.description}
+- Max amount: ${grant.maxAmount ? `${grant.maxAmount} SEK` : 'Not specified'}
+- Deadline: ${grant.deadline || 'Not specified'}
+
+COMPANY INFORMATION:
+- Company: ${company.name}
+- Sector: ${company.sector}
+- Description: ${company.description}
+- Employees: ${company.employees}
+- Region: ${company.region}
+${company.revenue ? `- Annual revenue: ${company.revenue} SEK` : ''}
+
+PROJECT INFORMATION:
+- Project description: ${project.projectDescription}
+- Goals: ${project.projectGoals}
+- Total budget: ${project.projectBudget} SEK
+- Requested amount: ${project.requestedAmount} SEK
+${project.previousExperience ? `- Relevant experience: ${project.previousExperience}` : ''}
+
+SECTION INSTRUCTIONS:
+- Section to write: ${section.title}
+- What this section should cover: ${section.description}
+- Max length: ${section.maxWords || 500} words
+- Evaluation criteria (what judges look for): ${section.evaluationCriteria}
+
+WRITING REQUIREMENTS:
+- Write in Swedish if the grant is from a Swedish agency (Vinnova, Tillväxtverket, 
+  Energimyndigheten, etc.), otherwise write in English
+- Be specific and use concrete numbers where possible
+- Align the language with what grant evaluators want to see
+- Do NOT use generic filler phrases — every sentence should add value
+- Do NOT exceed the word limit
+- Write in first person plural ("Vi planerar..." / "Our project will...")
+- Output ONLY the section text, no headers or meta-commentary
+
+Write the section now:`;
+}
+```
+
+## Frontend: New page client/src/pages/apply.tsx
+
+Create a 4-step wizard:
+
+**Step 1 — Select grant**
+- Show the grant the user clicked "Apply" from (pre-selected)
+- Display grant summary: title, funder, deadline, max amount
+- Show match score and why it matched (pulls from existing matching data)
+
+**Step 2 — Company profile**
+- Pre-fill from user's saved profile if available
+- Fields: company name, description (textarea), sector (dropdown using 
+  existing sector list), employees (number), annual revenue (optional), 
+  region (dropdown), founded year (optional)
+- "Save to profile" checkbox
+
+**Step 3 — Project information**
+- Project description (textarea, 200-1000 chars, live character count)
+- Project goals (textarea, what will be achieved)
+- Total project budget (SEK, number input)
+- Requested amount (SEK, auto-validates against grant max)
+- Previous relevant experience (optional textarea)
+
+**Step 4 — Generated application**
+- Show loading state: "Generating your application... this takes about 30 seconds"
+- Animated progress with messages like "Analyzing grant criteria...", 
+  "Writing project description...", "Reviewing for compliance..."
+- Once generated, show each section as an editable card:
+  - Section title
+  - Word count / max words indicator (green if under, red if over)
+  - Evaluation criteria shown as subtle hint text
+  - Editable textarea with the AI content
+  - "Regenerate this section" button (opens modal for custom instructions)
+- Warnings banner at top if any (e.g. "Your requested amount exceeds the grant maximum")
+- Bottom bar: "Copy all", "Download as PDF", "Download as Word (.docx)"
+
+## Export functionality
+
+Add `server/services/exportApplication.ts`:
+
+**PDF export**: Use `pdfkit` npm package to generate a formatted PDF
+**Word export**: Use `docx` npm package to generate a .docx file
+
+Both exports should include:
+- Header: Grant name, company name, generated date
+- Each section with its title as a heading
+- Page numbers
+- Footer: "Generated by GetGrant.ai"
+
+## Navigation integration
+
+Add "Apply with AI" button to:
+1. Grant detail page (`/grants/:id`) — primary CTA button
+2. Bookmarked grants list
+3. Match results — "Apply" action next to each match
+
+Route: `/apply?grantId=:id`
+
+## Database migration
+
+Run: `npm run db:push` after adding the applications table to schema.ts
+
+## Testing checklist
+- [ ] Generate application for a Vinnova grant — verify Swedish output
+- [ ] Generate application for an EU grant — verify English output  
+- [ ] Section regeneration with custom instructions works
+- [ ] Word count limits enforced in UI
+- [ ] PDF export downloads correctly
+- [ ] Word export downloads correctly
+- [ ] Warnings appear when requested amount > grant maximum
+- [ ] Company profile saves and pre-fills on next use
+- [ ] Application saves to database and can be retrieved
+
+🔴 CRITICAL 2: Eligibility Check
+Build an AI-powered eligibility pre-check feature that automatically verifies 
+whether a company meets a grant's requirements before they invest time applying.
+
+## Overview
+When a user views a grant or starts an application, they see an instant eligibility 
+verdict: ✅ Likely eligible / ⚠️ Partially eligible / ❌ Likely ineligible — with 
+clear explanations for each criterion.
+
+## Backend: server/services/eligibilityChecker.ts
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+
+interface EligibilityResult {
+  verdict: 'eligible' | 'partial' | 'ineligible' | 'unknown';
+  score: number;                    // 0-100 confidence
+  criteria: EligibilityCriterion[];
+  summary: string;                  // 1-2 sentence plain language verdict
+  blockers: string[];               // hard blockers that disqualify
+  warnings: string[];               // soft issues that may reduce chances
+  strengths: string[];              // where the company is a strong fit
+}
+
+interface EligibilityCriterion {
+  name: string;                     // e.g. "Company size"
+  requirement: string;              // e.g. "Max 250 employees (SME)"
+  companyValue: string;             // e.g. "45 employees"
+  status: 'pass' | 'fail' | 'warning' | 'unknown';
+  explanation: string;
+}
+
+export async function checkEligibility(
+  grant: Grant,
+  companyProfile: CompanyProfile
+): Promise<EligibilityResult> {
+  const client = new Anthropic();
+  
+  // First try structured eligibility data if available
+  if (grant.eligibilityData) {
+    const structuredResult = checkStructuredEligibility(
+      grant.eligibilityData, 
+      companyProfile
+    );
+    // If we got a confident result from structured data, enrich with AI summary
+    if (structuredResult.score > 80 || structuredResult.blockers.length > 0) {
+      structuredResult.summary = await generateEligibilitySummary(
+        structuredResult, grant, companyProfile
+      );
+      return structuredResult;
+    }
+  }
+  
+  // Fall back to AI analysis of raw grant text
+  const prompt = buildEligibilityPrompt(grant, companyProfile);
+  
+  const response = await client.messages.create({
+    model: 'claude-opus-4-5',
+    max_tokens: 1000,
+    messages: [{ role: 'user', content: prompt }],
+    system: `You are a Swedish grant eligibility expert. Analyze whether a company 
+    meets a grant's requirements. Always respond with valid JSON only, no prose.`
+  });
+  
+  const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+  
+  try {
+    return JSON.parse(text) as EligibilityResult;
+  } catch {
+    return { verdict: 'unknown', score: 0, criteria: [], 
+             summary: 'Could not determine eligibility', 
+             blockers: [], warnings: [], strengths: [] };
+  }
+}
+
+function checkStructuredEligibility(
+  eligibilityData: GrantEligibilityData,
+  company: CompanyProfile
+): EligibilityResult {
+  const criteria: EligibilityCriterion[] = [];
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+  const strengths: string[] = [];
+  
+  // Company size check
+  if (eligibilityData.maxEmployees) {
+    const pass = company.employees <= eligibilityData.maxEmployees;
+    criteria.push({
+      name: 'Company size',
+      requirement: `Max ${eligibilityData.maxEmployees} employees`,
+      companyValue: `${company.employees} employees`,
+      status: pass ? 'pass' : 'fail',
+      explanation: pass 
+        ? `Your company (${company.employees} employees) is within the limit`
+        : `Your company exceeds the maximum size requirement`
+    });
+    if (!pass) blockers.push(`Company too large (${company.employees} vs max ${eligibilityData.maxEmployees})`);
+    else strengths.push('Company size qualifies as SME');
+  }
+  
+  // Geography check
+  if (eligibilityData.geographyRequirements?.length) {
+    const geoMatch = eligibilityData.geographyRequirements.some(req => 
+      req.toLowerCase().includes(company.region?.toLowerCase() || '') ||
+      req.toLowerCase().includes('sweden') ||
+      req.toLowerCase().includes('sverige')
+    );
+    criteria.push({
+      name: 'Geographic eligibility',
+      requirement: eligibilityData.geographyRequirements.join(', '),
+      companyValue: company.region || 'Not specified',
+      status: geoMatch ? 'pass' : 'warning',
+      explanation: geoMatch 
+        ? 'Your region appears to be covered'
+        : 'Verify your region is covered by this grant'
+    });
+  }
+  
+  // Company type check
+  if (eligibilityData.companyTypes?.length) {
+    const typeMatch = eligibilityData.companyTypes.some(t => 
+      t.toLowerCase().includes(company.companyType?.toLowerCase() || 'company')
+    );
+    criteria.push({
+      name: 'Organization type',
+      requirement: eligibilityData.companyTypes.join(' or '),
+      companyValue: company.companyType || 'Company',
+      status: typeMatch ? 'pass' : 'warning',
+      explanation: typeMatch ? 'Your organization type is eligible' : 'Verify your organization type is covered'
+    });
+  }
+  
+  // Sector check
+  if (eligibilityData.sectors?.length) {
+    const sectorMatch = eligibilityData.sectors.some(s =>
+      s.toLowerCase().includes(company.sector?.toLowerCase() || '')
+    );
+    if (sectorMatch) strengths.push(`Your sector (${company.sector}) is explicitly targeted`);
+  }
+  
+  const failCount = criteria.filter(c => c.status === 'fail').length;
+  const passCount = criteria.filter(c => c.status === 'pass').length;
+  
+  let verdict: EligibilityResult['verdict'];
+  let score: number;
+  
+  if (failCount > 0) {
+    verdict = 'ineligible';
+    score = Math.max(0, 30 - (failCount * 15));
+  } else if (criteria.length === 0) {
+    verdict = 'unknown';
+    score = 50;
+  } else if (passCount === criteria.length) {
+    verdict = 'eligible';
+    score = 85 + Math.min(15, strengths.length * 5);
+  } else {
+    verdict = 'partial';
+    score = 60;
+  }
+  
+  return { verdict, score, criteria, summary: '', blockers, warnings, strengths };
+}
+
+function buildEligibilityPrompt(grant: Grant, company: CompanyProfile): string {
+  return `Analyze whether this company is eligible for this grant.
+
+GRANT:
+Title: ${grant.title}
+Source: ${grant.source}
+Description: ${grant.description}
+Eligibility text: ${grant.eligibilityText || 'Not available — infer from description'}
+Max amount: ${grant.maxAmount || 'Not specified'}
+
+COMPANY:
+Name: ${company.name}
+Sector: ${company.sector}
+Employees: ${company.employees}
+Annual revenue: ${company.revenue || 'Not provided'}
+Region: ${company.region}
+Company type: ${company.companyType || 'Private company (AB)'}
+Founded: ${company.founded || 'Not provided'}
+Description: ${company.description}
+
+Respond with JSON only in this exact structure:
+{
+  "verdict": "eligible" | "partial" | "ineligible" | "unknown",
+  "score": 0-100,
+  "criteria": [
+    {
+      "name": "criterion name",
+      "requirement": "what the grant requires",
+      "companyValue": "company's actual value",
+      "status": "pass" | "fail" | "warning" | "unknown",
+      "explanation": "1 sentence explanation"
+    }
+  ],
+  "summary": "1-2 sentence plain Swedish/English verdict",
+  "blockers": ["hard disqualifier 1"],
+  "warnings": ["soft concern 1"],
+  "strengths": ["strong match point 1"]
+}`;
+}
+```
+
+## New API endpoint
+
+Add to `server/routes/grants.ts`:
+POST /api/grants/:id/eligibility-check
+Body: { companyProfile: CompanyProfile }
+Response: EligibilityResult
+
+Cache results for 24 hours per grant+company combination to avoid redundant AI calls:
+```typescript
+const cacheKey = `eligibility:${grantId}:${userId}`;
+// Use existing cache mechanism or simple in-memory Map with TTL
+```
+
+## Frontend component: EligibilityBadge
+
+Create `client/src/components/EligibilityBadge.tsx`:
+
+**Small inline variant** (for grant cards in search results):
+[✅ Eligible] [⚠️ Check criteria] [❌ Not eligible]
+Click opens the full panel.
+
+**Full panel variant** (in grant detail page, before "Apply" button):
+┌─────────────────────────────────────────────────────┐
+│ 🎯 Eligibility Check                                 │
+│                                                      │
+│  ✅ Likely Eligible  •  Score: 87/100               │
+│                                                      │
+│  Based on your company profile:                      │
+│  ✅ Company size: 45 employees (max 250) — PASS     │
+│  ✅ Region: Stockholm — PASS                         │
+│  ✅ Sector: CleanTech — targeted sector              │
+│  ⚠️ Co-funding: 30% required — verify you have this │
+│                                                      │
+│  💪 Strengths: Your sector is explicitly targeted    │
+│                                                      │
+│  "Your company meets all hard requirements for      │
+│   this grant. Confirm you can provide 30%           │
+│   co-funding before applying."                       │
+│                                                      │
+│  [Update my profile]  [Proceed to Application →]    │
+└─────────────────────────────────────────────────────┘
+
+**Loading state**: Show spinner with "Checking eligibility..." for 2-3 seconds.
+
+**"Profile incomplete" state**: If user hasn't filled company profile, show:
+"Complete your company profile to get an instant eligibility check"
+[Complete profile →]
+
+## Integration points
+
+1. **Grant detail page** (`/grants/:id`): Show full EligibilityBadge panel above "Apply" button. Auto-run check when page loads if user is logged in and has profile.
+
+2. **Search results** (`/search`): Show small inline EligibilityBadge on each grant card. Run checks lazily (only for visible cards, use Intersection Observer).
+
+3. **AI Match results**: Include eligibility verdict in each match result card.
+
+4. **Apply wizard Step 1**: Re-show eligibility check. If ineligible, show warning but don't block — let user proceed with informed consent ("This grant has requirements you may not meet. Continue anyway?").
+
+## Testing checklist
+- [ ] Eligible company gets ✅ verdict with score >75
+- [ ] Company with wrong size gets ❌ with clear blocker message
+- [ ] Partial match (missing some info) gets ⚠️ with specific warnings
+- [ ] Check runs automatically on grant detail page for logged-in users
+- [ ] Results cached — second view doesn't call AI again
+- [ ] "Update profile" link navigates to profile page
+- [ ] Works on mobile (panel collapses gracefully on small screens)
+- [ ] Ineligible verdict still allows proceeding to application

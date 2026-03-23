@@ -1,0 +1,119 @@
+Fix 8 New Scrapers — Quality Pass
+Several issues were found after the initial implementation. Fix them in order of priority.
+
+🔴 CRITICAL FIX 1: EIT KICs — Switch to Playwright
+7 of 9 EIT KICs return 0 grants because they use JS-rendered pages. BeautifulSoup won't work here.
+For each KIC below, do the following steps before writing any code:
+
+Open the KIC's website and manually navigate to their calls/open-calls page
+Confirm the correct URL is live and accessible
+Inspect the HTML structure to find grant listing selectors
+Only then update the scraper to use Playwright
+
+KICs to fix:
+KICBase URLTry these paths firstEIT Healtheithealth.eu/new-call-opportunities/ or /opportunities/EIT Digitaleitdigital.eu/funding/ or /open-calls/EIT Manufacturingeitmanufacturing.eu/open-calls/ or /apply/EIT RawMaterialseitrawmaterials.eu/funding/ or /open-calls/EIT InnoEnergyeitinnoenergy.com/open-calls/ or /funding/EIT Culture & Creativityeitculture.eu/open-calls/ or /funding/EIT Climate-KICclimate-kic.org/programmes/ or /open-calls/
+Implementation requirements:
+
+Use the existing Playwright pattern from tillvaxtverket.py or region_scraper.py as your template
+Add await page.wait_for_load_state('networkidle') before scraping
+If a KIC has no currently open calls, fall back to scraping "upcoming" or "all calls" — do NOT return 0, instead store the programmes with status: "upcoming"
+Target: minimum 3–5 grants per KIC, 30+ total across all 9
+
+Important note on EIT Health specifically: EIT Health's Flagship Calls page (eithealth.eu/our-flagships/) currently states "no open calls" — this is expected. Instead scrape eithealth.eu/new-call-opportunities/ which lists THI (Transformative Health Instrument) and other active programmes. Confirmed live URL: https://eithealth.eu/new-call-opportunities/
+
+🔴 CRITICAL FIX 2: IHI — Fix SSL and remove hardcoded fallback
+The IHI scraper currently ignores the live website and falls back to hardcoded "known programs". This is wrong — it means we'll never detect new calls or deadlines.
+Fix:
+python# Replace the current SSL-failing request with:
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+response = requests.get(url, verify=False, timeout=30)
+logger.warning("IHI: SSL verification disabled — known issue with ihi.europa.eu cert")
+Then scrape the actual live page: https://www.ihi.europa.eu/apply-funding/open-calls
+IHI Call 12 is currently active with deadline around April 2026. It should appear in results after this fix. Remove the hardcoded fallback entirely — if the live page fails, log an error and return empty rather than returning stale hardcoded data.
+Expected output after fix: 3–8 grants (IHI typically has 2–4 open calls at any time plus upcoming calls).
+
+🟠 FIX 3: NLnet — Filter navigation links
+The NLnet scraper is capturing navigation links and page furniture as "grants".
+Fix the selectors so that only actual funding programmes are returned. Each grant must have ALL of these fields populated to be included:
+
+title — actual programme name (e.g. "NGI Zero Commons Fund", "NGI TALER", "NGI Fediversity")
+url — direct link to the programme page (not a nav link, must contain /project/ or /programmes/ or /funds/)
+description — at least 50 characters
+amount — if not found, set to null (don't block the record, but don't guess)
+deadline — if not found, check the programme page for next submission window
+
+Target: 3–5 clean programme records. The core NLnet funds to expect: Commons Fund, TALER, Fediversity, NGI Zero Review, Zero Core.
+Filter logic to add:
+python# Exclude if URL contains any of these patterns:
+EXCLUDE_PATTERNS = ['#', 'mailto:', '/news/', '/about/', '/contact/', '/team/', '/blog/']
+# Require minimum description length:
+if len(description) < 50:
+    continue
+
+🟡 FIX 4: EDF — Prevent duplicates with EU F&T scraper
+The EDF scraper is a wrapper around the EU F&T scraper using programme ID 44181033. This creates a risk of the same grants appearing twice in the database — once from the full EU F&T run and once from the EDF wrapper.
+Add this deduplication check in the EDF scraper:
+python# In edf_scraper.py, after fetching grants, before upserting:
+def deduplicate_against_eu_ft(self, grants: list) -> list:
+    """Remove grants already stored by the EU F&T scraper to prevent duplicates."""
+    existing_urls = self.db.get_grant_urls_by_source('eu_funding_tenders')
+    deduped = [g for g in grants if g['source_url'] not in existing_urls]
+    logger.info(f"EDF: {len(grants)} fetched, {len(deduped)} after dedup against EU F&T")
+    return deduped
+If get_grant_urls_by_source doesn't exist yet, add it to db.py:
+pythondef get_grant_urls_by_source(self, source_key: str) -> set:
+    result = self.db.execute(
+        "SELECT source_url FROM grants WHERE source = $1", [source_key]
+    )
+    return {row['source_url'] for row in result}
+
+🟡 FIX 5: Consistency — Update all count references
+After the fixes above are complete and you have verified the new grant totals, update ALL of the following files to show consistent numbers. Use the actual post-fix count, but floor to a round number (e.g. if total is 1,487 → use "1,480+" or "1,500+" — pick one and use it everywhere):
+Files to update:
+
+client/src/pages/landing.tsx — hero section, stats bar
+client/src/i18n/sv.json — all grant/source count strings
+client/src/i18n/en.json — all grant/source count strings
+replit.md — overview section, current state description
+Any other .tsx, .ts, or .json file containing hardcoded grant/source counts
+
+Search for all occurrences of: "1,4", "1,3", "27 sources", "35+", "37" to find everything that needs updating.
+Source count: use 37 (or the actual registered count from scraper_sources table — run SELECT COUNT(*) FROM scraper_sources WHERE status = 'active' to verify).
+
+🟡 FIX 6: Scraper health — Mark broken EIT scrapers correctly
+Until EIT Health and EIT Digital have confirmed working URLs, mark them as non-active in the database so the health monitoring dashboard doesn't show false positives:
+sqlUPDATE scraper_sources 
+SET status = 'url_error', 
+    error_message = 'Original URL returned 404 — needs URL verification before re-enabling',
+    last_error_at = NOW()
+WHERE source_key IN ('eit_health', 'eit_digital');
+```
+
+Once you have found and confirmed working URLs for these two in Fix 1 above, update them back to `active` at that point.
+
+---
+
+**Testing protocol**
+
+After all fixes, run each scraper individually and report results in this format:
+```
+SOURCE                  | GRANTS FOUND | URL USED                          | STATUS
+------------------------|-------------|-----------------------------------|--------
+EIT Health              | X           | https://...                       | ✅/❌
+EIT Digital             | X           | https://...                       | ✅/❌
+EIT Manufacturing       | X           | https://...                       | ✅/❌
+EIT RawMaterials        | X           | https://...                       | ✅/❌
+EIT InnoEnergy          | X           | https://...                       | ✅/❌
+EIT Culture & Creativity| X           | https://...                       | ✅/❌
+EIT Climate-KIC         | X           | https://...                       | ✅/❌
+EIT Food                | X           | https://...                       | ✅/❌
+EIT Urban Mobility      | X           | https://...                       | ✅/❌
+IHI                     | X           | https://...                       | ✅/❌
+NLnet                   | X           | https://...                       | ✅/❌
+EDF                     | X (deduped) | EU F&T wrapper, prog ID 44181033  | ✅/❌
+------------------------|-------------|-----------------------------------|--------
+TOTAL NEW FROM FIXES    | X           |                                   |
+TOTAL GRANTS IN DB      | X           |                                   |
+ACTIVE SOURCES IN DB    | X           |                                   |
+Success criteria: EIT KICs total ≥ 30 grants, IHI ≥ 3 grants, NLnet = 3–5 clean records, zero EDF duplicates, all count references consistent across codebase.

@@ -1,0 +1,415 @@
+Team Collaboration
+Add team collaboration features so multiple people at a company can work together 
+on grant applications — invite colleagues, see who's editing, leave comments, 
+and track changes.
+
+## Overview
+Companies rarely apply for grants alone — a CEO writes the vision, a CFO handles 
+the budget section, a technical lead writes the project description. This feature 
+enables that workflow directly in GetGrant.ai, inspired by GrantPilot.se's 
+collaboration features and Cogrant's team workspace.
+
+## Database schema changes
+
+Add to schema.ts:
+```typescript
+// Team members with roles
+export const applicationCollaborators = pgTable('application_collaborators', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  applicationId: uuid('application_id').notNull().references(() => applications.id),
+  userId: varchar('user_id').notNull(),
+  email: varchar('email').notNull(),
+  role: varchar('role').notNull().default('editor'), // owner | editor | viewer | commenter
+  invitedBy: varchar('invited_by').notNull(),
+  status: varchar('status').default('pending'),      // pending | accepted | declined
+  inviteToken: varchar('invite_token'),               // for email invite link
+  inviteExpiresAt: timestamp('invite_expires_at'),
+  joinedAt: timestamp('joined_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Section-level comments
+export const applicationComments = pgTable('application_comments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  applicationId: uuid('application_id').notNull().references(() => applications.id),
+  sectionKey: varchar('section_key'),                 // null = general comment
+  userId: varchar('user_id').notNull(),
+  authorName: varchar('author_name').notNull(),
+  authorEmail: varchar('author_email').notNull(),
+  content: text('content').notNull(),
+  resolved: boolean('resolved').default(false),
+  resolvedBy: varchar('resolved_by'),
+  resolvedAt: timestamp('resolved_at'),
+  parentId: uuid('parent_id'),                        // for comment threads
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Edit history per section
+export const applicationSectionHistory = pgTable('application_section_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  applicationId: uuid('application_id').notNull(),
+  sectionKey: varchar('section_key').notNull(),
+  content: text('content').notNull(),
+  editedBy: varchar('edited_by').notNull(),
+  editorName: varchar('editor_name').notNull(),
+  wordCount: integer('word_count'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Real-time presence tracking
+export const applicationPresence = pgTable('application_presence', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  applicationId: uuid('application_id').notNull(),
+  userId: varchar('user_id').notNull(),
+  userName: varchar('user_name').notNull(),
+  userColor: varchar('user_color').notNull(),         // assigned color for cursor
+  currentSection: varchar('current_section'),         // which section they're viewing
+  lastSeenAt: timestamp('last_seen_at').defaultNow(),
+});
+```
+
+## Backend: New API endpoints
+
+Create `server/routes/collaboration.ts`:
+
+### Invite management
+POST /api/applications/:id/collaborators/invite
+Body: { email: string, role: 'editor' | 'viewer' | 'commenter' }
+
+Generate secure invite token (crypto.randomUUID())
+Store in application_collaborators with status: 'pending'
+Send invite email via Resend
+Response: { inviteId, email, role, expiresAt }
+
+GET /api/applications/:id/collaborators
+
+List all collaborators with their roles and status
+Response: [{ userId, email, name, role, status, joinedAt }]
+
+PUT /api/applications/:id/collaborators/:userId/role
+Body: { role: 'editor' | 'viewer' | 'commenter' }
+
+Only application owner can change roles
+
+DELETE /api/applications/:id/collaborators/:userId
+
+Remove a collaborator (owner only, or self-removal)
+
+GET /api/invites/:token/accept
+
+Accept an invite link (user clicks link in email)
+If user not logged in: redirect to login with returnUrl
+If user logged in: accept invite, redirect to application
+Update status to 'accepted', set joinedAt
+
+
+### Comments
+GET /api/applications/:id/comments
+Query: ?sectionKey=project_description (optional filter)
+Response: comments with author info, nested threads, resolved status
+POST /api/applications/:id/comments
+Body: { sectionKey?: string, content: string, parentId?: string }
+Response: created comment with author info
+PUT /api/comments/:commentId/resolve
+
+Mark comment as resolved (only editor/owner)
+
+DELETE /api/comments/:commentId
+
+Delete own comment only
+
+
+### Section history
+GET /api/applications/:id/sections/:sectionKey/history
+Response: last 20 versions with editor name and timestamp
+POST /api/applications/:id/sections/:sectionKey/restore/:historyId
+
+Restore a previous version (saves current as new history entry first)
+
+
+### Real-time presence (WebSocket)
+
+Use the existing WebSocket setup if available, otherwise add:
+```typescript
+// server/websocket/collaboration.ts
+import { WebSocketServer } from 'ws';
+
+const rooms = new Map<string, Set<WebSocket>>();
+
+// Events to handle:
+// client → server: { type: 'join', applicationId, userId, userName }
+// client → server: { type: 'section_focus', sectionKey }
+// client → server: { type: 'typing', sectionKey, cursorPosition }
+// client → server: { type: 'leave' }
+
+// server → client: { type: 'presence_update', users: PresenceUser[] }
+// server → client: { type: 'section_updated', sectionKey, editedBy, updatedAt }
+// server → client: { type: 'comment_added', comment }
+
+export function setupCollaborationWS(wss: WebSocketServer) {
+  wss.on('connection', (ws, req) => {
+    let applicationId: string;
+    let userId: string;
+    
+    ws.on('message', (data) => {
+      const event = JSON.parse(data.toString());
+      
+      if (event.type === 'join') {
+        applicationId = event.applicationId;
+        userId = event.userId;
+        
+        // Add to room
+        if (!rooms.has(applicationId)) rooms.set(applicationId, new Set());
+        rooms.get(applicationId)!.add(ws);
+        
+        // Broadcast presence update to all in room
+        broadcastToRoom(applicationId, {
+          type: 'presence_update',
+          users: getPresenceUsers(applicationId)
+        });
+      }
+      
+      if (event.type === 'section_focus') {
+        updatePresence(applicationId, userId, event.sectionKey);
+        broadcastToRoom(applicationId, {
+          type: 'presence_update',
+          users: getPresenceUsers(applicationId)
+        }, ws); // exclude sender
+      }
+    });
+    
+    ws.on('close', () => {
+      if (applicationId) {
+        rooms.get(applicationId)?.delete(ws);
+        broadcastToRoom(applicationId, {
+          type: 'presence_update',
+          users: getPresenceUsers(applicationId)
+        });
+      }
+    });
+  });
+}
+```
+
+## Permission middleware
+```typescript
+// server/middleware/collaborationAuth.ts
+export async function requireApplicationAccess(
+  req: Request, res: Response, next: NextFunction,
+  requiredRole: 'owner' | 'editor' | 'viewer' | 'commenter' = 'viewer'
+) {
+  const { id: applicationId } = req.params;
+  const userId = req.user?.id;
+  
+  const collaborator = await db.query.applicationCollaborators.findFirst({
+    where: and(
+      eq(applicationCollaborators.applicationId, applicationId),
+      eq(applicationCollaborators.userId, userId),
+      eq(applicationCollaborators.status, 'accepted')
+    )
+  });
+  
+  // Check owner access
+  const application = await db.query.applications.findFirst({
+    where: eq(applications.id, applicationId)
+  });
+  
+  if (application?.userId === userId) return next(); // owner always has access
+  if (!collaborator) return res.status(403).json({ error: 'Access denied' });
+  
+  const roleHierarchy = { viewer: 0, commenter: 1, editor: 2, owner: 3 };
+  if (roleHierarchy[collaborator.role] < roleHierarchy[requiredRole]) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  next();
+}
+```
+
+## Invite email template
+
+`server/emails/collaborationInvite.tsx`:
+Subject: {inviterName} har bjudit in dig till en bidragsansökan på GetGrant.ai
+Hej,
+{inviterName} vill samarbeta med dig på ansökan till:
+📋 {grantTitle}
+💰 Upp till {grantAmount} SEK
+📅 Deadline: {grantDeadline}
+Du har bjudits in som {role} och kan {roleDescription}.
+[Öppna ansökan →]
+Länken är giltig i 7 dagar.
+
+## Frontend: Collaboration UI
+
+### Invite panel (in application editor)
+
+Add "Share" button to application header:
+```tsx
+// Clicking "Share" opens a modal:
+<CollaborationModal applicationId={id}>
+  <h3>Share application</h3>
+  
+  {/* Invite by email */}
+  <div className="invite-form">
+    <input placeholder="Colleague's email address" />
+    <select>
+      <option value="editor">Can edit</option>
+      <option value="commenter">Can comment</option>
+      <option value="viewer">Can view</option>
+    </select>
+    <button>Send invite</button>
+  </div>
+  
+  {/* Current collaborators list */}
+  <div className="collaborators-list">
+    {collaborators.map(c => (
+      <div key={c.userId} className="collaborator-row">
+        <Avatar name={c.name} color={c.color} />
+        <span>{c.email}</span>
+        <span className="role-badge">{c.role}</span>
+        {c.status === 'pending' && <span className="pending-badge">Pending</span>}
+        {isOwner && (
+          <RoleDropdown 
+            currentRole={c.role} 
+            onChange={(role) => updateRole(c.userId, role)} 
+          />
+        )}
+      </div>
+    ))}
+  </div>
+  
+  {/* Share link */}
+  <div className="share-link">
+    <input value={shareUrl} readOnly />
+    <button onClick={copyLink}>Copy link</button>
+  </div>
+</CollaborationModal>
+```
+
+### Live presence indicators
+
+In the application editor header, show who else is currently viewing:
+```tsx
+<div className="presence-bar">
+  {activeUsers.map(user => (
+    <div 
+      key={user.userId}
+      className="presence-avatar"
+      style={{ borderColor: user.color }}
+      title={`${user.name} is viewing${user.currentSection ? ` — ${user.currentSection}` : ''}`}
+    >
+      {user.name.charAt(0).toUpperCase()}
+    </div>
+  ))}
+  {activeUsers.length > 0 && (
+    <span className="presence-text">
+      {activeUsers.length} other{activeUsers.length !== 1 ? 's' : ''} viewing
+    </span>
+  )}
+</div>
+```
+
+Color each user consistently using a fixed palette:
+```typescript
+const PRESENCE_COLORS = [
+  '#3B82F6', '#10B981', '#F59E0B', '#EF4444', 
+  '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'
+];
+// Assign based on: PRESENCE_COLORS[collaboratorIndex % PRESENCE_COLORS.length]
+```
+
+Show colored left border on the section another user is currently in:
+```tsx
+<div 
+  className="section-card"
+  style={{ 
+    borderLeft: sectionActiveUser 
+      ? `4px solid ${sectionActiveUser.color}` 
+      : undefined 
+  }}
+>
+  {sectionActiveUser && (
+    <div className="section-active-indicator" style={{ color: sectionActiveUser.color }}>
+      {sectionActiveUser.name} is editing this section
+    </div>
+  )}
+  {/* section content */}
+</div>
+```
+
+### Comments panel
+
+Each section has a comment icon showing unresolved comment count:
+```tsx
+<div className="section-header">
+  <h4>{section.title}</h4>
+  <button 
+    onClick={() => setActiveCommentSection(section.key)}
+    className="comment-trigger"
+  >
+    <MessageSquare size={16} />
+    {unresolvedCount > 0 && (
+      <span className="comment-badge">{unresolvedCount}</span>
+    )}
+  </button>
+</div>
+
+{/* Comment panel slides in from right when active */}
+<CommentPanel sectionKey={section.key} applicationId={id}>
+  {comments.map(comment => (
+    <CommentThread
+      key={comment.id}
+      comment={comment}
+      onResolve={() => resolveComment(comment.id)}
+      onReply={(content) => addComment({ 
+        sectionKey: section.key, 
+        content, 
+        parentId: comment.id 
+      })}
+    />
+  ))}
+  <CommentInput 
+    onSubmit={(content) => addComment({ sectionKey: section.key, content })}
+    placeholder="Add a comment on this section..."
+  />
+</CommentPanel>
+```
+
+### Section history drawer
+
+"Version history" button per section opens a side drawer:
+Section History — Project Description
+● Today 14:32 — Anna Lindström (you)         [Restore]
+"Changed approach from B2B to B2B2C..."
+● Yesterday 09:15 — Erik Johansson
+"Added market size data"                    [Restore]
+● Feb 17 16:44 — Anna Lindström
+"Initial AI generation"                     [Restore]
+
+## Role permissions matrix
+
+| Action | Viewer | Commenter | Editor | Owner |
+|--------|--------|-----------|--------|-------|
+| View application | ✅ | ✅ | ✅ | ✅ |
+| Add comments | ❌ | ✅ | ✅ | ✅ |
+| Edit sections | ❌ | ❌ | ✅ | ✅ |
+| Regenerate with AI | ❌ | ❌ | ✅ | ✅ |
+| Invite collaborators | ❌ | ❌ | ❌ | ✅ |
+| Change roles | ❌ | ❌ | ❌ | ✅ |
+| Delete application | ❌ | ❌ | ❌ | ✅ |
+| Export (PDF/Word) | ✅ | ✅ | ✅ | ✅ |
+
+## Testing checklist
+- [ ] Owner can invite colleague by email — invite email arrives
+- [ ] Invite link works and logs in new user correctly
+- [ ] Editor can edit sections, viewer cannot (403 returned)
+- [ ] Two users editing same application — both see each other's avatar
+- [ ] Section shows colored border when another user is in it
+- [ ] Comment added by one user appears for other user without refresh
+- [ ] Comment resolve works and comment collapses
+- [ ] Version history shows last 20 edits with correct author names
+- [ ] Restore previous version saves current version first
+- [ ] Remove collaborator works — they lose access immediately
+- [ ] Pending invite shows in collaborator list until accepted
+- [ ] Mobile: collaboration panel collapses gracefully

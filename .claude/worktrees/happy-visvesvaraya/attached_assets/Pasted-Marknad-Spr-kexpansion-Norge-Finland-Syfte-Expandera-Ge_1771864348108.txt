@@ -1,0 +1,164 @@
+Marknad & Språkexpansion: Norge & Finland
+
+ℹ️ Syfte
+Expandera GetGrant.ai från en svensk plattform till en nordisk plattform.
+Lägg till stöd för norska (no) och finska (fi) som fullständiga marknadsspråk.
+All befintlig funktionalitet ska finnas tillgänglig på alla tre marknader.
+
+
+Kopiera denna prompt och klistra in direkt i Replit. Implementera hela prompten i ett enda steg.
+
+1. Databas — ny market/language-kolumn
+
+Lägg till en market-kolumn i relevanta tabeller:
+-- Migration: lägg till market-stöd
+ALTER TABLE grants ADD COLUMN IF NOT EXISTS market TEXT DEFAULT 'se';
+ALTER TABLE grants ADD COLUMN IF NOT EXISTS language TEXT DEFAULT 'sv';
+
+
+ALTER TABLE scraper_sources ADD COLUMN IF NOT EXISTS market TEXT DEFAULT 'se';
+ALTER TABLE scraper_sources ADD COLUMN IF NOT EXISTS language TEXT DEFAULT 'sv';
+
+
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS market TEXT DEFAULT 'se';
+
+
+-- Index för snabb filtrering per marknad
+CREATE INDEX IF NOT EXISTS idx_grants_market ON grants(market);
+CREATE INDEX IF NOT EXISTS idx_sources_market ON scraper_sources(market);
+
+2. i18n — lägg till norska (no) och finska (fi)
+
+GetGrant.ai använder react-i18next med sv/en. Lägg till:
+
+client/src/i18n/no.json — fullständig kopia av sv.json, översätt alla värden till norska (bokmål)
+client/src/i18n/fi.json — fullständig kopia av sv.json, översätt alla värden till finska
+Registrera båda i i18n-konfigurationen (client/src/i18n/index.ts eller liknande)
+
+Nyckeltermer att översätta korrekt:
+
+Svensk term
+Norsk (bokmål)
+Finsk
+bidrag
+tilskudd
+avustus / tuki
+utlysning
+utlysning
+haku / rahoitushaku
+ansökan
+søknad
+hakemus
+deadline
+frist
+hakuaika / määräaika
+belopp
+beløp
+määrä / summa
+behörighet
+krav til søker
+tukikelpoisuus
+finansiering
+finansiering
+rahoitus
+myndighet
+myndighet
+viranomainen
+region
+region / fylke
+alue
+ansök nu
+søk nå
+hae nyt
+
+
+3. Market-selector i UI
+
+Lägg till en marknadsväljarkomponent i:
+Navigationen (header) — flagg-ikoner 🇸🇪 🇳🇴 🇫🇮 med dropdown
+Onboarding-wizarden — välj marknad som första steg
+Profil-sidan — kunna ändra marknad
+
+// client/src/components/market-selector.tsx
+const MARKETS = [
+  { code: 'se', label: 'Sverige', flag: '🇸🇪', lang: 'sv' },
+  { code: 'no', label: 'Norge',   flag: '🇳🇴', lang: 'no' },
+  { code: 'fi', label: 'Suomi',   flag: '🇫🇮', lang: 'fi' },
+];
+// Spara vald marknad i user preferences + localStorage
+// Byt i18n-språk automatiskt när marknad byts
+
+4. Grant-filtrering per marknad
+
+All grant-hämtning ska filtrera på aktiv marknad som default:
+// server/routes/grants.ts
+// Lägg till market-query param
+const market = req.query.market || req.user?.market || 'se';
+const grants = await db.select().from(grantsTable)
+  .where(eq(grantsTable.market, market));
+
+
+// Frontend: skicka med market i alla API-anrop
+const { data } = useQuery(['grants', market], () =>
+  fetch(`/api/grants?market=${market}`).then(r => r.json())
+);
+
+5. Valuta & Formatering per marknad
+
+Marknad
+Valuta
+Format
+Kod
+Sverige
+Kronor
+1 000 000 kr
+SEK
+Norge
+Norske kroner
+1 000 000 kr
+NOK
+Finland
+Euro
+1.000.000 €
+EUR
+
+
+// client/src/lib/format.ts
+export function formatAmount(amount: number, market: string): string {
+  if (market === 'fi') return new Intl.NumberFormat('fi-FI', { style: 'currency', currency: 'EUR' }).format(amount);
+  if (market === 'no') return new Intl.NumberFormat('nb-NO', { style: 'currency', currency: 'NOK' }).format(amount);
+  return new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK' }).format(amount);
+}
+
+6. Application Generation — marknad-specifika mallar
+
+Den befintliga AI-ansökningsgeneratorn har mallar för Vinnova, Tillväxtverket etc. Utöka med:
+Norska mallar: Innovasjon Norge (5 sektioner), Forskningsrådet IPN (5 sektioner), Enova (4 sektioner)
+Finska mallar: Business Finland (5 sektioner), ELY-avustus (4 sektioner)
+Generisk nordisk mall som fallback
+
+// server/services/applicationGenerator.ts
+const TEMPLATES = {
+  'innovasjon-norge': { sections: ['Prosjektbeskrivelse', 'Markedspotensial', 'Team', 'Budsjett', 'Plan'], lang: 'no' },
+  'forskningsradet':  { sections: ['Prosjekt', 'FoU-innhold', 'Næringslivsnytte', 'Budsjett', 'Tidsplan'], lang: 'no' },
+  'enova':           { sections: ['Teknologi', 'Energieffekt', 'Økonomi', 'Gjennomføring'], lang: 'no' },
+  'business-finland': { sections: ['Project Description', 'Innovation', 'Market', 'Team & Capabilities', 'Budget'], lang: 'en' },
+  'ely-avustus':     { sections: ['Yritys', 'Hanke', 'Vaikutukset', 'Budjetti'], lang: 'fi' },
+};
+
+7. Email-notifikationer per marknad
+
+Befintliga email-templates (via Resend) ska skickas på rätt språk:
+Välj template baserat på user.market / user.language
+Skapa no- och fi-versioner av: new_grant_match.{lang}.tsx, deadline_reminder.{lang}.tsx, weekly_digest.{lang}.tsx
+
+8. Testchecklista
+
+[ ] Norsk användare ser norska bidrag och norsk UI
+[ ] Finsk användare ser finska bidrag och finsk UI (eller engelska som fallback)
+[ ] Valutaformatering är korrekt per marknad
+[ ] Market-selector i header fungerar och persisterar
+[ ] Befintlig svensk funktionalitet är opåverkad
+[ ] AI-matching filtrerar korrekt per marknad
+[ ] Admin-panelen visar scraper-källor per marknad
+

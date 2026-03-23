@@ -1,0 +1,1200 @@
+═══════════════════════════════════════════════════════════════════════════
+PART 7: EMPTY STATES & LOADING STATES (UX POLISH)
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Every screen should have beautiful empty states and smooth loading states.
+
+STEP 7.1: Create Reusable Empty State Component
+
+Create src/components/EmptyState.tsx:
+```typescript
+import { Button } from '@/components/ui/button';
+import { LucideIcon } from 'lucide-react';
+
+interface EmptyStateProps {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
+  secondaryAction?: {
+    label: string;
+    onClick: () => void;
+  };
+}
+
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  secondaryAction,
+}: EmptyStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <div className="rounded-full bg-gray-100 dark:bg-gray-800 p-6 mb-6">
+        <Icon className="h-12 w-12 text-gray-400" />
+      </div>
+      
+      <h3 className="text-xl font-semibold mb-2">{title}</h3>
+      <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md">
+        {description}
+      </p>
+
+      {action && (
+        <div className="flex gap-3">
+          <Button onClick={action.onClick}>
+            {action.label}
+          </Button>
+          {secondaryAction && (
+            <Button variant="outline" onClick={secondaryAction.onClick}>
+              {secondaryAction.label}
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+STEP 7.2: Create Loading Skeleton Component
+
+Create src/components/LoadingSkeleton.tsx:
+```typescript
+export function GrantCardSkeleton() {
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
+      <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-4"></div>
+      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-2"></div>
+      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3 mb-4"></div>
+      <div className="flex gap-2">
+        <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+        <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+      </div>
+    </div>
+  );
+}
+
+export function DashboardStatsSkeleton() {
+  return (
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="rounded-lg border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-4"></div>
+          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ApplicationListSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 animate-pulse">
+          <div className="flex items-center justify-between mb-3">
+            <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
+            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+          </div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-2"></div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+STEP 7.3: Apply Empty States to All Pages
+
+**Grants List (No Results):**
+```typescript
+import { Search, Filter } from 'lucide-react';
+
+export function GrantsList() {
+  const [grants, setGrants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ search: '', status: 'all' });
+
+  // ... fetch logic ...
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6">
+        <h1 className="text-3xl font-bold mb-6">Bidrag</h1>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <GrantCardSkeleton />
+          <GrantCardSkeleton />
+          <GrantCardSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (grants.length === 0 && !filters.search && filters.status === 'all') {
+    // No grants at all (shouldn't happen with 379+)
+    return (
+      <div className="container mx-auto p-6">
+        <EmptyState
+          icon={Search}
+          title="Inga bidrag hittades"
+          description="Det finns för närvarande inga bidrag i databasen. Kontakta support om detta fortsätter."
+          action={{
+            label: 'Kontakta support',
+            onClick: () => window.location.href = 'mailto:support@bidragai.se',
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (grants.length === 0) {
+    // No results for current filters
+    return (
+      <div className="container mx-auto p-6">
+        <h1 className="text-3xl font-bold mb-6">Bidrag</h1>
+        {/* Show filters */}
+        <EmptyState
+          icon={Filter}
+          title="Inga bidrag matchade din sökning"
+          description={`Inga bidrag hittades med filter "${filters.search}". Prova att ändra dina filter eller rensa dem.`}
+          action={{
+            label: 'Rensa filter',
+            onClick: () => setFilters({ search: '', status: 'all' }),
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Normal render with grants
+  return (
+    <div className="container mx-auto p-6">
+      {/* ... grant cards ... */}
+    </div>
+  );
+}
+```
+
+**Applications List (No Applications):**
+```typescript
+import { FileText, Plus } from 'lucide-react';
+
+export function ApplicationsList() {
+  const [applications, setApplications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6">
+        <h1 className="text-3xl font-bold mb-6">Mina ansökningar</h1>
+        <ApplicationListSkeleton />
+      </div>
+    );
+  }
+
+  if (applications.length === 0) {
+    return (
+      <div className="container mx-auto p-6">
+        <h1 className="text-3xl font-bold mb-6">Mina ansökningar</h1>
+        <EmptyState
+          icon={FileText}
+          title="Inga ansökningar än"
+          description="Du har inte skapat några ansökningar än. Börja med att hitta ett bidrag som passar ditt företag."
+          action={{
+            label: 'Utforska bidrag',
+            onClick: () => window.location.href = '/bidrag',
+          }}
+          secondaryAction={{
+            label: 'Se hur det fungerar',
+            onClick: () => window.location.href = '/#how-it-works',
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Normal render
+  return (
+    <div className="container mx-auto p-6">
+      {/* ... applications list ... */}
+    </div>
+  );
+}
+```
+
+**Company Profile (Not Created):**
+```typescript
+import { Building } from 'lucide-react';
+
+export function CompanyProfile() {
+  const [company, setCompany] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-6 animate-pulse"></div>
+          <div className="space-y-4">
+            <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+            <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!company) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="max-w-2xl mx-auto">
+          <EmptyState
+            icon={Building}
+            title="Skapa din företagsprofil"
+            description="För att få AI-matchade bidrag behöver du först skapa en företagsprofil. Det tar bara 2 minuter."
+            action={{
+              label: 'Skapa profil',
+              onClick: () => {
+                // Scroll to form or show form
+              },
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Normal render with form
+  return (
+    <div className="container mx-auto p-6">
+      {/* ... profile form ... */}
+    </div>
+  );
+}
+```
+
+STEP 7.4: Add Progress Indicators for Long Operations
+
+Create src/components/ProgressDialog.tsx:
+```typescript
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
+import { Loader2, CheckCircle } from 'lucide-react';
+
+interface ProgressDialogProps {
+  open: boolean;
+  title: string;
+  description: string;
+  progress: number; // 0-100
+  status?: 'loading' | 'success' | 'error';
+}
+
+export function ProgressDialog({ open, title, description, progress, status = 'loading' }: ProgressDialogProps) {
+  return (
+    <Dialog open={open}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {status === 'loading' && <Loader2 className="h-5 w-5 animate-spin" />}
+            {status === 'success' && <CheckCircle className="h-5 w-5 text-green-500" />}
+            {title}
+          </DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <Progress value={progress} />
+          <p className="text-sm text-center text-gray-600 dark:text-gray-400">
+            {progress}% färdigt
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+Use for AI generation:
+```typescript
+export function ApplicationGenerate() {
+  const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setProgress(0);
+
+    try {
+      // Simulate progress
+      const interval = setInterval(() => {
+        setProgress(prev => Math.min(prev + 10, 90));
+      }, 500);
+
+      const res = await fetch('/api/applications/generate', {
+        method: 'POST',
+        body: JSON.stringify({ grantId, companyId }),
+      });
+
+      clearInterval(interval);
+      setProgress(100);
+
+      const data = await res.json();
+      
+      // Show success briefly
+      setTimeout(() => {
+        setGenerating(false);
+        // Navigate or update UI
+      }, 1000);
+
+    } catch (error) {
+      setGenerating(false);
+      toast.error('Kunde inte generera ansökan');
+    }
+  }
+
+  return (
+    <>
+      <Button onClick={handleGenerate} disabled={generating}>
+        {generating ? 'Genererar...' : 'Generera med AI'}
+      </Button>
+
+      <ProgressDialog
+        open={generating}
+        title="Genererar ansökan"
+        description="Claude AI skriver din ansökan..."
+        progress={progress}
+        status={progress === 100 ? 'success' : 'loading'}
+      />
+    </>
+  );
+}
+```
+
+STEP 7.5: Add Toast Notifications
+
+Install sonner (if not already):
+```bash
+npm install sonner
+```
+
+Setup in main app:
+```typescript
+// In App.tsx or main layout
+import { Toaster } from 'sonner';
+
+export function App() {
+  return (
+    <>
+      <Toaster position="top-right" />
+      {/* ... rest of app ... */}
+    </>
+  );
+}
+```
+
+Use throughout app:
+```typescript
+import { toast } from 'sonner';
+
+// Success
+toast.success('Ansökan sparad');
+
+// Error
+toast.error('Något gick fel');
+
+// Loading
+const toastId = toast.loading('Sparar...');
+// Later:
+toast.success('Sparat!', { id: toastId });
+
+// With action
+toast.success('Ansökan skapad', {
+  action: {
+    label: 'Se ansökan',
+    onClick: () => window.location.href = `/applications/${id}`,
+  },
+});
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PART 8: MOBILE RESPONSIVE DESIGN
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Perfect mobile experience on phones and tablets.
+
+STEP 8.1: Mobile Navigation
+
+Create src/components/MobileNav.tsx:
+```typescript
+import { useState } from 'react';
+import { Menu, X, Home, Search, FileText, User, Settings } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+
+export function MobileNav() {
+  const [open, setOpen] = useState(false);
+
+  const navItems = [
+    { icon: Home, label: 'Översikt', href: '/dashboard' },
+    { icon: Search, label: 'Bidrag', href: '/bidrag' },
+    { icon: FileText, label: 'Ansökningar', href: '/applications' },
+    { icon: User, label: 'Profil', href: '/profile' },
+    { icon: Settings, label: 'Inställningar', href: '/settings' },
+  ];
+
+  return (
+    <>
+      {/* Mobile menu button - only show on mobile */}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild className="lg:hidden">
+          <Button variant="ghost" size="icon">
+            <Menu className="h-6 w-6" />
+          </Button>
+        </SheetTrigger>
+        
+        <SheetContent side="left" className="w-72">
+          <div className="flex flex-col h-full">
+            {/* Logo */}
+            <div className="flex items-center gap-2 mb-8">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-cyan-600"></div>
+              <span className="font-bold text-xl">BidragAI</span>
+            </div>
+
+            {/* Nav items */}
+            <nav className="flex-1 space-y-2">
+              {navItems.map((item) => (
+                
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span className="font-medium">{item.label}</span>
+                </a>
+              ))}
+            </nav>
+
+            {/* User section at bottom */}
+            <div className="border-t pt-4">
+              <UserMenu />
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Bottom nav bar for mobile - alternative to side drawer */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 z-50">
+        <div className="flex justify-around items-center h-16">
+          {navItems.slice(0, 4).map((item) => (
+            
+              key={item.href}
+              href={item.href}
+              className="flex flex-col items-center gap-1 px-4 py-2"
+            >
+              <item.icon className="h-5 w-5" />
+              <span className="text-xs">{item.label}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+```
+
+STEP 8.2: Responsive Grid Layouts
+
+Make sure all grids are responsive:
+```typescript
+// Dashboard stats
+<div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+  {/* Stats cards */}
+</div>
+
+// Grants grid
+<div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+  {/* Grant cards */}
+</div>
+
+// Features grid
+<div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+  {/* Feature cards */}
+</div>
+```
+
+STEP 8.3: Mobile-Friendly Forms
+```typescript
+export function CompanyProfileForm() {
+  return (
+    <form className="space-y-4 max-w-2xl mx-auto px-4 sm:px-6">
+      {/* Full width on mobile, comfortable on desktop */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Företagsnamn
+          </label>
+          <input
+            type="text"
+            className="w-full px-4 py-3 rounded-lg border text-base" // text-base prevents zoom on iOS
+            placeholder="Mitt Företag AB"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Org.nummer
+          </label>
+          <input
+            type="text"
+            className="w-full px-4 py-3 rounded-lg border text-base"
+            placeholder="123456-7890"
+          />
+        </div>
+      </div>
+
+      {/* Buttons stack on mobile */}
+      <div className="flex flex-col sm:flex-row gap-3 pt-4">
+        <Button type="submit" className="w-full sm:w-auto">
+          Spara
+        </Button>
+        <Button type="button" variant="outline" className="w-full sm:w-auto">
+          Avbryt
+        </Button>
+      </div>
+    </form>
+  );
+}
+```
+
+STEP 8.4: Mobile Table Alternative
+
+For application lists, use cards on mobile instead of table:
+```typescript
+export function ApplicationsList() {
+  const [applications, setApplications] = useState([]);
+
+  return (
+    <div className="container mx-auto p-4 sm:p-6">
+      <h1 className="text-2xl sm:text-3xl font-bold mb-6">Mina ansökningar</h1>
+
+      {/* Desktop: Table */}
+      <div className="hidden md:block">
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th>Bidrag</th>
+              <th>Status</th>
+              <th>Datum</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {applications.map(app => (
+              <tr key={app.id}>
+                <td>{app.grant.title}</td>
+                <td><StatusBadge status={app.status} /></td>
+                <td>{formatDate(app.createdAt)}</td>
+                <td><Button size="sm">Se</Button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile: Cards */}
+      <div className="md:hidden space-y-4">
+        {applications.map(app => (
+          <Card key={app.id} className="p-4">
+            <div className="flex justify-between items-start mb-3">
+              <h3 className="font-semibold line-clamp-2">{app.grant.title}</h3>
+              <StatusBadge status={app.status} />
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+              {formatDate(app.createdAt)}
+            </p>
+            <Button size="sm" className="w-full">
+              Se ansökan
+            </Button>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+STEP 8.5: Touch-Friendly Interactions
+
+Ensure all interactive elements are at least 44x44px (Apple HIG):
+```typescript
+// Use proper button sizes
+<Button size="lg" className="min-h-[44px] px-6">
+  Klicka här
+</Button>
+
+// Increase tap targets for small icons
+<button className="p-3 rounded-lg hover:bg-gray-100">
+  <Icon className="h-5 w-5" />
+</button>
+
+// Add comfortable padding to cards
+<Card className="p-4 sm:p-6">
+  {/* Content */}
+</Card>
+```
+
+STEP 8.6: Mobile-Optimized Modals/Dialogs
+```typescript
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Drawer, DrawerContent } from '@/components/ui/drawer';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+
+export function ResponsiveDialog({ children, ...props }) {
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+
+  if (isDesktop) {
+    return (
+      <Dialog {...props}>
+        <DialogContent>{children}</DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Drawer {...props}>
+      <DrawerContent>{children}</DrawerContent>
+    </Drawer>
+  );
+}
+```
+
+Create the useMediaQuery hook:
+```typescript
+// src/hooks/useMediaQuery.ts
+import { useState, useEffect } from 'react';
+
+export function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    setMatches(media.matches);
+
+    const listener = (e: MediaQueryListEvent) => setMatches(e.matches);
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, [query]);
+
+  return matches;
+}
+```
+
+STEP 8.7: Add viewport meta tag
+
+Ensure this is in your HTML head:
+```html
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PART 9: TESTING & DEPLOYMENT CHECKLIST
+═══════════════════════════════════════════════════════════════════════════
+
+STEP 9.1: Pre-Launch Testing Checklist
+
+Create a testing document:
+```markdown
+# BidragAI - Launch Testing Checklist
+
+## Authentication & User Management
+- [ ] Sign up with email works
+- [ ] Sign up with Google works
+- [ ] Sign up with GitHub works
+- [ ] Login works
+- [ ] Logout works
+- [ ] User menu displays correctly
+- [ ] Can't access protected routes without login
+- [ ] Redirects work correctly after login
+
+## Company Profile
+- [ ] Can create company profile
+- [ ] Can edit company profile
+- [ ] Can save profile
+- [ ] All fields validate correctly
+- [ ] Profile completion shows correct percentage
+
+## Grant Discovery
+- [ ] All 379+ grants load
+- [ ] Search filters work
+- [ ] Status filters work (Open/Closed/Upcoming)
+- [ ] Source filters work
+- [ ] Deadline filters work
+- [ ] Amount slider works
+- [ ] Grant cards display correctly
+- [ ] Can click to see grant details
+- [ ] Pagination works (if implemented)
+
+## Grant Details
+- [ ] Full description displays
+- [ ] Eligibility criteria shows
+- [ ] Basic match score calculates
+- [ ] AI semantic analysis button works
+- [ ] Semantic analysis returns valid score
+- [ ] Apply button navigates correctly
+
+## AI Matching
+- [ ] Semantic analysis completes in <10 seconds
+- [ ] Returns 0-100 score
+- [ ] Shows reasoning
+- [ ] Shows strengths & concerns
+- [ ] Rate limiting works (10/hour)
+- [ ] Shows remaining quota
+- [ ] Error handling works
+
+## Application Generation
+- [ ] AI generation button works
+- [ ] Generates Swedish text
+- [ ] Content is relevant to grant
+- [ ] Content uses company profile
+- [ ] Can edit generated text
+- [ ] Can save draft
+- [ ] Can regenerate
+- [ ] Can copy to clipboard
+- [ ] Rate limiting works (20/day)
+- [ ] Token usage displays
+- [ ] Cost estimate displays
+
+## Application Export
+- [ ] Export to Word works
+- [ ] Export to PDF works
+- [ ] Downloaded files are valid
+- [ ] Formatting looks professional
+- [ ] Company name appears
+- [ ] Grant title appears
+- [ ] Content is complete
+
+## Application Tracking
+- [ ] Can see all applications
+- [ ] Can filter by status
+- [ ] Can update status
+- [ ] Status badges display correctly
+- [ ] "Already applied" shows on grants
+- [ ] Can add notes
+- [ ] Can add approved amount
+
+## Notifications
+- [ ] Can enable email notifications
+- [ ] Test email sends successfully
+- [ ] Notification preferences save
+- [ ] Unsubscribe works
+
+## Pricing & Billing
+- [ ] Pricing page displays correctly
+- [ ] Free plan limits enforced
+- [ ] Upgrade to Pro button works
+- [ ] Stripe checkout loads
+- [ ] Can complete test payment
+- [ ] Plan upgrades in database
+- [ ] Pro features unlock after payment
+- [ ] Customer portal works
+- [ ] Can cancel subscription
+
+## Mobile Responsiveness
+- [ ] Works on iPhone (Safari)
+- [ ] Works on Android (Chrome)
+- [ ] Works on iPad
+- [ ] Bottom nav displays on mobile
+- [ ] Forms work on mobile
+- [ ] No horizontal scroll
+- [ ] Touch targets are 44x44px
+- [ ] Text is readable
+- [ ] No zoom on input focus
+
+## Performance
+- [ ] Dashboard loads in <2 seconds
+- [ ] Grants list loads in <3 seconds
+- [ ] Search is instant (<100ms)
+- [ ] No layout shift (CLS)
+- [ ] Images load fast
+- [ ] No console errors
+
+## Security
+- [ ] Can't access other users' data
+- [ ] SQL injection protected (using ORM)
+- [ ] XSS protected
+- [ ] CSRF protected
+- [ ] API keys not exposed
+- [ ] Rate limiting works
+- [ ] Input validation works
+
+## Error Handling
+- [ ] 404 page exists
+- [ ] 500 error page exists
+- [ ] Network errors show toast
+- [ ] Invalid input shows validation
+- [ ] API errors don't crash app
+- [ ] Retry logic works
+
+## Empty States
+- [ ] No companies - shows empty state
+- [ ] No applications - shows empty state
+- [ ] No search results - shows empty state
+- [ ] Loading states show skeletons
+
+## Analytics (Optional)
+- [ ] Pageviews tracked
+- [ ] Events tracked (signup, upgrade, etc.)
+- [ ] Error tracking works
+```
+
+STEP 9.2: Load Testing
+
+Create simple load test:
+```javascript
+// test-load.js
+async function testLoad() {
+  const urls = [
+    '/api/grants',
+    '/api/dashboard/stats',
+    '/api/companies',
+  ];
+
+  for (let i = 0; i < 100; i++) {
+    const promises = urls.map(url => 
+      fetch(`http://localhost:3000${url}`)
+    );
+    
+    const start = Date.now();
+    await Promise.all(promises);
+    const duration = Date.now() - start;
+    
+    console.log(`Request ${i}: ${duration}ms`);
+    
+    if (duration > 5000) {
+      console.error('⚠️ Slow response!');
+    }
+  }
+}
+
+testLoad();
+```
+
+Run: `node test-load.js`
+
+STEP 9.3: SEO & Meta Tags
+
+Add to your HTML head or Helmet component:
+```typescript
+export function SEOHead({ title, description, url, image }: SEOProps) {
+  return (
+    <>
+      {/* Basic */}
+      <title>{title} | BidragAI</title>
+      <meta name="description" content={description} />
+      <link rel="canonical" href={url} />
+
+      {/* Open Graph */}
+      <meta property="og:title" content={title} />
+      <meta property="og:description" content={description} />
+      <meta property="og:url" content={url} />
+      <meta property="og:image" content={image} />
+      <meta property="og:type" content="website" />
+      <meta property="og:locale" content="sv_SE" />
+
+      {/* Twitter */}
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content={title} />
+      <meta name="twitter:description" content={description} />
+      <meta name="twitter:image" content={image} />
+    </>
+  );
+}
+
+// Use on pages:
+<SEOHead
+  title="Hitta och ansök om bidrag på 5 minuter"
+  description="AI-driven bidragsplattform för svenska företag. 379+ aktiva bidrag från Vinnova, Tillväxtverket och fler."
+  url="https://bidragai.se"
+  image="https://bidragai.se/og-image.png"
+/>
+```
+
+STEP 9.4: Analytics Setup
+
+Add Plausible or Google Analytics:
+```typescript
+// src/lib/analytics.ts
+export function trackEvent(eventName: string, props?: Record<string, any>) {
+  if (typeof window !== 'undefined' && (window as any).plausible) {
+    (window as any).plausible(eventName, { props });
+  }
+}
+
+// Usage:
+trackEvent('signup', { plan: 'free' });
+trackEvent('upgrade', { from: 'free', to: 'pro' });
+trackEvent('application_generated', { grantId });
+trackEvent('application_submitted', { grantId });
+```
+
+Add to HTML head:
+```html
+<script defer data-domain="bidragai.se" src="https://plausible.io/js/script.js"></script>
+```
+
+STEP 9.5: Environment Variables Checklist
+
+Before deployment, ensure all these are set:
+```bash
+# Required
+DATABASE_URL=
+ANTHROPIC_API_KEY=
+RESEND_API_KEY=
+FROM_EMAIL=
+APP_URL=
+CRON_SECRET=
+
+# Optional but recommended
+STRIPE_SECRET_KEY=
+STRIPE_PUBLISHABLE_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRO_PRICE_ID=
+STRIPE_ENTERPRISE_PRICE_ID=
+
+# Analytics (optional)
+PLAUSIBLE_DOMAIN=
+SENTRY_DSN=
+```
+
+STEP 9.6: Deployment Steps
+
+1. **Push to Replit**
+   - Commit all changes
+   - Test in Replit preview
+
+2. **Setup Custom Domain** (if available)
+   - In Replit: Settings → Domains
+   - Add DNS records to your domain registrar
+   - Wait for DNS propagation (5-60 min)
+
+3. **Configure Stripe Webhooks**
+   - Go to Stripe Dashboard → Webhooks
+   - Add endpoint: `https://bidragai.se/api/billing/webhook`
+   - Select events:
+     - checkout.session.completed
+     - customer.subscription.updated
+     - customer.subscription.deleted
+   - Copy webhook secret to env
+
+4. **Setup Cron Jobs**
+   - Go to cron-job.org
+   - Create 3 jobs (see Part 3, Priority 4)
+   - Test each cron endpoint manually first
+
+5. **Test Production**
+   - Run through entire testing checklist
+   - Make test payment with Stripe test cards
+   - Verify emails arrive
+   - Check cron jobs execute
+
+6. **Launch! 🚀**
+
+═══════════════════════════════════════════════════════════════════════════
+PART 10: POST-LAUNCH MONITORING & ITERATION
+═══════════════════════════════════════════════════════════════════════════
+
+STEP 10.1: Key Metrics Dashboard
+
+Track these weekly:
+```typescript
+// Analytics to monitor
+interface Metrics {
+  // Acquisition
+  signups: number;
+  signupSources: { google: number; github: number; email: number };
+  
+  // Activation
+  profilesCreated: number;
+  firstAIAnalysis: number;
+  firstApplicationGenerated: number;
+  
+  // Engagement
+  dau: number; // Daily active users
+  mau: number; // Monthly active users
+  dauMauRatio: number; // Stickiness
+  
+  // Revenue
+  conversions: { free_to_pro: number; free_to_enterprise: number };
+  mrr: number; // Monthly recurring revenue
+  churnRate: number;
+  
+  // Product
+  avgApplicationsPerUser: number;
+  avgAIAnalysesPerUser: number;
+  topGrantSources: string[];
+  
+  // Costs
+  anthropicCostPerUser: number;
+  totalAICost: number;
+}
+```
+
+STEP 10.2: User Feedback Loop
+
+Add feedback widget:
+```typescript
+import { MessageSquare, ThumbsUp, ThumbsDown } from 'lucide-react';
+
+export function FeedbackWidget() {
+  const [open, setOpen] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
+  async function handleSubmit() {
+    await fetch('/api/feedback', {
+      method: 'POST',
+      body: JSON.stringify({
+        feedback,
+        page: window.location.pathname,
+      }),
+    });
+    
+    toast.success('Tack för din feedback!');
+    setOpen(false);
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed bottom-4 right-4 p-4 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors"
+      >
+        <MessageSquare className="h-6 w-6" />
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ge oss feedback</DialogTitle>
+            <DialogDescription>
+              Hur kan vi göra BidragAI bättre?
+            </DialogDescription>
+          </DialogHeader>
+
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            rows={4}
+            className="w-full px-4 py-3 rounded-lg border"
+            placeholder="Skriv din feedback här..."
+          />
+
+          <Button onClick={handleSubmit}>
+            Skicka feedback
+          </Button>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+```
+
+STEP 10.3: A/B Testing Ideas
+
+Test these after launch:
+
+1. **Onboarding flow**
+   - 3 steps vs 1 page
+   - Video vs text explanation
+
+2. **Pricing page**
+   - Monthly vs annual toggle
+   - 3 tiers vs 2 tiers
+   - Different feature emphasis
+
+3. **CTA buttons**
+   - "Kom igång gratis" vs "Prova nu"
+   - "Uppgradera" vs "Bli Pro"
+
+4. **AI matching**
+   - Show score immediately vs "Run analysis" button
+   - 0-100 score vs A-F grade
+
+5. **Email subject lines**
+   - "Nytt bidrag: [NAME]" vs "5 nya matchningar för dig"
+
+═══════════════════════════════════════════════════════════════════════════
+FINAL SUMMARY
+═══════════════════════════════════════════════════════════════════════════
+
+YOU NOW HAVE:
+
+✅ Modern, delightful landing page with clear value prop
+✅ Guided onboarding for new users (3 steps)
+✅ Improved dashboard with stats and quick actions
+✅ Export to Word/PDF functionality
+✅ Stripe integration with tiered pricing
+✅ Application status tracking (draft → approved)
+✅ Success rate analytics
+✅ Beautiful empty states everywhere
+✅ Smooth loading states with skeletons
+✅ Progress indicators for long operations
+✅ Toast notifications
+✅ Fully mobile responsive
+✅ Touch-friendly interactions
+✅ Mobile nav (bottom bar + drawer)
+✅ Comprehensive testing checklist
+✅ Load testing script
+✅ SEO meta tags
+✅ Analytics tracking
+✅ Deployment guide
+✅ Post-launch monitoring plan
+✅ Feedback widget
+✅ A/B testing ideas
+
+═══════════════════════════════════════════════════════════════════════════
+IMPLEMENTATION TIMELINE
+═══════════════════════════════════════════════════════════════════════════
+
+WEEK 1 (Core UX):
+Day 1-2: Landing page + onboarding (8h)
+Day 3-4: Dashboard redesign + empty states (8h)
+Day 5: Export functionality (4h)
+
+WEEK 2 (Monetization):
+Day 1-2: Stripe integration + pricing page (8h)
+Day 3: Application tracking improvements (4h)
+Day 4: Mobile responsiveness (4h)
+Day 5: Testing + fixes (4h)
+
+WEEK 3 (Polish & Launch):
+Day 1: Loading states + toast notifications (3h)
+Day 2: Analytics + SEO (3h)
+Day 3: Final testing + deployment (4h)
+Day 4-5: Beta launch to 20 users, gather feedback
+
+Total: ~50 hours of development
+
+═══════════════════════════════════════════════════════════════════════════
+NEXT ACTIONS (DO THESE IN ORDER)
+═══════════════════════════════════════════════════════════════════════════
+
+1. Copy this entire prompt into Replit Agent
+2. Let it implement everything (will take multiple prompts)
+3. Test each feature as it's built
+4. Deploy to custom domain
+5. Send to 10 beta users from your network
+6. Collect feedback for 1 week
+7. Iterate based on feedback
+8. Public launch!
+
+═══════════════════════════════════════════════════════════════════════════
+
+This is everything you need to launch a production-ready BidragAI. 
+
+Good luck, Linus! 🚀

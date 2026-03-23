@@ -1,0 +1,16 @@
+node_modules/
+.venv/
+venv/
+__pycache__/
+.cache/
+.local/
+.playwright/
+.config/
+dist/
+uploads/
+*.pyc
+*.bin
+.env
+.env.local
+.replit
+replit.md

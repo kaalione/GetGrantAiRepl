@@ -1,0 +1,170 @@
+ — Norska Bidragskällor: Scrapers &
+Integration
+Viktig kontext: Norska marknaden 2026
+Statsbudget 2026 innebär MINSKADE bidragsramar i Norge:
+• Innovasjon Norge: Oppstartstilskudd minskat NOK 46M → 30M
+• Innovasjonskontrakter: NOK 260M → 160M
+Detta ökar konkurrensen och gör GetGrant.ai extra värdefullt för norska användare.
+Enova delar däremot ut ~NOK 4.2 miljarder/år — oförändrat och mycket lukrativt.
+Implementera alla norska källor i detta steg. Sätt market='no' på alla norska grants och sources.
+P1 — Prioritet 1: Implementera omedelbart
+1.1 Forskningsrådet (BÄSTA datakällan — börja här)
+Teknisk fördel
+Forskningsrådet har det bästa API-stödet av alla norska källor:
+• Prosjektbanken REST API: prosjektbanken.forskningsradet.no
+• Öppet dataset på data.norge.no (alla ansökningar sedan 2004)
+• Utlysningssidan är server-renderad HTML (BeautifulSoup räcker)
+Detta är Norges motsvarighet till Vinnovas GDP API.
+# scrapers/sources/forskningsradet.py
+# URL: https://www.forskningsradet.no/utlysninger/
+# Teknik: BeautifulSoup (statisk HTML) + REST API
+# Marknad: 'no' | Språk: 'nb' (norsk bokmål)
+ACTIVE_GRANT_PROGRAMS = [
+'Innovasjonsprosjekt i næringslivet (IPN)', # NOK 2-16M, 50% støtteandel for SMB
+'Nærings-ph.d.', # ~NOK 2M per prosjekt, løpende søknad
+'Grønn Plattform', # NOK 644.5M (samarbeid m/ IN og Siva)
+'PILOT-E', # Felles med Enova + IN, energi
+'Eurostars', # Internasjonalt SMB-samarbeid
+'BIA (Brukerstyrt innovasjonsarena)', # Næringslivsprosjekter, åpent
+]
+# API-endpoints att utforska:
+# https://prosjektbanken.forskningsradet.no/api/ (Elasticsearch-baserat)
+# https://data.norge.no/datasets/d23bbbfa-fdad-4dab-b31b-4daadbfa3299
+Parameter Värde
+URL forskningsradet.no/utlysninger/
+Teknik BeautifulSoup + REST API
+Estimerade bidrag 20–40 aktiva utlysningar
+Tid att implementera 3–5 timmar
+Implementeringsfil scrapers/sources/forskningsradet.py
+Kategori innovation/research
+Marknadsfiltrering market='no'
+1.2 Innovasjon Norge
+# scrapers/sources/innovasjon_norge.py
+# URL: https://www.innovasjonnorge.no/artikkel/tilskudd
+# Teknik: Playwright (Sanity.io CMS + React-renderat)
+# OBS: Utforska GROQ API-endpoints från page source — kan ge renare data
+# Aktiva tilskuddsprogram att skrapa:
+TILSKUDD_PROGRAMS = [
+'Oppstartstilskudd 1', # Idéfas, upp till ~NOK 400K
+'Oppstartstilskudd 2', # Verifieringsfas, upp till ~NOK 800K
+'Innovasjonskontrakter', # NOK 1-10M, kräver pilot-kund
+'Tilskudd til miljøteknologi', # Pilotprojekt miljöteknik
+'Tilskudd til bioøkonomi',
+'Pilot-T', # Smart transport
+'Bedriftsnettverk', # Nätverk av 3+ bolag
+'Klyngetilskudd', # Klusterstöd
+'Distriktstilskudd', # Regionalt stöd
+]
+# VIKTIGT: Alla sökande måste vara norskregistrerade AS
+# De flesta program kräver internationell tillväxtpotential
+# market='no', currency='NOK'
+Parameter Värde
+URL innovasjonnorge.no/artikkel/tilskudd
+Teknik Playwright (Sanity.io)
+Estimerade bidrag 12–15 program
+Tid att implementera 5–7 timmar
+Implementeringsfil scrapers/sources/innovasjon_norge.py
+Kategori innovation/startup/regional
+Notering Norges motsvarighet till Tillväxtverket + Almi
+1.3 Enova
+Enova — Norges energi/klimatgigant
+Enova delar ut ~NOK 3–4.2 miljarder per år till företag.
+Finansieras av Energi- og Klimafondet (55 miljarder NOK totalt).
+Alla norska företag kan söka — kravet är att stödet ska vara 'utlösande'
+(projektet hade inte genomförts utan bidraget).
+Samma Sanity.io CMS som Innovasjon Norge — återanvänd Playwright-koden!
+# scrapers/sources/enova.py
+# URL: https://www.enova.no/bedrift/
+# Teknik: Playwright (samma Sanity.io CMS som Innovasjon Norge!)
+# Återanvänd innovasjon_norge.py Playwright-logiken
+ENOVA_PROGRAMS = {
+'industri': ['Industri og bergverk', 'Storskalaproduksjon fornybar energi'],
+'pilotering': ['Pilotering av ny energi og klimateknologi'], # Tvärsektoriellt
+'maritim': ['Elektrifisering av skip', 'Landstrøm'],
+'landtransport': ['Tunge nullutslippskjøretøy', 'Utslippsfrie anleggsmaskiner'],
+'bygg': [
+'Energikartlegging yrkesbygg', # Upp till NOK 400K
+'Energieffektivisering bygg', # Upp till NOK 10M
+],
+'energisystem': ['Fornybar oppvarming', 'Energilagring'],
+}
+# Belopp: NOK 400K (audit) till NOK 10M+ (investering)
+# Støtteandel: upp till 45% for SMB inom industri
+P2 — Prioritet 2: Implementera i andra steget
+2.1 SkatteFUNN (statisk sida — snabb implementation)
+# scrapers/sources/skattefunn.py
+# URL: https://www.forskningsradet.no/skattefunn/
+# Teknik: Statisk BeautifulSoup (en enda programsida)
+# Implementeringstid: 1-2 timmar
+# SkatteFUNN är ett skatteavdrag, INTE ett konkurrensutsatt bidrag.
+# Alla norska företag med FoU-aktiviteter är berättigade.
+# Avdrag: 19% av godkända FoU-kostnader, upp till NOK 25M kostnadsbas/år
+# Max skattelättnad: ~NOK 4.75M per år
+# Om bolaget saknar skattemässig vinst → utbetalas som kontant återbetalning
+# Rullande ansökan — ingen deadline
+# Ca 4 000 norska bolag nyttjar SkatteFUNN per år
+# Tagga som: type='tax_incentive' (ej competitive_grant)
+# market='no', currency='NOK'
+2.2 Fylkeskommuner via Regionalforvaltning.no
+# scrapers/sources/regionalforvaltning_no.py
+# URL: https://www.regionalforvaltning.no/
+# Teknik: BeautifulSoup
+# Regionalforvaltning.no är Norges samlade portal för regionalt stöd
+# — motsvarar svenska Länsstyrelsernas samlade hemsida.
+# Bättre att scrapa DENNA portal än alla 15 fylken separat.
+# Nyckelprogram via fylkeskommuner:
+# BIO (Bedriftsrettet inkubasjon og oppstartsprosjekter)
+# FORREGION (regional FoU-samarbeid)
+# Kommunale næringsfond
+# Tilskudd til næringsutvikling (varies by county)
+# Fylkeskommuner (15 st) — URL-mönster:
+# https://www.{fylke}.no/naeringsliv/tilskudd
+2.3 Interreg Aurora (redan delvis i plattformen)
+Interreg Aurora — uppdatering
+Plattformen har redan en interreg_aurora.py scraper.
+OBS: Interreg Auroras 6:e call (small-scale) och 8:e call (reguljärt) öppnade 9 februari 2026.
+Uppdatera scrapers för att fånga dessa nya utlysningar.
+Program spänner över Sverige-Finland-Norge — relevant för alla tre marknader.
+Kräver partners från minst 2 av 3 länder. Total budget: €205M (2021-2027).
+Datastruktur för norska grants
+# Alla norska grants ska ha:
+{
+'market': 'no',
+'language': 'nb', # norsk bokmål
+'currency': 'NOK',
+'country': 'Norway',
+'source_country': 'NO',
+'amount_min_nok': ..., # lagra i NOK
+'amount_max_nok': ...,
+# Konvertera till SEK/EUR för jämförbarhet i UI om behov
+}
+# Vanliga norska belopp att känna igen i scraping:
+# 'NOK 1 million' | '1 000 000 kr' | '1 mill. kr' | '1 MNOK'
+Scraper-katalog: Norge
+Källa Fil Teknik Prio Bidrag (est.) Timmar
+Forskningsrådet forskningsradet.
+py
+BS4 + REST
+API
+P1 20–40 3–5h
+Innovasjon
+Norge
+innovasjon_nor
+ge.py
+Playwright P1 12–15 5–7h
+Enova enova.py Playwright P1 15–20 4–6h
+SkatteFUNN skattefunn.py BS4 (statisk) P2 1 1–2h
+Regionalforvaltn
+ing.no
+regionalforvaltni
+ng_no.py
+BS4 P2 20–40 4–6h
+NordForsk nordforsk.py BS4 P3 5–8 2–3h
+Testchecklista — Norge
+• [ ] Norska grants visas bara för norska användare (market='no') som default
+• [ ] Belopp visas i NOK med korrekt formatering
+• [ ] Scraper-loggar visar 'market=no' för alla norska källor
+• [ ] SkatteFUNN märkt som 'tax_incentive' inte 'grant'
+• [ ] Innovasjon Norge-grants har korrekt eligibility: kräver norskregistrerat bolag
+• [ ] Enova-grants har energi/klimat-kategori
+• [ ] Deduplicering fungerar mot eventuellt överlapp med EU F&T Porta

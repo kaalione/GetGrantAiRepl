@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 1200px; height: 630px; overflow: hidden; }
+
+@import url(‘https://fonts.googleapis.com/css2?family=Sora:wght@400;600;800&family=Inter:wght@400;500&display=swap’);
+
+.card {
+width: 1200px;
+height: 630px;
+background: #040d1a;
+position: relative;
+overflow: hidden;
+font-family: ‘Sora’, sans-serif;
+display: flex;
+align-items: center;
+padding: 80px 100px;
+}
+
+/* Background gradient mesh */
+.bg-gradient {
+position: absolute;
+inset: 0;
+background:
+radial-gradient(ellipse 700px 500px at -100px 400px, #0c2a6e 0%, transparent 70%),
+radial-gradient(ellipse 500px 400px at 900px -50px, #0e4d6b 0%, transparent 65%),
+radial-gradient(ellipse 300px 300px at 600px 500px, #0a3350 0%, transparent 60%);
+}
+
+/* Subtle grid texture */
+.grid-lines {
+position: absolute;
+inset: 0;
+background-image:
+linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+background-size: 60px 60px;
+}
+
+/* Geometric accent — large ring */
+.ring-1 {
+position: absolute;
+right: -120px;
+top: 50%;
+transform: translateY(-50%);
+width: 580px;
+height: 580px;
+border-radius: 50%;
+border: 1.5px solid rgba(56, 189, 248, 0.12);
+}
+.ring-2 {
+position: absolute;
+right: -20px;
+top: 50%;
+transform: translateY(-50%);
+width: 420px;
+height: 420px;
+border-radius: 50%;
+border: 1px solid rgba(56, 189, 248, 0.18);
+}
+.ring-3 {
+position: absolute;
+right: 80px;
+top: 50%;
+transform: translateY(-50%);
+width: 260px;
+height: 260px;
+border-radius: 50%;
+border: 1px solid rgba(56, 189, 248, 0.25);
+background: radial-gradient(circle, rgba(14, 165, 233, 0.06) 0%, transparent 70%);
+}
+
+/* Data nodes on right side */
+.nodes {
+position: absolute;
+right: 0;
+top: 0;
+width: 500px;
+height: 630px;
+}
+.node {
+position: absolute;
+border-radius: 50%;
+background: rgba(56, 189, 248, 0.7);
+box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+.node-lg { width: 8px; height: 8px; background: rgba(56, 189, 248, 0.9); box-shadow: 0 0 20px rgba(56, 189, 248, 0.6); }
+.node-sm { width: 4px; height: 4px; background: rgba(56, 189, 248, 0.5); }
+.node-xs { width: 3px; height: 3px; background: rgba(56, 189, 248, 0.3); }
+
+/* Connector lines */
+.connector {
+position: absolute;
+background: linear-gradient(90deg, rgba(56,189,248,0.0), rgba(56,189,248,0.15), rgba(56,189,248,0.0));
+height: 1px;
+transform-origin: left center;
+}
+
+/* Left content */
+.content {
+position: relative;
+z-index: 10;
+max-width: 620px;
+}
+
+/* Logo pill */
+.logo-pill {
+display: inline-flex;
+align-items: center;
+gap: 10px;
+background: rgba(255,255,255,0.06);
+border: 1px solid rgba(255,255,255,0.12);
+border-radius: 100px;
+padding: 8px 20px 8px 12px;
+margin-bottom: 36px;
+}
+.logo-icon {
+width: 28px;
+height: 28px;
+background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+border-radius: 8px;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 14px;
+}
+.logo-text {
+font-size: 16px;
+font-weight: 600;
+color: rgba(255,255,255,0.9);
+letter-spacing: -0.3px;
+}
+
+/* Main headline */
+h1 {
+font-size: 64px;
+font-weight: 800;
+line-height: 1.05;
+letter-spacing: -2px;
+color: #ffffff;
+margin-bottom: 20px;
+}
+h1 .accent {
+background: linear-gradient(135deg, #38bdf8 0%, #7dd3fc 50%, #bae6fd 100%);
+-webkit-background-clip: text;
+-webkit-text-fill-color: transparent;
+background-clip: text;
+}
+
+/* Subtitle */
+.subtitle {
+font-size: 22px;
+font-weight: 400;
+color: rgba(255,255,255,0.55);
+letter-spacing: -0.3px;
+line-height: 1.4;
+margin-bottom: 44px;
+font-family: ‘Inter’, sans-serif;
+}
+
+/* Stats row */
+.stats {
+display: flex;
+gap: 32px;
+align-items: center;
+}
+.stat {
+display: flex;
+flex-direction: column;
+gap: 2px;
+}
+.stat-num {
+font-size: 26px;
+font-weight: 700;
+color: #38bdf8;
+letter-spacing: -0.5px;
+}
+.stat-label {
+font-size: 13px;
+color: rgba(255,255,255,0.4);
+font-family: ‘Inter’, sans-serif;
+font-weight: 500;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+}
+.stat-divider {
+width: 1px;
+height: 36px;
+background: rgba(255,255,255,0.1);
+}
+
+/* Bottom bar */
+.bottom-bar {
+position: absolute;
+bottom: 0;
+left: 0;
+right: 0;
+height: 3px;
+background: linear-gradient(90deg, transparent 0%, #38bdf8 30%, #0ea5e9 60%, transparent 100%);
+opacity: 0.6;
+}
+
+/* Top accent line */
+.top-line {
+position: absolute;
+top: 0;
+left: 100px;
+width: 300px;
+height: 2px;
+background: linear-gradient(90deg, transparent, rgba(56,189,248,0.4), transparent);
+}
+</style>
+
+</head>
+<body>
+<div class="card">
+  <div class="bg-gradient"></div>
+  <div class="grid-lines"></div>
+  <div class="top-line"></div>
+
+  <!-- Geometric rings -->
+
+  <div class="ring-1"></div>
+  <div class="ring-2"></div>
+  <div class="ring-3"></div>
+
+  <!-- Data nodes -->
+
+  <div class="nodes">
+    <!-- Connector lines -->
+    <div class="connector" style="top:180px; left:120px; width:140px; transform:rotate(-15deg)"></div>
+    <div class="connector" style="top:240px; left:80px; width:180px; transform:rotate(8deg)"></div>
+    <div class="connector" style="top:320px; left:150px; width:120px; transform:rotate(-25deg)"></div>
+    <div class="connector" style="top:400px; left:100px; width:160px; transform:rotate(12deg)"></div>
+    <div class="connector" style="top:160px; left:200px; width:130px; transform:rotate(30deg)"></div>
+    <div class="connector" style="top:460px; left:120px; width:150px; transform:rotate(-10deg)"></div>
+
+```
+<!-- Nodes -->
+<div class="node node-lg" style="top:172px; left:118px"></div>
+<div class="node node-lg" style="top:232px; left:78px"></div>
+<div class="node node-lg" style="top:312px; left:148px"></div>
+<div class="node node-lg" style="top:392px; left:98px"></div>
+<div class="node node-lg" style="top:152px; left:198px"></div>
+<div class="node node-lg" style="top:452px; left:118px"></div>
+<div class="node node-sm" style="top:260px; left:258px"></div>
+<div class="node node-sm" style="top:340px; left:270px"></div>
+<div class="node node-sm" style="top:200px; left:240px"></div>
+<div class="node node-sm" style="top:420px; left:260px"></div>
+<div class="node node-xs" style="top:100px; left:180px"></div>
+<div class="node node-xs" style="top:500px; left:200px"></div>
+<div class="node node-xs" style="top:80px; left:300px"></div>
+<div class="node node-xs" style="top:540px; left:300px"></div>
+<div class="node node-xs" style="top:290px; left:320px"></div>
+```
+
+  </div>
+
+  <!-- Main content -->
+
+  <div class="content">
+    <div class="logo-pill">
+      <div class="logo-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="3" fill="white"/>
+          <circle cx="8" cy="8" r="6" stroke="white" stroke-width="1.5" fill="none"/>
+        </svg>
+      </div>
+      <span class="logo-text">getgrant.ai</span>
+    </div>
+
+```
+<h1>Hitta rätt<br><span class="accent">bidrag</span> med AI</h1>
+
+<p class="subtitle">Matcha ditt företag mot rätt finansiering.<br>Ansök snabbare. Få mer.</p>
+
+<div class="stats">
+  <div class="stat">
+    <span class="stat-num">2 000+</span>
+    <span class="stat-label">Bidrag</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat">
+    <span class="stat-num">39</span>
+    <span class="stat-label">Källor</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat">
+    <span class="stat-num">AI</span>
+    <span class="stat-label">Matchning</span>
+  </div>
+</div>
+```
+
+  </div>
+
+  <div class="bottom-bar"></div>
+</div>
+</body>
+</html>

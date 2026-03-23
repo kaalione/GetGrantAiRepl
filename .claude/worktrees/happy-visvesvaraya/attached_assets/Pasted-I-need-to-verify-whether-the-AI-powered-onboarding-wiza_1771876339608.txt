@@ -1,0 +1,150 @@
+I need to verify whether the AI-powered onboarding wizard with website 
+scraping is fully implemented or if it's still the old manual version.
+
+INVESTIGATE AND REPORT:
+
+1. Check the /onboarding route:
+   - What file handles this route? (client/src/pages/onboarding.tsx 
+     or similar)
+   - Does it contain a URL input field where users can enter their 
+     company website?
+   - Does it call any backend endpoint for website scraping/extraction?
+   - Does it have a multi-step wizard UI (at least 4-5 steps)?
+
+2. Check the backend:
+   - Does server/routes/onboarding.ts (or similar) exist?
+   - Is there a POST /api/onboarding/extract endpoint?
+   - Is there a websiteExtractor.ts service file?
+   - Is there a websiteScrapeCache table in the database?
+   - Is there an onboardingSessions table in the database?
+
+3. Check the scraping logic:
+   - Is cheerio installed in package.json?
+   - Does the extractor fetch multiple pages (/om-oss, /about etc.)?
+   - Does it call Claude AI to extract structured company data?
+   - Does it return confidence scores per field?
+
+4. Check the profile review step:
+   - After extraction, does the UI show which fields were AI-filled 
+     with a badge/indicator?
+   - Can the user edit AI-filled fields before saving?
+
+BASED ON YOUR FINDINGS:
+- If fully implemented: confirm it works and show me the key files.
+- If partially implemented: tell me exactly what is missing.
+- If NOT implemented (still old manual form): implement the full 
+  AI-powered onboarding wizard based on this specification:
+
+[If you need to build it, here is the full spec:]
+
+DATABASE — add to schema.ts:
+  onboardingSessions table with fields:
+  id, userId, companyId, currentStep, totalSteps, completedAt,
+  skippedAt, websiteUrl, extractionStatus, extractionAttempts,
+  rawExtractedData (jsonb), confidenceScores (jsonb),
+  autoFilledFields (varchar array), userEditedFields (varchar array),
+  extractionRating, extractionFeedback, createdAt, updatedAt
+
+  websiteScrapeCache table with fields:
+  id, url, normalizedUrl, scrapedContent, scrapedAt, statusCode,
+  errorMessage, contentLength, expiresAt (7 days)
+
+BACKEND — create server/services/websiteExtractor.ts:
+  normalizeUrl(input): adds https://, validates format,
+    rejects localhost and private IPs
+  
+  scrapeWebsite(baseUrl): fetches homepage + tries /om-oss, /about,
+    /about-us, /om. Uses cheerio to extract clean text (removes 
+    scripts, nav, footer). Includes meta description and title.
+    Caches results for 7 days. Timeout: 8 seconds per page.
+    Returns { content, pagesScraped, errors }
+  
+  extractCompanyDataFromWebsite(content, url): calls Claude claude-opus-4-5
+    with a structured prompt to extract:
+    companyName, description (2-4 sentences in Swedish), tagline,
+    foundedYear, orgNumber, sector (mapped to platform options:
+    tech/cleantech/life_science/manufacturing/creative/agriculture/
+    social/other), industryKeywords[], employeeCount (mapped to
+    '1-10'/'11-50'/'51-200'/'201-500'/'500+'), companyStage,
+    revenueRange, city, region (Swedish regions), country, isSwedish,
+    technologyAreas[], hasRdFocus, businessModel (B2B/B2C/B2G/mixed),
+    isExportFocused, sustainabilityFocus, sustainabilityAreas[],
+    confidence scores (0-100) per field, extractionNotes
+    Returns parsed JSON. On parse error: returns safe empty structure.
+
+BACKEND — create server/routes/onboarding.ts, mount at /api/onboarding:
+  POST /api/onboarding/start
+    Creates or resumes session. Returns { sessionId, currentStep, 
+    existingProfile, resuming }
+  
+  POST /api/onboarding/extract
+    Body: { sessionId, websiteUrl }
+    Rate limit: 3 attempts per session, 10 per user per day
+    Process: normalize URL → scrapeWebsite() → extractCompanyDataFromWebsite()
+    → store in session.rawExtractedData and confidenceScores
+    Returns: { status, extractedData, mappedProfile, fieldsFound,
+    confidenceScores, pagesScraped, message }
+    Error cases: invalid URL (400), unreachable site (422), timeout (504),
+    rate limited (429)
+  
+  GET /api/onboarding/session — get current session
+  PUT /api/onboarding/step — update current step
+  POST /api/onboarding/save-profile — upsert company from reviewed data
+  POST /api/onboarding/complete — mark done, trigger first AI matching run
+  POST /api/onboarding/skip — skip wizard
+  POST /api/onboarding/retry-extraction — retry with same/new URL
+
+FRONTEND — create client/src/pages/onboarding.tsx:
+  Full-page wizard, no main nav. Progress dots at top.
+
+  Step 1 — Welcome:
+    "Välkommen till GetGrant.ai, {firstName}!"
+    Explain AI auto-fill. [Kom igång →] and [Fyll i manuellt] links.
+
+  Step 2 — URL input:
+    Large URL input field, [Analysera min webbplats →] button.
+    Three animated loading states while scraping:
+      "Hämtar din webbplats..." (0-3s)
+      "Analyserar innehållet..." (3-8s)  
+      "Skapar din företagsprofil..." (8-15s)
+    Success state: "✅ Vi hittade X uppgifter!"
+    Partial state: "⚠️ Vi hittade en del information"
+    Failure state: "😕 Kunde inte analysera" with specific reason
+    and [Prova en annan URL] + [Fyll i manuellt] buttons.
+
+  Step 3 — Review profile:
+    Show all extracted fields as editable form inputs.
+    Fields filled by AI show ✅ AI badge (green) if confidence ≥ 70.
+    Fields filled by AI show ⚠️ AI badge (amber) if confidence < 70.
+    Show confidence % under low-confidence fields.
+    Empty required fields highlighted.
+    [← Ändra URL] and [Spara och fortsätt →] buttons.
+
+  Step 4 — Grant goals:
+    Select primary goal (product development / market / hiring /
+    sustainability / digitalization / infrastructure).
+    Select funding size range.
+    Select urgency (within 3 months / 3-12 months / exploring).
+
+  Step 5 — Notifications:
+    Checkboxes for weekly digest, direct alerts, deadline reminders.
+    Pre-filled email from user account.
+
+  Step 6 — Complete:
+    "🎉 Vi hittade {matchCount} bidrag!"
+    Show top match card.
+    Star rating (1-5) for extraction quality.
+    [Se alla matchningar →]
+
+ALSO add AI auto-fill button to existing profile edit page:
+  Blue info box at top of form: "Fyll i profilen automatiskt med AI"
+  URL input + [Analysera] button.
+  After extraction: show diff of what changed.
+  [Tillämpa alla] and [Välj enskilt] buttons.
+
+ROUTING — update post-login redirect:
+  No company profile → redirect to /onboarding
+  Profile completion < 40% → redirect to /onboarding?resume=sessionId
+  Profile complete → redirect to /dashboard
+
+Install dependency: npm install cheerio

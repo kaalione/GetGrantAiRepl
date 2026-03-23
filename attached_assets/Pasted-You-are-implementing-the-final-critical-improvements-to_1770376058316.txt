@@ -1,0 +1,903 @@
+You are implementing the final critical improvements to GetGrant.ai before beta launch. These changes will significantly improve user engagement, retention, and success tracking.
+
+CONTEXT:
+GetGrant.ai is production-ready but needs 5 critical polish features:
+1. Sticky progress tracker on dashboard
+2. Three-tier deadline urgency system
+3. Email notification frequency controls
+4. Success tracking dashboard with ROI visibility
+5. Grant alerts system for passive discovery
+
+Current tech stack:
+- Backend: Express.js + PostgreSQL + Drizzle ORM
+- Frontend: React + TypeScript + Vite
+- Auth: Replit Auth
+- Email: Resend
+- AI: Claude (Anthropic)
+- i18n: Full Swedish/English support
+
+═══════════════════════════════════════════════════════════════════════════
+PART 1: STICKY PROGRESS TRACKER (GAMIFICATION)
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Keep users engaged by showing clear next steps with actionable CTAs.
+
+STEP 1.1: Add Progress Tracking to Database Schema
+
+Update your Drizzle schema to track user milestones:
+```typescript
+// In your schema file (e.g., db/schema.ts)
+
+export const userProgress = pgTable('user_progress', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id).notNull().unique(),
+  
+  // Milestones
+  profileCreated: boolean('profile_created').default(false),
+  profileCompleted: boolean('profile_completed').default(false), // >90%
+  firstGrantViewed: boolean('first_grant_viewed').default(false),
+  firstAIAnalysisRun: boolean('first_ai_analysis_run').default(false),
+  firstApplicationGenerated: boolean('first_application_generated').default(false),
+  firstApplicationSubmitted: boolean('first_application_submitted').default(false),
+  
+  // Timestamps for each milestone
+  profileCreatedAt: timestamp('profile_created_at'),
+  profileCompletedAt: timestamp('profile_completed_at'),
+  firstGrantViewedAt: timestamp('first_grant_viewed_at'),
+  firstAIAnalysisAt: timestamp('first_ai_analysis_at'),
+  firstApplicationAt: timestamp('first_application_at'),
+  firstSubmissionAt: timestamp('first_submission_at'),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+```
+
+Run migration:
+```bash
+npm run db:push
+```
+
+STEP 1.2: Create Progress Tracking Service
+
+Create `server/services/userProgress.ts`:
+```typescript
+import { db } from '../db';
+import { userProgress } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
+export async function getOrCreateUserProgress(userId: string) {
+  let progress = await db.query.userProgress.findFirst({
+    where: eq(userProgress.userId, userId),
+  });
+
+  if (!progress) {
+    [progress] = await db.insert(userProgress)
+      .values({ userId })
+      .returning();
+  }
+
+  return progress;
+}
+
+export async function updateProgressMilestone(
+  userId: string,
+  milestone: keyof typeof userProgress.$inferInsert,
+  value: boolean = true
+) {
+  const progress = await getOrCreateUserProgress(userId);
+
+  // Only update if not already completed
+  if (!progress[milestone]) {
+    const updates: any = {
+      [milestone]: value,
+      updatedAt: new Date(),
+    };
+
+    // Also set timestamp field if it exists
+    const timestampField = `${milestone}At` as keyof typeof userProgress.$inferInsert;
+    if (timestampField in progress) {
+      updates[timestampField] = new Date();
+    }
+
+    await db.update(userProgress)
+      .set(updates)
+      .where(eq(userProgress.userId, userId));
+  }
+}
+
+export async function checkAndUpdateProgress(userId: string) {
+  // Get user's company
+  const company = await db.query.companies.findFirst({
+    where: eq(companies.userId, userId),
+  });
+
+  if (company) {
+    await updateProgressMilestone(userId, 'profileCreated', true);
+
+    // Check if profile is >90% complete
+    const completion = calculateProfileCompletion(company);
+    if (completion.percentage >= 90) {
+      await updateProgressMilestone(userId, 'profileCompleted', true);
+    }
+  }
+
+  // Check for first grant view (from analytics or separate tracking)
+  const hasViewedGrant = await checkIfUserViewedGrant(userId);
+  if (hasViewedGrant) {
+    await updateProgressMilestone(userId, 'firstGrantViewed', true);
+  }
+
+  // Check for first AI analysis
+  const hasRunAnalysis = await db.query.grantMatches.findFirst({
+    where: eq(grantMatches.userId, userId),
+  });
+  if (hasRunAnalysis) {
+    await updateProgressMilestone(userId, 'firstAIAnalysisRun', true);
+  }
+
+  // Check for first application
+  const hasApplication = await db.query.applications.findFirst({
+    where: eq(applications.userId, userId),
+  });
+  if (hasApplication) {
+    await updateProgressMilestone(userId, 'firstApplicationGenerated', true);
+  }
+
+  // Check for first submitted application
+  const hasSubmitted = await db.query.applications.findFirst({
+    where: and(
+      eq(applications.userId, userId),
+      eq(applications.status, 'submitted')
+    ),
+  });
+  if (hasSubmitted) {
+    await updateProgressMilestone(userId, 'firstApplicationSubmitted', true);
+  }
+}
+
+async function checkIfUserViewedGrant(userId: string): Promise<boolean> {
+  // Check if user has any grant views in analytics or tracking table
+  // This depends on how you're tracking grant views
+  // For now, return true if they have any applications
+  const hasApp = await db.query.applications.findFirst({
+    where: eq(applications.userId, userId),
+  });
+  return !!hasApp;
+}
+```
+
+STEP 1.3: Add API Endpoint for Progress
+
+Create route in `server/routes/user.ts`:
+```typescript
+import express from 'express';
+import { requireAuth } from '../middleware/auth';
+import { getOrCreateUserProgress, checkAndUpdateProgress } from '../services/userProgress';
+
+const router = express.Router();
+
+router.get('/user/progress', requireAuth, async (req, res) => {
+  try {
+    // Update progress based on current state
+    await checkAndUpdateProgress(req.user.id);
+    
+    // Fetch updated progress
+    const progress = await getOrCreateUserProgress(req.user.id);
+    
+    res.json(progress);
+  } catch (error) {
+    console.error('Get progress error:', error);
+    res.status(500).json({ error: 'Failed to fetch progress' });
+  }
+});
+
+export default router;
+```
+
+STEP 1.4: Create Progress Tracker Component
+
+Create `src/components/ProgressTracker.tsx`:
+```typescript
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { CheckCircle, Circle, Trophy, ArrowRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+interface ProgressTrackerProps {
+  compact?: boolean;
+}
+
+export function ProgressTracker({ compact = false }: ProgressTrackerProps) {
+  const { t } = useTranslation();
+  const [progress, setProgress] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchProgress();
+  }, []);
+
+  async function fetchProgress() {
+    try {
+      const res = await fetch('/api/user/progress');
+      const data = await res.json();
+      setProgress(data);
+    } catch (error) {
+      console.error('Failed to fetch progress:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card className="animate-pulse">
+        <CardContent className="p-6">
+          <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!progress) return null;
+
+  const milestones = [
+    {
+      key: 'profileCreated',
+      completed: progress.profileCreated,
+      title: t('progress.createProfile'),
+      description: t('progress.createProfileDesc'),
+      action: '/profile',
+      actionLabel: t('progress.createProfileAction'),
+      nextMilestone: 'profileCompleted',
+    },
+    {
+      key: 'profileCompleted',
+      completed: progress.profileCompleted,
+      title: t('progress.completeProfile'),
+      description: t('progress.completeProfileDesc'),
+      action: '/profile',
+      actionLabel: t('progress.completeProfileAction'),
+      nextMilestone: 'firstGrantViewed',
+      dependsOn: 'profileCreated',
+    },
+    {
+      key: 'firstGrantViewed',
+      completed: progress.firstGrantViewed,
+      title: t('progress.viewGrants'),
+      description: t('progress.viewGrantsDesc'),
+      action: '/grants',
+      actionLabel: t('progress.viewGrantsAction'),
+      nextMilestone: 'firstAIAnalysisRun',
+      dependsOn: 'profileCompleted',
+    },
+    {
+      key: 'firstAIAnalysisRun',
+      completed: progress.firstAIAnalysisRun,
+      title: t('progress.runAIAnalysis'),
+      description: t('progress.runAIAnalysisDesc'),
+      action: '/grants',
+      actionLabel: t('progress.runAIAnalysisAction'),
+      nextMilestone: 'firstApplicationGenerated',
+      dependsOn: 'firstGrantViewed',
+    },
+    {
+      key: 'firstApplicationGenerated',
+      completed: progress.firstApplicationGenerated,
+      title: t('progress.generateApplication'),
+      description: t('progress.generateApplicationDesc'),
+      action: '/grants',
+      actionLabel: t('progress.generateApplicationAction'),
+      nextMilestone: 'firstApplicationSubmitted',
+      dependsOn: 'firstAIAnalysisRun',
+    },
+    {
+      key: 'firstApplicationSubmitted',
+      completed: progress.firstApplicationSubmitted,
+      title: t('progress.submitApplication'),
+      description: t('progress.submitApplicationDesc'),
+      action: '/applications',
+      actionLabel: t('progress.submitApplicationAction'),
+      dependsOn: 'firstApplicationGenerated',
+    },
+  ];
+
+  const completedCount = milestones.filter(m => m.completed).length;
+  const allCompleted = completedCount === milestones.length;
+
+  // Find next milestone to complete
+  const nextMilestone = milestones.find(m => !m.completed && (
+    !m.dependsOn || progress[m.dependsOn]
+  ));
+
+  // Don't show if all completed
+  if (allCompleted) return null;
+
+  if (compact) {
+    return (
+      <Card className="border-2 border-blue-500 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Trophy className="h-5 w-5 text-blue-600" />
+              <div>
+                <div className="font-semibold text-sm">
+                  {completedCount}/{milestones.length} {t('progress.completed')}
+                </div>
+                <div className="text-xs text-gray-600 dark:text-gray-400">
+                  {nextMilestone?.title}
+                </div>
+              </div>
+            </div>
+            {nextMilestone && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => window.location.href = nextMilestone.action}
+              >
+                {t('common.continue')}
+                <ArrowRight className="ml-1 h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-2 border-blue-500 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Trophy className="h-5 w-5 text-blue-600" />
+          {t('progress.title')}
+        </CardTitle>
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          {completedCount}/{milestones.length} {t('progress.milestonesCompleted')}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {milestones.map((milestone, index) => {
+          const isLocked = milestone.dependsOn && !progress[milestone.dependsOn];
+          const isCurrent = !milestone.completed && !isLocked;
+
+          return (
+            <div
+              key={milestone.key}
+              className={`flex items-start gap-3 p-3 rounded-lg transition-all ${
+                milestone.completed
+                  ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                  : isCurrent
+                  ? 'bg-white dark:bg-gray-800 border-2 border-blue-500'
+                  : 'bg-gray-50 dark:bg-gray-800/50 opacity-60'
+              }`}
+            >
+              {milestone.completed ? (
+                <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+              ) : (
+                <Circle className="h-5 w-5 text-gray-300 mt-0.5 flex-shrink-0" />
+              )}
+
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm mb-1">
+                  {milestone.title}
+                </div>
+                {!milestone.completed && milestone.description && (
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                    {milestone.description}
+                  </div>
+                )}
+                {isCurrent && milestone.actionLabel && (
+                  <Button
+                    size="sm"
+                    variant="link"
+                    className="p-0 h-auto text-blue-600"
+                    onClick={() => window.location.href = milestone.action}
+                  >
+                    {milestone.actionLabel} →
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {allCompleted && (
+          <div className="mt-4 p-4 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 text-center border border-green-500">
+            <div className="text-3xl mb-2">🎉</div>
+            <div className="font-semibold text-green-900 dark:text-green-100 mb-1">
+              {t('progress.congratulations')}
+            </div>
+            <div className="text-sm text-gray-700 dark:text-gray-300">
+              {t('progress.allMilestonesComplete')}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+STEP 1.5: Add to Dashboard
+
+Update your dashboard to include the progress tracker:
+```typescript
+// In src/pages/Dashboard.tsx
+
+import { ProgressTracker } from '@/components/ProgressTracker';
+
+export function Dashboard() {
+  return (
+    <div className="container mx-auto p-6 space-y-8">
+      {/* Hero Section */}
+      {/* ... existing hero ... */}
+
+      {/* Progress Tracker - prominently displayed */}
+      <ProgressTracker />
+
+      {/* Profile Completion Alert */}
+      {/* ... existing profile completion ... */}
+
+      {/* Rest of dashboard */}
+      {/* ... stats, grants, etc ... */}
+    </div>
+  );
+}
+```
+
+STEP 1.6: Add Translation Keys
+
+Add to `public/locales/sv/translation.json`:
+```json
+{
+  "progress": {
+    "title": "Kom igång med GetGrant.ai",
+    "completed": "slutförda",
+    "milestonesCompleted": "milstolpar slutförda",
+    "createProfile": "Skapa företagsprofil",
+    "createProfileDesc": "Berätta om ditt företag för att få personliga matchningar",
+    "createProfileAction": "Skapa profil nu",
+    "completeProfile": "Komplettera profil (>90%)",
+    "completeProfileDesc": "Fyll i fler fält för bättre AI-matchningar",
+    "completeProfileAction": "Komplettera nu",
+    "viewGrants": "Se dina första matchningar",
+    "viewGrantsDesc": "Utforska bidrag som passar ert företag",
+    "viewGrantsAction": "Utforska bidrag",
+    "runAIAnalysis": "Kör AI-analys",
+    "runAIAnalysisDesc": "Låt AI analysera era chanser för ett bidrag",
+    "runAIAnalysisAction": "Testa AI-matchning",
+    "generateApplication": "Generera ansökan",
+    "generateApplicationDesc": "Låt AI skriva en komplett ansökan åt dig",
+    "generateApplicationAction": "Generera med AI",
+    "submitApplication": "Skicka in ansökan",
+    "submitApplicationDesc": "Markera din första ansökan som inskickad",
+    "submitApplicationAction": "Gå till ansökningar",
+    "congratulations": "Grattis!",
+    "allMilestonesComplete": "Du har låst upp full potential i GetGrant.ai"
+  }
+}
+```
+
+Add English translations to `public/locales/en/translation.json`:
+```json
+{
+  "progress": {
+    "title": "Get Started with GetGrant.ai",
+    "completed": "completed",
+    "milestonesCompleted": "milestones completed",
+    "createProfile": "Create company profile",
+    "createProfileDesc": "Tell us about your company for personalized matches",
+    "createProfileAction": "Create profile now",
+    "completeProfile": "Complete profile (>90%)",
+    "completeProfileDesc": "Fill in more fields for better AI matching",
+    "completeProfileAction": "Complete now",
+    "viewGrants": "View your first matches",
+    "viewGrantsDesc": "Explore grants that fit your company",
+    "viewGrantsAction": "Explore grants",
+    "runAIAnalysis": "Run AI analysis",
+    "runAIAnalysisDesc": "Let AI analyze your chances for a grant",
+    "runAIAnalysisAction": "Try AI matching",
+    "generateApplication": "Generate application",
+    "generateApplicationDesc": "Let AI write a complete application for you",
+    "generateApplicationAction": "Generate with AI",
+    "submitApplication": "Submit application",
+    "submitApplicationDesc": "Mark your first application as submitted",
+    "submitApplicationAction": "Go to applications",
+    "congratulations": "Congratulations!",
+    "allMilestonesComplete": "You've unlocked the full potential of GetGrant.ai"
+  }
+}
+```
+
+STEP 1.7: Trigger Progress Updates
+
+Update relevant endpoints to trigger progress updates:
+```typescript
+// When company is created/updated
+router.post('/companies', requireAuth, async (req, res) => {
+  // ... create company logic ...
+  
+  await updateProgressMilestone(req.user.id, 'profileCreated', true);
+  
+  res.json(company);
+});
+
+// When grant is viewed
+router.get('/grants/:id', requireAuth, async (req, res) => {
+  // ... fetch grant logic ...
+  
+  await updateProgressMilestone(req.user.id, 'firstGrantViewed', true);
+  
+  res.json(grant);
+});
+
+// When AI analysis is run
+router.post('/grants/:id/analyze', requireAuth, async (req, res) => {
+  // ... AI analysis logic ...
+  
+  await updateProgressMilestone(req.user.id, 'firstAIAnalysisRun', true);
+  
+  res.json(analysis);
+});
+
+// When application is generated
+router.post('/applications/generate', requireAuth, async (req, res) => {
+  // ... generate application logic ...
+  
+  await updateProgressMilestone(req.user.id, 'firstApplicationGenerated', true);
+  
+  res.json(application);
+});
+
+// When application status is updated to submitted
+router.patch('/applications/:id/status', requireAuth, async (req, res) => {
+  // ... update status logic ...
+  
+  if (req.body.status === 'submitted') {
+    await updateProgressMilestone(req.user.id, 'firstApplicationSubmitted', true);
+  }
+  
+  res.json(application);
+});
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PART 2: THREE-TIER DEADLINE URGENCY SYSTEM
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Show deadlines with proper urgency levels (critical <3d, urgent 3-7d, upcoming 7-14d).
+
+STEP 2.1: Create Deadline Utility Functions
+
+Create `src/lib/deadlines.ts`:
+```typescript
+import { differenceInDays, isBefore, startOfDay } from 'date-fns';
+
+export type DeadlineUrgency = 'critical' | 'urgent' | 'upcoming' | 'normal';
+
+export interface CategorizedDeadlines {
+  critical: any[]; // <3 days
+  urgent: any[];   // 3-7 days
+  upcoming: any[]; // 7-14 days
+}
+
+export function getDeadlineUrgency(deadline: Date): DeadlineUrgency {
+  const now = startOfDay(new Date());
+  const deadlineDate = startOfDay(new Date(deadline));
+  const daysUntil = differenceInDays(deadlineDate, now);
+
+  if (daysUntil < 0) return 'normal'; // Past deadline
+  if (daysUntil <= 3) return 'critical';
+  if (daysUntil <= 7) return 'urgent';
+  if (daysUntil <= 14) return 'upcoming';
+  return 'normal';
+}
+
+export function categorizeGrantsByDeadline(grants: any[]): CategorizedDeadlines {
+  const result: CategorizedDeadlines = {
+    critical: [],
+    urgent: [],
+    upcoming: [],
+  };
+
+  grants.forEach(grant => {
+    if (!grant.deadline) return;
+    
+    const urgency = getDeadlineUrgency(grant.deadline);
+    
+    if (urgency === 'critical') result.critical.push(grant);
+    else if (urgency === 'urgent') result.urgent.push(grant);
+    else if (urgency === 'upcoming') result.upcoming.push(grant);
+  });
+
+  return result;
+}
+
+export function getUrgencyColor(urgency: DeadlineUrgency) {
+  switch (urgency) {
+    case 'critical':
+      return {
+        bg: 'bg-red-50 dark:bg-red-900/20',
+        border: 'border-red-500',
+        text: 'text-red-900 dark:text-red-100',
+        icon: 'text-red-600',
+      };
+    case 'urgent':
+      return {
+        bg: 'bg-amber-50 dark:bg-amber-900/20',
+        border: 'border-amber-500',
+        text: 'text-amber-900 dark:text-amber-100',
+        icon: 'text-amber-600',
+      };
+    case 'upcoming':
+      return {
+        bg: 'bg-blue-50 dark:bg-blue-900/20',
+        border: 'border-blue-500',
+        text: 'text-blue-900 dark:text-blue-100',
+        icon: 'text-blue-600',
+      };
+    default:
+      return {
+        bg: 'bg-gray-50 dark:bg-gray-800',
+        border: 'border-gray-300',
+        text: 'text-gray-900 dark:text-gray-100',
+        icon: 'text-gray-600',
+      };
+  }
+}
+
+export function getUrgencyLabel(urgency: DeadlineUrgency, t: any) {
+  switch (urgency) {
+    case 'critical': return t('deadlines.critical');
+    case 'urgent': return t('deadlines.urgent');
+    case 'upcoming': return t('deadlines.upcoming');
+    default: return '';
+  }
+}
+
+export function getUrgencyDescription(urgency: DeadlineUrgency, t: any) {
+  switch (urgency) {
+    case 'critical': return t('deadlines.criticalDesc');
+    case 'urgent': return t('deadlines.urgentDesc');
+    case 'upcoming': return t('deadlines.upcomingDesc');
+    default: return '';
+  }
+}
+```
+
+STEP 2.2: Create Deadline Alerts Component
+
+Create `src/components/DeadlineAlerts.tsx`:
+```typescript
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertTriangle, Clock, Calendar } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { sv } from 'date-fns/locale';
+import { useTranslation } from 'react-i18next';
+import { categorizeGrantsByDeadline, getUrgencyColor, getUrgencyLabel, getUrgencyDescription } from '@/lib/deadlines';
+
+interface DeadlineAlertsProps {
+  grants: any[];
+}
+
+export function DeadlineAlerts({ grants }: DeadlineAlertsProps) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language === 'sv' ? sv : undefined;
+
+  const categorized = categorizeGrantsByDeadline(grants);
+
+  // Don't show if no urgent deadlines
+  if (
+    categorized.critical.length === 0 &&
+    categorized.urgent.length === 0 &&
+    categorized.upcoming.length === 0
+  ) {
+    return null;
+  }
+
+  const sections = [
+    {
+      urgency: 'critical' as const,
+      icon: AlertTriangle,
+      grants: categorized.critical,
+    },
+    {
+      urgency: 'urgent' as const,
+      icon: Clock,
+      grants: categorized.urgent,
+    },
+    {
+      urgency: 'upcoming' as const,
+      icon: Calendar,
+      grants: categorized.upcoming,
+    },
+  ].filter(section => section.grants.length > 0);
+
+  return (
+    <div className="grid gap-4 md:grid-cols-3">
+      {sections.map(section => {
+        const colors = getUrgencyColor(section.urgency);
+        const Icon = section.icon;
+
+        return (
+          <Card
+            key={section.urgency}
+            className={`border-2 ${colors.border} ${colors.bg}`}
+          >
+            <CardHeader className="pb-3">
+              <CardTitle className={`flex items-center gap-2 text-base ${colors.text}`}>
+                <Icon className={`h-5 w-5 ${colors.icon}`} />
+                {getUrgencyLabel(section.urgency, t).toUpperCase()} ({section.grants.length})
+              </CardTitle>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {getUrgencyDescription(section.urgency, t)}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {section.grants.slice(0, 3).map(grant => (
+                
+                  key={grant.id}
+                  href={`/grants/${grant.id}`}
+                  className="block p-3 rounded-lg bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700"
+                >
+                  <div className="font-medium text-sm mb-1 line-clamp-2">
+                    {grant.title}
+                  </div>
+                  <div className={`text-xs ${colors.icon} font-semibold`}>
+                    {formatDistanceToNow(new Date(grant.deadline), {
+                      addSuffix: true,
+                      locale,
+                    })}
+                  </div>
+                  {grant.matchScore && (
+                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      {grant.matchScore}% {t('common.match')}
+                    </div>
+                  )}
+                </a>
+              ))}
+
+              {section.grants.length > 3 && (
+                
+                  href={`/grants?deadline=${section.urgency}`}
+                  className="block text-sm text-center text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {t('deadlines.viewAll', { count: section.grants.length - 3 })}
+                </a>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+```
+
+STEP 2.3: Add API Endpoint for Deadline Grants
+
+Add to your grants routes:
+```typescript
+// In server/routes/grants.ts
+
+router.get('/grants/deadlines/upcoming', requireAuth, async (req, res) => {
+  try {
+    const now = new Date();
+    const twoWeeksFromNow = new Date();
+    twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+
+    const grants = await db.query.grants.findMany({
+      where: and(
+        eq(grants.status, 'open'),
+        gte(grants.deadline, now),
+        lte(grants.deadline, twoWeeksFromNow)
+      ),
+      orderBy: [asc(grants.deadline)],
+    });
+
+    // Get user's company for match scores
+    const company = await db.query.companies.findFirst({
+      where: eq(companies.userId, req.user.id),
+    });
+
+    // Add match scores if company exists
+    const grantsWithScores = grants.map(grant => {
+      if (company) {
+        const match = calculateBasicMatch(company, grant);
+        return {
+          ...grant,
+          matchScore: match.score,
+        };
+      }
+      return grant;
+    });
+
+    res.json(grantsWithScores);
+  } catch (error) {
+    console.error('Fetch upcoming deadlines error:', error);
+    res.status(500).json({ error: 'Failed to fetch grants' });
+  }
+});
+```
+
+STEP 2.4: Add to Dashboard
+
+Update dashboard to fetch and display deadline alerts:
+```typescript
+// In src/pages/Dashboard.tsx
+
+import { DeadlineAlerts } from '@/components/DeadlineAlerts';
+
+export function Dashboard() {
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/grants/deadlines/upcoming')
+      .then(res => res.json())
+      .then(setUpcomingDeadlines);
+  }, []);
+
+  return (
+    <div className="container mx-auto p-6 space-y-8">
+      {/* ... hero, progress tracker, profile completion ... */}
+
+      {/* Deadline Alerts */}
+      {upcomingDeadlines.length > 0 && (
+        <div>
+          <h2 className="text-2xl font-bold mb-4">{t('deadlines.upcomingDeadlines')}</h2>
+          <DeadlineAlerts grants={upcomingDeadlines} />
+        </div>
+      )}
+
+      {/* ... rest of dashboard ... */}
+    </div>
+  );
+}
+```
+
+STEP 2.5: Add Translation Keys
+
+Add to Swedish translations:
+```json
+{
+  "deadlines": {
+    "critical": "Kritiska",
+    "criticalDesc": "Stänger inom 3 dagar!",
+    "urgent": "Brådskande",
+    "urgentDesc": "Stänger inom en vecka",
+    "upcoming": "Kommande",
+    "upcomingDesc": "Stänger inom 2 veckor",
+    "upcomingDeadlines": "Kommande deadlines",
+    "viewAll": "Visa alla {{count}} →"
+  }
+}
+```
+
+Add to English translations:
+```json
+{
+  "deadlines": {
+    "critical": "Critical",
+    "criticalDesc": "Closing within 3 days!",
+    "urgent": "Urgent",
+    "urgentDesc": "Closing within a week",
+    "upcoming": "Upcoming",
+    "upcomingDesc": "Closing within 2 weeks",
+    "upcomingDeadlines": "Upcoming deadlines",
+    "viewAll": "View all {{count}} →"
+  }
+}
+```
+
+═══════════════════════════════════════════════════════════════════════════
+
+This is PART 1 of 3. The prompt is very long, so I need to break it into parts.
+
+Continue with:
+- PART 3: Email Notification Frequency Controls
+- PART 4: Success Tracking Dashboard with ROI
+- PART 5: Grant Alerts System
+
+Reply "continue" and I'll send the next parts with the remaining critical features.

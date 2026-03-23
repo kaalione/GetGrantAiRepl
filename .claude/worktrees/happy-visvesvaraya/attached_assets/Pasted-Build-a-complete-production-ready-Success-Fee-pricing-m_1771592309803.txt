@@ -1,0 +1,1142 @@
+Build a complete, production-ready Success Fee pricing module for GetGrant.ai.
+This gives free-plan users an alternative to subscription: pay nothing upfront,
+pay 3% of the approved grant amount only when they win. Full Stripe billing,
+admin oversight, legal terms, and upgrade conversion flow included.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1: DATABASE SCHEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add to shared/schema.ts and run npm run db:push.
+```typescript
+// One row per application where user opted into success fee
+export const successFeeAgreements = pgTable('success_fee_agreements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: varchar('user_id').notNull(),
+  applicationId: uuid('application_id').notNull().references(() => applications.id),
+  grantId: varchar('grant_id').notNull(),
+  grantTitle: varchar('grant_title').notNull(),
+  funder: varchar('funder').notNull(),
+  
+  // Fee terms locked in at time of agreement (in case global settings change later)
+  feePercentage: integer('fee_percentage').notNull().default(3),
+  maxFeeCapSek: integer('max_fee_cap_sek').notNull().default(25000),
+  minFeeSek: integer('min_fee_sek').notNull().default(500),
+  termsVersion: varchar('terms_version').notNull().default('1.0'),
+  
+  // Lifecycle status
+  status: varchar('status').notNull().default('pending'),
+  // pending        — created but user hasn't formally agreed yet
+  // active         — user agreed, awaiting outcome
+  // grant_won      — user reported success, calculating fee
+  // fee_invoiced   — Stripe invoice created and sent
+  // fee_paid       — invoice paid (webhook confirmed)
+  // rejected       — user reported rejection
+  // cancelled      — user cancelled before outcome
+  // expired        — no outcome reported after 18 months
+  
+  // Agreement timestamps
+  agreedAt: timestamp('agreed_at'),
+  ipAddressAtAgreement: varchar('ip_address_at_agreement'), // for legal record
+  
+  // Outcome (self-reported)
+  outcomeReportedAt: timestamp('outcome_reported_at'),
+  approvedAmountSek: integer('approved_amount_sek'),
+  grantAgreementRef: varchar('grant_agreement_ref'),        // funder reference number
+  proofOfApprovalUrl: varchar('proof_of_approval_url'),     // link to decision letter
+  rejectionReason: varchar('rejection_reason'),             // optional if rejected
+  
+  // Fee calculation (computed at time of outcome report)
+  calculatedFeeSek: integer('calculated_fee_sek'),
+  capApplied: boolean('cap_applied').default(false),
+  minimumApplied: boolean('minimum_applied').default(false),
+  
+  // Stripe billing
+  stripeCustomerId: varchar('stripe_customer_id'),
+  stripeInvoiceId: varchar('stripe_invoice_id'),
+  stripeInvoiceUrl: varchar('stripe_invoice_url'),         // link to hosted invoice
+  stripePaymentStatus: varchar('stripe_payment_status'),
+  // open | paid | void | uncollectible
+  invoiceCreatedAt: timestamp('invoice_created_at'),
+  invoicePaidAt: timestamp('invoice_paid_at'),
+  invoiceDueDate: date('invoice_due_date'),
+  
+  // Admin
+  adminNotes: text('admin_notes'),
+  flaggedForReview: boolean('flagged_for_review').default(false),
+  reviewedBy: varchar('reviewed_by'),
+  reviewedAt: timestamp('reviewed_at'),
+  
+  // Reminders sent
+  reminderSentAt: timestamp('reminder_sent_at'),           // last payment reminder
+  reminderCount: integer('reminder_count').default(0),
+  
+  notes: text('notes'),                                     // user's own notes
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Global fee settings — one row, managed from admin panel
+export const successFeeSettings = pgTable('success_fee_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  defaultFeePercentage: integer('default_fee_percentage').notNull().default(3),
+  maxFeeCapSek: integer('max_fee_cap_sek').notNull().default(25000),
+  minFeeSek: integer('min_fee_sek').notNull().default(500),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  // Which plans can use success fee (others must subscribe)
+  eligiblePlans: varchar('eligible_plans').array().notNull().default(['free']),
+  termsVersion: varchar('terms_version').notNull().default('1.0'),
+  termsLastUpdated: timestamp('terms_last_updated').defaultNow(),
+  invoiceDaysUntilDue: integer('invoice_days_until_due').default(30),
+  // Auto-expire agreements with no outcome after X months
+  autoExpireMonths: integer('auto_expire_months').default(18),
+  updatedBy: varchar('updated_by'),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Audit log for all fee-related events
+export const successFeeEvents = pgTable('success_fee_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  agreementId: uuid('agreement_id').notNull().references(() => successFeeAgreements.id),
+  userId: varchar('user_id').notNull(),
+  eventType: varchar('event_type').notNull(),
+  // agreement_created | user_agreed | outcome_reported_won | outcome_reported_rejected
+  // invoice_created | invoice_paid | invoice_voided | agreement_cancelled
+  // reminder_sent | admin_flagged | admin_reviewed | agreement_expired
+  description: text('description').notNull(),
+  metadata: jsonb('metadata').default('{}'),
+  performedBy: varchar('performed_by'),                     // userId or 'system' or 'stripe_webhook'
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Upgrade conversions driven by success fee experience
+export const successFeeUpgradePrompts = pgTable('success_fee_upgrade_prompts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: varchar('user_id').notNull(),
+  triggeredBy: varchar('triggered_by').notNull(),
+  // first_fee_paid | fee_exceeds_subscription | multiple_agreements | manual
+  totalFeesPaidSek: integer('total_fees_paid_sek'),
+  subscriptionCostYearlySek: integer('subscription_cost_yearly_sek'),
+  promptShownAt: timestamp('prompt_shown_at').defaultNow(),
+  userClickedUpgrade: boolean('user_clicked_upgrade').default(false),
+  userUpgradedAt: timestamp('user_upgraded_at'),
+});
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2: FEE CALCULATION SERVICE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create server/services/successFee.ts:
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import Stripe from 'stripe';
+
+// ─── Fee calculation ───────────────────────────────────────────────────────
+
+export interface FeeCalculation {
+  approvedAmountSek: number;
+  feePercentage: number;
+  rawFeeSek: number;
+  finalFeeSek: number;
+  capApplied: boolean;
+  minimumApplied: boolean;
+  breakdown: string;              // human-readable explanation
+}
+
+export function calculateSuccessFee(
+  approvedAmountSek: number,
+  feePercentage: number = 3,
+  maxCapSek: number = 25000,
+  minFeeSek: number = 500
+): FeeCalculation {
+  const rawFee = Math.round(approvedAmountSek * (feePercentage / 100));
+  const cappedFee = Math.min(rawFee, maxCapSek);
+  const finalFee = Math.max(cappedFee, minFeeSek);
+  
+  const capApplied = rawFee > maxCapSek;
+  const minimumApplied = cappedFee < minFeeSek;
+  
+  let breakdown = `${feePercentage}% × ${approvedAmountSek.toLocaleString('sv-SE')} SEK = ${rawFee.toLocaleString('sv-SE')} SEK`;
+  if (capApplied) breakdown += ` → capped at ${maxCapSek.toLocaleString('sv-SE')} SEK`;
+  if (minimumApplied) breakdown += ` → minimum fee ${minFeeSek.toLocaleString('sv-SE')} SEK applied`;
+  
+  return {
+    approvedAmountSek,
+    feePercentage,
+    rawFeeSek: rawFee,
+    finalFeeSek: finalFee,
+    capApplied,
+    minimumApplied,
+    breakdown
+  };
+}
+
+// Example table for documentation/UI:
+// 50,000 SEK grant   × 3% = 1,500 SEK fee
+// 100,000 SEK grant  × 3% = 3,000 SEK fee
+// 500,000 SEK grant  × 3% = 15,000 SEK fee
+// 1,000,000 SEK grant × 3% = 25,000 SEK (capped)
+// 5,000,000 SEK grant × 3% = 25,000 SEK (capped)
+// 10,000 SEK grant   × 3% = 500 SEK (minimum)
+
+// ─── Stripe invoice creation ───────────────────────────────────────────────
+
+export async function createFeeInvoice(
+  agreement: SuccessFeeAgreement,
+  feeCalc: FeeCalculation,
+  user: { email: string; name: string; stripeCustomerId?: string },
+  settings: SuccessFeeSettings
+): Promise<{ invoiceId: string; invoiceUrl: string; hostedUrl: string }> {
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  
+  // Create or retrieve Stripe customer
+  let customerId = user.stripeCustomerId;
+  if (!customerId) {
+    const customer = await stripe.customers.create({
+      email: user.email,
+      name: user.name,
+      metadata: { userId: agreement.userId, platform: 'getgrant_ai' }
+    });
+    customerId = customer.id;
+    // Save customerId back to user record
+    await db.update(users)
+      .set({ stripeCustomerId: customerId })
+      .where(eq(users.id, agreement.userId));
+  }
+  
+  // Build detailed line item description
+  const lineItemDescription = [
+    `GetGrant.ai Success Fee`,
+    `Grant: ${agreement.grantTitle}`,
+    `Funder: ${agreement.funder}`,
+    `Approved amount: ${feeCalc.approvedAmountSek.toLocaleString('sv-SE')} SEK`,
+    `Fee rate: ${feeCalc.feePercentage}%`,
+    feeCalc.capApplied ? `Maximum fee cap applied (${agreement.maxFeeCapSek!.toLocaleString('sv-SE')} SEK)` : '',
+    feeCalc.minimumApplied ? `Minimum fee applied` : '',
+    `Reference: ${agreement.grantAgreementRef || 'Not provided'}`
+  ].filter(Boolean).join('\n');
+  
+  // Create invoice with auto-advance disabled so we can add items first
+  const invoice = await stripe.invoices.create({
+    customer: customerId,
+    collection_method: 'send_invoice',
+    days_until_due: settings.invoiceDaysUntilDue || 30,
+    auto_advance: false,
+    description: `GetGrant.ai success fee — ${agreement.grantTitle}`,
+    footer: 'GetGrant.ai | support@getgrant.ai | VAT included where applicable',
+    metadata: {
+      agreementId: agreement.id,
+      applicationId: agreement.applicationId,
+      grantId: agreement.grantId,
+      userId: agreement.userId,
+      feeCalculation: JSON.stringify(feeCalc)
+    },
+    custom_fields: [
+      { name: 'Bidragsreferens', value: agreement.grantAgreementRef || 'Ej angiven' },
+      { name: 'Finansiär', value: agreement.funder },
+      { name: 'GetGrant.ai referens', value: agreement.id.substring(0, 8).toUpperCase() }
+    ]
+  });
+  
+  // Add the fee line item
+  await stripe.invoiceItems.create({
+    customer: customerId,
+    invoice: invoice.id,
+    amount: feeCalc.finalFeeSek * 100,    // Stripe uses öre (1/100 SEK)
+    currency: 'sek',
+    description: lineItemDescription,
+    tax_rates: [],                          // Add Swedish VAT tax rate ID if applicable
+    metadata: {
+      agreementId: agreement.id,
+      feeBreakdown: feeCalc.breakdown
+    }
+  });
+  
+  // Finalize and send the invoice
+  const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
+  await stripe.invoices.sendInvoice(invoice.id);
+  
+  return {
+    invoiceId: invoice.id,
+    invoiceUrl: finalizedInvoice.invoice_pdf || '',
+    hostedUrl: finalizedInvoice.hosted_invoice_url || ''
+  };
+}
+
+// ─── Void an invoice (if agreement cancelled after invoicing) ─────────────
+
+export async function voidFeeInvoice(stripeInvoiceId: string): Promise<void> {
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  await stripe.invoices.voidInvoice(stripeInvoiceId);
+}
+
+// ─── Upgrade comparison calculator ────────────────────────────────────────
+
+export function calculateUpgradeComparison(
+  totalFeesPaidSek: number,
+  proMonthlySek: number = 495
+): {
+  annualSubscriptionSek: number;
+  feesPaidSek: number;
+  savingsSek: number;
+  shouldShowUpgradePrompt: boolean;
+  message: string;
+} {
+  const annualSek = proMonthlySek * 12;
+  const savings = totalFeesPaidSek - annualSek;
+  
+  return {
+    annualSubscriptionSek: annualSek,
+    feesPaidSek: totalFeesPaidSek,
+    savingsSek: savings,
+    shouldShowUpgradePrompt: totalFeesPaidSek >= annualSek * 0.7, // show at 70% of annual cost
+    message: savings > 0
+      ? `Du har betalat ${totalFeesPaidSek.toLocaleString('sv-SE')} SEK i framgångsavgifter — ${savings.toLocaleString('sv-SE')} SEK mer än ett årsabonnemang kostar.`
+      : `Du har betalat ${totalFeesPaidSek.toLocaleString('sv-SE')} SEK i framgångsavgifter. Ett årsabonnemang kostar bara ${annualSek.toLocaleString('sv-SE')} SEK.`
+  };
+}
+
+// ─── Auto-expire old agreements ───────────────────────────────────────────
+
+export async function expireStaleAgreements(autoExpireMonths: number = 18): Promise<number> {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - autoExpireMonths);
+  
+  const stale = await db.update(successFeeAgreements)
+    .set({ status: 'expired', updatedAt: new Date() })
+    .where(
+      and(
+        eq(successFeeAgreements.status, 'active'),
+        lt(successFeeAgreements.agreedAt, cutoff)
+      )
+    )
+    .returning();
+  
+  // Log each expiration
+  for (const agreement of stale) {
+    await logFeeEvent(agreement.id, agreement.userId, 'agreement_expired',
+      `Agreement expired after ${autoExpireMonths} months with no outcome reported`,
+      { expiredAt: new Date().toISOString() },
+      'system'
+    );
+  }
+  
+  return stale.length;
+}
+
+// ─── Event logging helper ─────────────────────────────────────────────────
+
+export async function logFeeEvent(
+  agreementId: string,
+  userId: string,
+  eventType: string,
+  description: string,
+  metadata: Record<string, unknown> = {},
+  performedBy: string = 'system'
+): Promise<void> {
+  await db.insert(successFeeEvents).values({
+    agreementId,
+    userId,
+    eventType,
+    description,
+    metadata,
+    performedBy
+  });
+}
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3: API ROUTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create server/routes/successFee.ts. All routes require authentication
+unless noted. Mount at /api/success-fee in server/index.ts.
+```typescript
+// ─── GET /api/success-fee/terms ───────────────────────────────────────────
+// Public — no auth required
+// Returns current global fee terms for display before agreement.
+
+Response: {
+  feePercentage: number,          // e.g. 3
+  maxFeeCapSek: number,           // e.g. 25000
+  minFeeSek: number,              // e.g. 500
+  isEnabled: boolean,
+  termsVersion: string,
+  invoiceDaysUntilDue: number,
+  exampleCalculations: [          // pre-computed examples for UI
+    { grantAmountSek: 100000, feeSek: 3000 },
+    { grantAmountSek: 500000, feeSek: 15000 },
+    { grantAmountSek: 1000000, feeSek: 25000, capApplied: true },
+    { grantAmountSek: 10000, feeSek: 500, minimumApplied: true }
+  ],
+  termsUrl: '/terms/success-fee'
+}
+
+// ─── GET /api/success-fee/eligibility ─────────────────────────────────────
+// Check if the current user is eligible for success fee.
+
+Response: {
+  eligible: boolean,
+  reason?: string,               // if not eligible: "Pro subscribers don't need success fee"
+  currentPlan: string
+}
+
+// ─── POST /api/success-fee/agreements ─────────────────────────────────────
+// Create a new success fee agreement (opt-in for an application).
+
+Request body: {
+  applicationId: string
+}
+
+Validation:
+- User must be on eligible plan (default: 'free')
+- Application must belong to the user
+- No existing active agreement for this applicationId
+- successFeeSettings.isEnabled must be true
+
+Process:
+1. Fetch application + grant data to populate agreement fields
+2. Fetch current global settings (lock in fee terms at time of agreement)
+3. Create agreement with status: 'pending'
+4. Log event: 'agreement_created'
+
+Response: {
+  agreementId: string,
+  status: 'pending',
+  grantTitle: string,
+  feePercentage: number,
+  maxFeeCapSek: number,
+  minFeeSek: number,
+  termsVersion: string,
+  message: 'Agreement created. Call /agree to confirm.'
+}
+
+// ─── PUT /api/success-fee/agreements/:id/agree ────────────────────────────
+// User formally agrees to the success fee terms.
+
+Request body: {
+  termsVersion: string            // must match current terms version
+}
+
+Validation:
+- Agreement must belong to the user
+- Status must be 'pending'
+- termsVersion must match settings.termsVersion
+
+Process:
+1. Set status: 'active', agreedAt: now()
+2. Store IP address from request headers for legal record
+3. Log event: 'user_agreed' with IP and termsVersion
+
+Response: {
+  agreementId: string,
+  status: 'active',
+  agreedAt: string,
+  message: 'Agreement active. You will be invoiced only if this grant is approved.'
+}
+
+// ─── POST /api/success-fee/agreements/:id/report-outcome ──────────────────
+// User reports the outcome of their grant application.
+
+Request body: {
+  outcome: 'won' | 'rejected',
+  approvedAmountSek?: number,     // required if outcome === 'won'
+  grantAgreementRef?: string,     // optional — funder reference number
+  proofOfApprovalUrl?: string,    // optional — link to decision letter
+  rejectionReason?: string,       // optional if outcome === 'rejected'
+  notes?: string
+}
+
+Validation:
+- Agreement must belong to the user
+- Status must be 'active'
+- If outcome === 'won': approvedAmountSek required, must be > 0
+
+Process if outcome === 'won':
+1. Calculate fee using locked-in terms from agreement
+2. Create Stripe invoice
+3. Update agreement: status='grant_won' → 'fee_invoiced', store fee calculation
+4. Log event: 'outcome_reported_won' + 'invoice_created'
+5. Send confirmation email with invoice link
+6. Check if upgrade prompt should be shown (calculateUpgradeComparison)
+7. If upgrade prompt triggered, create successFeeUpgradePrompts record
+
+Process if outcome === 'rejected':
+1. Update agreement: status='rejected', outcomeReportedAt=now()
+2. Log event: 'outcome_reported_rejected'
+3. Send brief "Sorry to hear that" email with encouragement
+
+Response (won): {
+  status: 'fee_invoiced',
+  feeCalculation: FeeCalculation,
+  stripeInvoiceUrl: string,       // hosted invoice link
+  dueDate: string,
+  showUpgradePrompt: boolean,
+  upgradeComparison?: object
+}
+
+Response (rejected): {
+  status: 'rejected',
+  message: 'No fee charged. Better luck next time!'
+}
+
+// ─── GET /api/success-fee/agreements ──────────────────────────────────────
+// List all agreements for the current user.
+
+Query params:
+- ?status=active|fee_invoiced|fee_paid|rejected|cancelled (optional filter)
+- ?limit=20&offset=0
+
+Response: {
+  agreements: [{
+    id, status, grantTitle, funder, agreedAt,
+    approvedAmountSek, calculatedFeeSek,
+    stripeInvoiceUrl, invoiceDueDate, invoicePaidAt,
+    daysUntilDue: number | null,
+    isOverdue: boolean
+  }],
+  summary: {
+    totalActive: number,
+    totalWon: number,
+    totalFeesPaidSek: number,
+    totalFeesOutstandingSek: number
+  }
+}
+
+// ─── GET /api/success-fee/agreements/:id ──────────────────────────────────
+// Single agreement detail with fee preview calculation.
+
+Response: full agreement + {
+  feePreview?: FeeCalculation     // computed if outcome not yet reported
+  events: SuccessFeeEvent[]       // full audit trail for this agreement
+}
+
+// ─── DELETE /api/success-fee/agreements/:id ───────────────────────────────
+// Cancel an agreement (only before outcome is reported).
+
+Validation:
+- Status must be 'pending' or 'active'
+- Agreement must belong to the user
+
+Process:
+1. If there's a Stripe invoice (edge case: status was 'fee_invoiced' due to bug),
+   void it
+2. Set status: 'cancelled'
+3. Log event: 'agreement_cancelled'
+
+Response: { message: 'Agreement cancelled. No fee will be charged.' }
+
+// ─── POST /api/success-fee/send-reminder ──────────────────────────────────
+// Admin only — manually send payment reminder for overdue invoice.
+
+Request body: { agreementId: string }
+
+Validation:
+- User must be admin
+- Agreement status must be 'fee_invoiced'
+- stripeInvoiceId must exist
+
+Process:
+1. Fetch Stripe invoice status — confirm it's still open
+2. Send reminder email (not via Stripe — custom email with context)
+3. Update reminderSentAt, increment reminderCount
+4. Log event: 'reminder_sent'
+
+// ─── PATCH /api/success-fee/agreements/:id/admin ──────────────────────────
+// Admin only — update admin notes, flag for review, mark as reviewed.
+
+Request body: {
+  adminNotes?: string,
+  flaggedForReview?: boolean,
+  reviewedBy?: string
+}
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 4: STRIPE WEBHOOK HANDLER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Extend the existing Stripe webhook handler in server/routes/webhooks.ts:
+```typescript
+// Add these cases to the existing switch(event.type) block:
+
+case 'invoice.paid': {
+  const invoice = event.data.object as Stripe.Invoice;
+  const agreementId = invoice.metadata?.agreementId;
+  if (!agreementId) break;
+  
+  // Update agreement
+  await db.update(successFeeAgreements)
+    .set({
+      status: 'fee_paid',
+      stripePaymentStatus: 'paid',
+      invoicePaidAt: new Date(),
+      updatedAt: new Date()
+    })
+    .where(eq(successFeeAgreements.id, agreementId));
+  
+  // Log event
+  await logFeeEvent(
+    agreementId,
+    invoice.metadata.userId,
+    'invoice_paid',
+    `Invoice paid: ${(invoice.amount_paid / 100).toLocaleString('sv-SE')} SEK`,
+    { invoiceId: invoice.id, amountPaid: invoice.amount_paid },
+    'stripe_webhook'
+  );
+  
+  // Send payment confirmation email
+  const agreement = await db.query.successFeeAgreements.findFirst({
+    where: eq(successFeeAgreements.id, agreementId),
+    with: { user: true }
+  });
+  if (agreement) {
+    await sendFeePaymentConfirmationEmail(agreement);
+    
+    // Check if upgrade prompt should be triggered
+    const totalFeesPaid = await getTotalFeesPaidByUser(agreement.userId);
+    const comparison = calculateUpgradeComparison(totalFeesPaid);
+    if (comparison.shouldShowUpgradePrompt) {
+      await db.insert(successFeeUpgradePrompts).values({
+        userId: agreement.userId,
+        triggeredBy: 'first_fee_paid',
+        totalFeesPaidSek: totalFeesPaid,
+        subscriptionCostYearlySek: 495 * 12
+      }).onConflictDoNothing();
+    }
+  }
+  break;
+}
+
+case 'invoice.payment_failed': {
+  const invoice = event.data.object as Stripe.Invoice;
+  const agreementId = invoice.metadata?.agreementId;
+  if (!agreementId) break;
+  
+  await db.update(successFeeAgreements)
+    .set({
+      stripePaymentStatus: 'payment_failed',
+      updatedAt: new Date()
+    })
+    .where(eq(successFeeAgreements.id, agreementId));
+  
+  await logFeeEvent(
+    agreementId,
+    invoice.metadata.userId,
+    'payment_failed',
+    'Invoice payment failed',
+    { invoiceId: invoice.id, attemptCount: invoice.attempt_count },
+    'stripe_webhook'
+  );
+  
+  // Send payment failure email with link to invoice
+  const agreement = await db.query.successFeeAgreements.findFirst({
+    where: eq(successFeeAgreements.id, agreementId),
+    with: { user: true }
+  });
+  if (agreement) {
+    await sendPaymentFailedEmail(agreement, invoice.hosted_invoice_url || '');
+  }
+  break;
+}
+
+case 'invoice.voided': {
+  const invoice = event.data.object as Stripe.Invoice;
+  const agreementId = invoice.metadata?.agreementId;
+  if (!agreementId) break;
+  
+  await db.update(successFeeAgreements)
+    .set({ stripePaymentStatus: 'void', updatedAt: new Date() })
+    .where(eq(successFeeAgreements.id, agreementId));
+  
+  await logFeeEvent(
+    agreementId, invoice.metadata.userId, 'invoice_voided',
+    'Invoice voided', { invoiceId: invoice.id }, 'stripe_webhook'
+  );
+  break;
+}
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 5: EMAIL TEMPLATES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create these email templates in server/emails/. Use the existing
+Resend + React Email setup. All emails in Swedish.
+
+### 5.1 — Invoice created (sent when user reports winning)
+Subject: 🎉 Grattis! Din faktura från GetGrant.ai
+Hej {firstName},
+Vad roligt att höra att du fick bidraget godkänt!
+FAKTURADETALJER ─────────────────────────────────── Bidrag: {grantTitle} Finansiär: {funder} Godkänt belopp: {approvedAmountSek} SEK Framgångsavgift ({feePercentage}%): {calculatedFeeSek} SEK {capApplied ? 'Maxtak tillämpat: ' + maxFeeCapSek + ' SEK' : ''} Förfallodatum: {dueDate}
+[Betala faktura →] ← links to Stripe hosted invoice
+Fakturan kan också laddas ner som PDF från länken ovan.
+Tack för att du använder GetGrant.ai. Vi är glada att ha bidragit till din framgång!
+GetGrant.ai | mailto:support@getgrant.ai [Avsluta notifieringar]
+
+
+### 5.2 — Payment confirmation
+Subject: ✅ Betalning mottagen — GetGrant.ai
+Hej {firstName},
+Vi har tagit emot din betalning på {calculatedFeeSek} SEK.
+Referens: {agreementId (short)} Bidrag: {grantTitle} Betalat: {paidAt}
+[Se kvitto →]
+Lycka till med projektet! Glöm inte att sätta upp projektuppföljning i GetGrant.ai för att hålla koll på milstolpar och rapporter.
+[Sätt upp projektuppföljning →]
+GetGrant.ai
+
+
+### 5.3 — Payment failed
+Subject: ⚠️ Betalning misslyckades — åtgärd krävs
+Hej {firstName},
+Betalningen av din framgångsavgift på {calculatedFeeSek} SEK misslyckades.
+Bidrag: {grantTitle} Förfallodatum: {dueDate}
+Vänligen betala fakturan för att undvika påminnelseavgifter: [Betala faktura →]
+Om du har frågor, kontakta oss på mailto:support@getgrant.ai.
+GetGrant.ai
+
+
+### 5.4 — Payment reminder (manual + auto)
+Subject: 📋 Påminnelse: Faktura förfaller snart — GetGrant.ai
+Hej {firstName},
+Din faktura för framgångsavgiften förfaller om {daysUntilDue} dagar.
+Bidrag: {grantTitle} Belopp: {calculatedFeeSek} SEK Förfallodatum: {dueDate}
+[Betala faktura →]
+GetGrant.ai
+
+
+### 5.5 — Rejection acknowledgment
+Subject: Vi hörs nästa gång — GetGrant.ai
+Hej {firstName},
+Tack för att du meddelade oss om beslutet för {grantTitle}.
+Ingen avgift debiteras — framgångsavgiften gäller bara vid godkänt bidrag.
+Det finns många fler möjligheter: [Se dina matchade bidrag →]
+GetGrant.ai
+
+
+### 5.6 — Upgrade prompt (after paying fees)
+Subject: 💡 Tips: Spara pengar med Pro-abonnemang
+Hej {firstName},
+Du har hittills betalat {totalFeesPaidSek} SEK i framgångsavgifter.
+Ett Pro-abonnemang kostar bara {annualSek} SEK/år och inkluderar obegränsade ansökningar, AI-skrivhjälp och mer.
+Du hade sparat {savingsSek} SEK med Pro.
+[Uppgradera till Pro →] [Nej tack, fortsätt med framgångsavgift]
+GetGrant.ai
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 6: SCHEDULED JOBS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add to server/jobs/successFeeJobs.ts:
+```typescript
+import { CronJob } from 'cron';
+
+// Daily at 09:00 — payment reminders for overdue/near-due invoices
+export const feeReminderJob = new CronJob('0 9 * * *', async () => {
+  const settings = await getSuccessFeeSettings();
+  
+  // Find agreements with invoices due within 7 days OR already overdue
+  const agreements = await db.query.successFeeAgreements.findMany({
+    where: and(
+      eq(successFeeAgreements.status, 'fee_invoiced'),
+      or(
+        // Due within 7 days
+        lte(successFeeAgreements.invoiceDueDate, 
+            new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
+        // Already overdue
+        lt(successFeeAgreements.invoiceDueDate, 
+           new Date().toISOString().split('T')[0])
+      )
+    ),
+    with: { user: true }
+  });
+  
+  for (const agreement of agreements) {
+    // Don't spam — max 1 reminder per 7 days
+    const daysSinceLastReminder = agreement.reminderSentAt
+      ? Math.floor((Date.now() - new Date(agreement.reminderSentAt).getTime()) / 86400000)
+      : 999;
+    
+    if (daysSinceLastReminder >= 7) {
+      const daysUntilDue = Math.ceil(
+        (new Date(agreement.invoiceDueDate!).getTime() - Date.now()) / 86400000
+      );
+      
+      await sendPaymentReminderEmail(agreement, daysUntilDue);
+      
+      await db.update(successFeeAgreements)
+        .set({
+          reminderSentAt: new Date(),
+          reminderCount: (agreement.reminderCount || 0) + 1,
+          updatedAt: new Date()
+        })
+        .where(eq(successFeeAgreements.id, agreement.id));
+      
+      await logFeeEvent(
+        agreement.id, agreement.userId, 'reminder_sent',
+        `Payment reminder sent (${daysUntilDue} days until due)`,
+        { reminderCount: (agreement.reminderCount || 0) + 1 },
+        'system'
+      );
+    }
+  }
+}, null, true, 'Europe/Stockholm');
+
+// Weekly on Monday at 08:00 — expire stale agreements
+export const feeExpirationJob = new CronJob('0 8 * * 1', async () => {
+  const settings = await getSuccessFeeSettings();
+  const expired = await expireStaleAgreements(settings.autoExpireMonths);
+  if (expired > 0) {
+    console.log(`Expired ${expired} stale success fee agreements`);
+  }
+}, null, true, 'Europe/Stockholm');
+
+// Weekly on Monday at 08:30 — send upgrade prompts for eligible users
+export const upgradePromptJob = new CronJob('30 8 * * 1', async () => {
+  // Find users with unprompted upgrade opportunities
+  const unprompted = await db.query.successFeeUpgradePrompts.findMany({
+    where: and(
+      eq(successFeeUpgradePrompts.promptShownAt, null), // never shown via email
+      eq(successFeeUpgradePrompts.userClickedUpgrade, false)
+    ),
+    limit: 50  // batch limit
+  });
+  
+  for (const prompt of unprompted) {
+    const user = await getUserById(prompt.userId);
+    if (user && user.plan === 'free') {  // only send if still on free plan
+      await sendUpgradePromptEmail(user, prompt);
+      await db.update(successFeeUpgradePrompts)
+        .set({ promptShownAt: new Date() })
+        .where(eq(successFeeUpgradePrompts.id, prompt.id));
+    }
+  }
+}, null, true, 'Europe/Stockholm');
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 7: FRONTEND COMPONENTS & PAGES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## 7.1 — SuccessFeeOptIn component
+
+Show at bottom of application editor for free-plan users only.
+File: client/src/components/SuccessFeeOptIn.tsx
+```tsx
+// Layout — collapsible card at bottom of application page
+
+// COLLAPSED STATE (default):
+// ┌─────────────────────────────────────────────────────┐
+// │  💡 Betala bara om du vinner         [Läs mer ▼]   │
+// └─────────────────────────────────────────────────────┘
+
+// EXPANDED STATE:
+// ┌─────────────────────────────────────────────────────┐
+// │  💡 Betala bara om du vinner                        │
+// │                                                     │
+// │  Inget abonnemang behövs. Om den här ansökan        │
+// │  beviljas betalar du 3% av det beviljade beloppet   │
+// │  (max 25 000 SEK, minimum 500 SEK).                 │
+// │                                                     │
+// │  RÄKNA UT DIN AVGIFT:                               │
+// │  Om jag beviljas: ←━━━━━━━━●━━━━━━━━→ 500 000 SEK │
+// │  Framgångsavgift: 15 000 SEK                        │
+// │                         [Cap ej tillämpat]          │
+// │                                                     │
+// │  EXEMPEL:                                           │
+// │  100 000 SEK → 3 000 SEK avgift                    │
+// │  500 000 SEK → 15 000 SEK avgift                   │
+// │  1 000 000 SEK → 25 000 SEK avgift (maxtak)        │
+// │                                                     │
+// │  ✅ Aktivera framgångsavgift för den här ansökan    │
+// │     Jag godkänner villkoren [läs villkor]           │
+// │                                                     │
+// │  [Aktivera framgångsavgift]                         │
+// │                                                     │
+// │  ── eller ───────────────────────────────────────── │
+// │  [Uppgradera till Pro — 495 SEK/mån] för obegränsad│
+// │  åtkomst utan avgifter per ansökan.                 │
+// └─────────────────────────────────────────────────────┘
+
+// ALREADY ACTIVE STATE (if agreement exists):
+// ┌─────────────────────────────────────────────────────┐
+// │  ✅ Framgångsavgift aktiverad                       │
+// │  Du betalar 3% om den här ansökan beviljas          │
+// │  (max 25 000 SEK).                    [Avbryt]      │
+// └─────────────────────────────────────────────────────┘
+
+function FeeCalculator({ feePercentage = 3, maxCap = 25000, minFee = 500 }) {
+  const [amount, setAmount] = useState(500000);
+  const fee = Math.max(Math.min(
+    Math.round(amount * feePercentage / 100), maxCap
+  ), minFee);
+  const capApplied = Math.round(amount * feePercentage / 100) > maxCap;
+  const minApplied = Math.round(amount * feePercentage / 100) < minFee;
+  
+  return (
+    <div className="fee-calculator space-y-2">
+      <label className="text-sm font-medium">
+        Om jag beviljas: {amount.toLocaleString('sv-SE')} SEK
+      </label>
+      <input
+        type="range"
+        min={10000} max={5000000} step={10000}
+        value={amount}
+        onChange={e => setAmount(Number(e.target.value))}
+        className="w-full accent-blue-600"
+      />
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Framgångsavgift:</span>
+        <span className="font-bold text-lg">
+          {fee.toLocaleString('sv-SE')} SEK
+        </span>
+        {capApplied && (
+          <Badge variant="secondary">Maxtak tillämpat</Badge>
+        )}
+        {minApplied && (
+          <Badge variant="secondary">Minimiavgift</Badge>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+## 7.2 — Report Outcome modal
+
+Show on application detail page after submission.
+File: client/src/components/ReportOutcomeModal.tsx
+// Trigger: "Vad hände med din ansökan?" card shown when: // - Application status is 'submitted' // - More than 30 days have passed since submission OR user manually opens it // - No outcome has been reported yet
+// OUTCOME SELECTION: // ┌─────────────────────────────────────────────────────┐ // │ 📬 Vad hände med din ansökan? │ // │ {grantTitle} │ // │ │ // │ [🎉 Bidraget beviljades] [❌ Nekad] [⏳ Väntar] │ // └─────────────────────────────────────────────────────┘
+// IF "BEVILJADES" CLICKED — shows detailed form: // ┌─────────────────────────────────────────────────────┐ // │ 🎉 Grattis! Berätta mer: │ // │ │ // │ Beviljat belopp (SEK)*: [] │ // │ │ // │ [LIVE FEE PREVIEW — updates as user types] │ // │ Framgångsavgift: 3% × 500 000 = 15 000 SEK │ // │ │ // │ Finansiärens referensnummer (valfritt): │ // │ [____________________________] │ // │ │ // │ Beslutsbrev / länk till beslut (valfritt): │ // │ [________________________] │ // │ │ // │ Anteckningar (valfritt): │ // │ [textarea] │ // │ │ // │ ───────────────────────────────────────────────── │ // │ Genom att bekräfta godkänner du att betala │ // │ 15 000 SEK inom 30 dagar. En faktura skickas │ // │ till {email}. │ // │ │ // │ [Bekräfta och ta emot faktura] [Avbryt] │ // └─────────────────────────────────────────────────────┘
+// IF "NEKAD" CLICKED: // ┌─────────────────────────────────────────────────────┐ // │ Vi hörs nästa gång! │ // │ │ // │ Ingen avgift debiteras. │ // │ │ // │ Anledning (valfritt): [_______________________] │ // │ │ // │ [Det finns 12 liknande bidrag du kan söka →] │ // │ │ // │ [Bekräfta] │ // └─────────────────────────────────────────────────────┘
+
+
+## 7.3 — Success Fee Dashboard tab
+
+Add to user account settings page (/account → "Framgångsavgifter" tab):
+┌──────────────────────────────────────────────────────────────┐ │ 💰 Framgångsavgifter │ │ │ │ SAMMANFATTNING │ │ Aktiva avtal: 3 | Vunna: 2 | Totalt betalt: 18 500 SEK│ │ Utestående: 15 000 SEK │ │ │ │ ─── AKTIVA (inväntar utfall) ──────────────────────────── │ │ │ │ 🟡 Vinnova: Innovationsprojekt │ │ Ansökt: 15 feb 2026 Avtal aktivt sedan: 16 feb 2026 │ │ Beräknad avgift vid 500 000 SEK: 15 000 SEK │ │ [Rapportera utfall] [Avbryt avtal] │ │ │ │ 🟡 Energimyndigheten: Green Tech Innovation │ │ Ansökt: 3 jan 2026 Avtal aktivt sedan: 4 jan 2026 │ │ [Rapportera utfall] [Avbryt avtal] │ │ │ │ ─── FAKTURERADE (väntar på betalning) ────────────────── │ │ │ │ 🔴 Tillväxtverket: Regional Tillväxt │ │ Beviljat: 250 000 SEK Avgift: 7 500 SEK │ │ Förfaller: 15 mars 2026 ⚠️ 8 dagar kvar │ │ [Betala faktura →] │ │ │ │ ─── BETALDA ──────────────────────────────────────────── │ │ │ │ ✅ Energimyndigheten: Solcellsprojekt │ │ Beviljat: 350 000 SEK Avgift: 10 500 SEK │ │ Betalt: 12 jan 2026 [Ladda ner kvitto] │ │ │ │ ✅ Vinnova: Prototyputveckling │ │ Beviljat: 267 000 SEK Avgift: 8 000 SEK │ │ Betalt: 3 dec 2025 [Ladda ner kvitto] │ │ │ │ ─── NEKADE & AVBRUTNA ────────────────────────────────── │ │ │ │ ⚫ EU Horizon: EIC Accelerator Nekad: jan 2026 │ │ ⚫ Formas: Hållbar stad Avbruten: dec 2025 │ │ │ │ ───────────────────────────────────────────────────────── │ │ 💡 Du har betalat 18 500 SEK i avgifter. Ett Pro- │ │ abonnemang kostar 5 940 SEK/år — du hade sparat │ │ 12 560 SEK. [Uppgradera till Pro →] │ └──────────────────────────────────────────────────────────────┘
+
+
+## 7.4 — Admin panel section
+
+Add "Framgångsavgifter" section to the existing admin panel (/admin):
+FRAMGÅNGSAVGIFTER — ÖVERSIKT
+Totala avtal: 47 Aktiva: 31 Vunna: 12 Betalda: 8
+Utestående: 87 500 SEK Insamlat (månad): 22 000 SEK Insamlat (totalt): 94 500 SEK
+Förfallna (ej betalda >30 dagar): 2
+[Exportera till CSV]
+─── FILTER ────────────────────────────────────────────────── [Alla] [Aktiva] [Fakturerade] [Förfallna] [Betalda] [Nekade] [Sök på användar-e-post eller grant-titel]
+─── AVTALSTABELL ──────────────────────────────────────────── Användare | Bidrag | Status | Belopp | Avgift | Förfaller | Åtgärder
+mailto:user@example.com | Vinnova Innovation | fee_invoiced | 500k SEK | 15k SEK | 2026-03-15 ⚠️ | [Skicka påminnelse] [Notera] [Flagga]
+─── INSTÄLLNINGAR ─────────────────────────────────────────── Avgiftsprocent: [3]% Maxtak: [25 000] SEK Minimiavgift: [500] SEK Fakturans betalfrist: [30] dagar Auto-förfall efter: [18] månader Aktiverat: [✅]
+[Spara inställningar]
+
+
+## 7.5 — Legal terms page
+
+Create client/src/pages/terms/success-fee.tsx at route /terms/success-fee:
+VILLKOR FÖR FRAMGÅNGSAVGIFT
+GetGrant.ai Framgångsavgift — Version 1.0
+    1    Vkad ÄR FRAMGÅNGSAVGIFTEN? Framgångsavgiften är ett alternativ till GetGrant.ai:s abonnemangspriser. Istället för en månadsavgift betalar du en procentuell avgift baserad på det beviljade bidraget, men bara om din ansökan godkänns.
+    2    AVGIFTSBERÄKNING
+    ◦    Avgiften är 3% av det beviljade beloppet
+    ◦    Maximal avgift: 25 000 SEK per ansökan
+    ◦    Minimiavgift: 500 SEK per ansökan
+    ◦    Avgiften beräknas på det faktiska beviljade beloppet, inte på det ansökta beloppet
+    3    NÄR GÄLLER AVGIFTEN? Framgångsavgiften gäller för bidrag som:
+    ◦    Hittades via GetGrant.ai:s söktjänst, ELLER
+    ◦    Ansökan skrevs med hjälp av GetGrant.ai:s AI-tjänster
+    ◦    Och där användaren aktivt aktiverat framgångsavgift för den specifika ansökan
+    4    RAPPORTERING OCH FAKTURERING
+    ◦    Du rapporterar själv om din ansökan beviljades
+    ◦    GetGrant.ai litar på din rapportering
+    ◦    Fakturan skickas till din registrerade e-postadress
+    ◦    Betalning sker via Stripe (kort eller faktura)
+    ◦    Betalning ska ske inom 30 dagar från fakturadatum
+    5    AVBOKNING
+    ◦    Avtal kan avbokas innan utfall rapporteras
+    ◦    Avbokning sker via inställningssidan
+    ◦    Ingen avgift debiteras vid avbokning
+    6    BEGRÄNSNINGAR
+    ◦    GetGrant.ai garanterar inte att ansökningar beviljas
+    ◦    GetGrant.ai ansvarar inte för beslut fattade av finansiärerna
+    7    ÄNDRINGAR AV VILLKOR
+    ◦    Villkorsändringar gäller från det datum de publiceras
+    ◦    Befintliga aktiva avtal löper på de villkor som gällde när avtalet ingicks
+Senast uppdaterad: Februari 2026 Villkorsversion: 1.0 Kontakt: mailto:legal@getgrant.ai
+
+
+## 7.6 — Upgrade prompt component
+
+Show after fee payment in multiple locations:
+File: client/src/components/UpgradeFromFeePrompt.tsx
+```tsx
+// Shown in:
+// 1. After payment confirmation page
+// 2. In success fee dashboard (if totalFees > 70% of annual sub cost)
+// 3. Via email (see Part 5.6)
+
+// UI:
+// ┌─────────────────────────────────────────────────────┐
+// │  💡 Spara pengar med Pro-abonnemang                 │
+// │                                                     │
+// │  Du har betalat 18 500 SEK i framgångsavgifter     │
+// │  hittills i år.                                     │
+// │                                                     │
+// │  Pro-abonnemang: 495 SEK/mån = 5 940 SEK/år        │
+// │                                                     │
+// │  Du hade sparat 12 560 SEK med Pro.                │
+// │                                                     │
+// │  PRO INKLUDERAR:                                    │
+// │  ✅ Obegränsade ansökningar utan framgångsavgift    │
+// │  ✅ AI-ansökningsskrivning                          │
+// │  ✅ Eligibility check                               │
+// │  ✅ Deadline-kalender med påminnelser               │
+// │  ✅ Projektuppföljning                              │
+// │                                                     │
+// │  [Uppgradera till Pro — 495 SEK/mån]               │
+// │  [Nej tack, fortsätt med framgångsavgift]          │
+// └─────────────────────────────────────────────────────┘
+
+// Track clicks for analytics:
+// onClick upgrade → log to analytics + redirect to /pricing
+// onClick dismiss → record dismissal, don't show again for 60 days
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 8: INTEGRATION POINTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. APPLICATION EDITOR (/apply)
+   - After Step 3 (project info), show SuccessFeeOptIn for free users
+   - Place between "Save draft" and "Export" buttons
+   - If agreement already active for this application, show active state
+
+2. APPLICATION DETAIL PAGE (/applications/:id)
+   - Show "Rapportera utfall" card when status is 'submitted' AND age > 30 days
+   - Show active fee agreement badge if opt-in is active
+   - "Markera som godkänt" button (from project management feature) should
+     also trigger outcome reporting if a success fee agreement exists
+
+3. MAIN NAVIGATION
+   - No dedicated nav item needed — accessed via /account settings tab
+
+4. DASHBOARD
+   - If user has active fee agreements: show count in a subtle indicator
+   - "Du har 3 aktiva framgångsavtal — rapportera utfall →"
+
+5. PRICING PAGE (/pricing)
+   - Add "Betala per vinst" option alongside subscription plans
+   - Show fee calculator widget
+   - Link to full terms
+
+6. ONBOARDING FLOW
+   - After user creates first application: offer choice between
+     "Subscribe" or "Try success fee" as the CTA
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 9: TESTING CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DATABASE
+- [ ] All 4 tables created (successFeeAgreements, successFeeSettings,
+      successFeeEvents, successFeeUpgradePrompts)
+- [ ] Default settings row created in successFeeSettings
+- [ ] Foreign key constraints work correctly
+
+FEE CALCULATION
+- [ ] 100,000 SEK × 3% = 3,000 SEK (no cap, no minimum)
+- [ ] 1,000,000 SEK × 3% = 25,000 SEK (cap applied)
+- [ ] 10,000 SEK × 3% = 500 SEK (minimum applied)
+- [ ] Cap and minimum flags correct in all cases
+
+OPT-IN FLOW
+- [ ] Free user sees SuccessFeeOptIn in application editor
+- [ ] Pro/Business user does NOT see opt-in
+- [ ] Agreement created with status: 'pending' on POST /agreements
+- [ ] User agrees → status changes to 'active', agreedAt saved
+- [ ] IP address stored at time of agreement
+- [ ] Terms version stored matches current version
+- [ ] Duplicate agreement for same application rejected (409 error)
+
+FEE CALCULATOR (frontend)
+- [ ] Slider updates fee in real time
+- [ ] Cap badge appears at 833,333+ SEK (where cap kicks in)
+- [ ] Minimum badge appears at <16,667 SEK
+- [ ] All three example calculations show correctly in examples table
+
+OUTCOME REPORTING (won)
+- [ ] "Rapportera utfall" card appears on submitted application
+- [ ] Live fee preview updates as user types approved amount
+- [ ] Stripe invoice created with correct amount (in öre)
+- [ ] Invoice line item description includes all relevant details
+- [ ] Invoice sent via Stripe (check Stripe dashboard)
+- [ ] Agreement status updates to 'fee_invoiced'
+- [ ] capApplied and minimumApplied flags saved correctly
+- [ ] Event logged: 'outcome_reported_won' + 'invoice_created'
+- [ ] Invoice created email received by user
+
+OUTCOME REPORTING (rejected)
+- [ ] Status updates to 'rejected'
+- [ ] No Stripe invoice created
+- [ ] Rejection email received
+- [ ] Event logged: 'outcome_reported_rejected'
+
+STRIPE WEBHOOKS
+- [ ] invoice.paid → status updates to 'fee_paid', invoicePaidAt saved
+- [ ] invoice.paid → payment confirmation email sent
+- [ ] invoice.payment_failed → stripePaymentStatus updated
+- [ ] invoice.payment_failed → payment failed email sent
+- [ ] invoice.voided → stripePaymentStatus updated to 'void'
+- [ ] Webhook signature validation passes
+
+CANCELLATION
+- [ ] User can cancel 'pending' agreement — status → 'cancelled'
+- [ ] User can cancel 'active' agreement — status → 'cancelled'
+- [ ] Cannot cancel 'fee_invoiced' agreement via API (must contact support)
+
+PAYMENT REMINDERS
+- [ ] Reminder email sent when invoice due within 7 days
+- [ ] Reminder not resent if sent within last 7 days
+- [ ] reminderCount increments correctly
+- [ ] Reminder email contains correct invoice link
+
+AUTO-EXPIRATION
+- [ ] Agreements older than 18 months with no outcome → status: 'expired'
+- [ ] Expiration event logged for each expired agreement
+
+UPGRADE PROMPT
+- [ ] Upgrade prompt shown after total fees ≥ 70% of annual subscription
+- [ ] Prompt shows correct savings calculation
+- [ ] Clicking "Uppgradera" redirects to pricing page
+- [ ] Prompt dismissal recorded, not shown again for 60 days
+- [ ] Upgrade prompt email sent by weekly job
+
+ADMIN PANEL
+- [ ] Overview stats correct (totals, outstanding, collected)
+- [ ] Filter by status works
+- [ ] Send reminder manually works
+- [ ] Admin notes save correctly
+- [ ] Flag for review toggles correctly
+- [ ] Settings form saves and takes effect for new agreements
+- [ ] CSV export downloads with correct data
+
+TERMS PAGE
+- [ ] /terms/success-fee accessible without login
+- [ ] Terms version displayed matches successFeeSettings.termsVersion
+- [ ] "Läs villkor" link in opt-in component opens correct page
+
+LEGAL COMPLIANCE
+- [ ] IP address stored at time of agreement
+- [ ] Terms version stored at time of agreement (not current version)
+- [ ] Event log provides complete immutable audit trail
+- [ ] Old agreements use old fee terms even if settings change
+
+INTEGRATION
+- [ ] SuccessFeeOptIn not shown on Pro/Business plan applications
+- [ ] Active agreement badge shows on application detail page
+- [ ] Dashboard shows count of active agreements
+- [ ] Pricing page shows success fee option

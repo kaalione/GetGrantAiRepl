@@ -1,0 +1,147 @@
+Do a comprehensive audit of the getgrant.ai platform and report back.
+Do NOT make any code changes. Read-only investigation only.
+
+## PART 1 — PLATFORM ARCHITECTURE STATUS
+
+Read and summarize:
+1. All files in client/src/pages/ — list every page/route that exists
+2. All files in server/routes.ts — list every API endpoint
+3. client/src/lib/matching.ts — summarize how the matching algorithm works
+4. scrapers/ directory — list all active scraper sources
+
+Report:
+- Total number of pages/routes in the frontend
+- Total number of API endpoints
+- Database tables (from schema file)
+- Active scraper sources and their categories
+
+---
+
+## PART 2 — USER JOURNEYS AUDIT
+
+Map out every user journey that currently exists in the platform.
+For each journey, list:
+  - Entry point (URL)
+  - Steps involved
+  - Exit point / outcome
+  - Current state: ✅ Working | ⚠️ Partial | ❌ Broken
+
+Journeys to audit:
+
+JOURNEY 1: New visitor → Registration → Onboarding
+  - Landing page → click CTA → register → onboarding wizard → dashboard
+  - How many steps in onboarding? What fields are collected?
+  - Does the user land on dashboard with matches immediately after?
+
+JOURNEY 2: Profile completion → Grant matching
+  - Company profile page → fill fields → save → see updated matches
+  - Which fields affect matching scores?
+  - Is there feedback showing the user HOW to improve their matches?
+
+JOURNEY 3: Grant discovery → Grant detail
+  - /bidrag page → browse/filter → click grant → grant detail page
+  - What filters are available?
+  - What information is shown on the grant detail page?
+  - Is there a clear "Ansök nu" CTA?
+
+JOURNEY 4: AI match analysis
+  - Grant detail → click "Run AI analysis" → see match report
+  - How long does it take?
+  - What does the analysis contain? (score, reasoning, strengths, blockers)
+  - Is the result actionable? Does it tell the user what to do?
+
+JOURNEY 5: Application generation
+  - Grant detail → "Ansök nu" → 4-step wizard → generated content → export
+  - What are the 4 steps?
+  - What templates exist per grant source?
+  - What export formats are available?
+  - What happens after export — is there a "submitted" tracking state?
+
+JOURNEY 6: Returning user → Dashboard
+  - Login → dashboard
+  - What does the dashboard show? (stats, matches, deadlines, progress)
+  - Is there a clear "next action" for the user at every visit?
+
+JOURNEY 7: Grant alerts / notifications
+  - How does a user set up grant alerts?
+  - What triggers an email? (new match, deadline reminder, weekly digest)
+  - Is email actually configured and working?
+
+---
+
+## PART 3 — CRITICAL PATH ANALYSIS
+
+The single most important user outcome is:
+"User finds a relevant grant AND submits a complete application"
+
+Analyze the current funnel for this outcome:
+
+STEP A: Discovery — Can users find grants relevant to their business?
+  - What is the matching algorithm's input? (what company fields does it use?)
+  - What is the typical score range for a matched grant? (top 10 grants)
+  - Are the top 10 matches actually relevant for a typical Swedish SME?
+
+STEP B: Evaluation — Can users quickly decide if a grant is worth applying for?
+  - How much information is on the grant card in /bidrag?
+  - What's on the grant detail page?
+  - How fast/slow is the AI analysis? Is it always triggered or optional?
+
+STEP C: Application — Can users complete an application without leaving the platform?
+  - What grant sources have custom templates vs generic template?
+  - What information does the wizard ask for?
+  - How long does generation take?
+  - What's the quality of generated content? (word count, sections)
+
+STEP D: Submission tracking — Can users track what they've applied for?
+  - Is there an applications list page?
+  - Can users mark grants as "submitted" or "funded"?
+  - Is there a success fee flow when a grant is funded?
+
+---
+
+## PART 4 — FRICTION POINTS & OPTIMIZATION OPPORTUNITIES
+
+For each step in the critical path, identify:
+1. The biggest friction point (what makes users drop off?)
+2. The quickest fix to reduce that friction
+3. Whether the fix is a frontend change, backend change, or content change
+
+Also check:
+- Is the onboarding wizard asking for all the fields needed for good matching?
+  Missing fields = worse matches = user frustration
+- Are there grants in the database with empty/missing titles or descriptions?
+  Run: SELECT COUNT(*) FROM grants WHERE title IS NULL OR description IS NULL OR LENGTH(description) < 50;
+- What % of grants have structured_eligibility extracted?
+  Run: SELECT 
+    COUNT(*) as total,
+    COUNT(CASE WHEN structured_eligibility IS NOT NULL AND (structured_eligibility->>'confidence_score')::float >= 0.3 THEN 1 END) as good,
+    ROUND(COUNT(CASE WHEN structured_eligibility IS NOT NULL AND (structured_eligibility->>'confidence_score')::float >= 0.3 THEN 1 END) * 100.0 / COUNT(*), 1) as coverage_pct
+  FROM grants WHERE status IN ('open','upcoming');
+- Are there any JavaScript errors in the browser console that would block users?
+  Check server logs for any 500 errors in the last 24h.
+
+---
+
+## PART 5 — RECOMMENDATIONS REPORT
+
+After the audit, produce a prioritized list of recommendations:
+
+Format each recommendation as:
+  PRIORITY: 🔴 Critical | 🟡 Important | 🟢 Nice-to-have
+  AREA: Discovery | Evaluation | Application | Retention
+  EFFORT: Small (< 2h) | Medium (2-8h) | Large (> 8h)
+  DESCRIPTION: What to fix and why
+  EXPECTED IMPACT: What metric improves and by how much
+
+Focus specifically on recommendations that:
+1. Shorten the path from "new user" to "first application generated"
+2. Improve matching relevance so top 10 grants feel personally relevant
+3. Make the application wizard faster and require less effort from the user
+4. Give users a reason to come back (notifications, saved searches, progress)
+
+Target: A new user should be able to go from registration to 
+their first generated application draft in under 10 minutes.
+Is that currently possible? If not, what's blocking it?
+
+Output this entire report as structured text. Be specific and honest.
+Include actual numbers from the database where possible.

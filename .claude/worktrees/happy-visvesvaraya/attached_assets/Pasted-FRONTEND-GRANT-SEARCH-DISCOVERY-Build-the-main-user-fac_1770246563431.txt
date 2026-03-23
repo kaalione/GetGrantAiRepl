@@ -1,0 +1,127 @@
+FRONTEND - GRANT SEARCH & DISCOVERY
+Build the main user-facing interface for discovering grants.
+
+PAGES TO CREATE:
+
+1. app/dashboard/page.tsx:
+   - After login, users land here
+   - Show overview:
+     * Number of relevant grants for user's company
+     * Recent grants
+     * Application drafts
+   - Call-to-action: "Complete Company Profile" if not done
+
+2. app/grants/page.tsx:
+   - Main grants listing page
+   - Filters sidebar:
+     * Source (Vinnova, Tillväxtverket, etc.)
+     * Deadline (upcoming 30 days, 60 days, 90 days, custom)
+     * Amount range (slider)
+     * Status (open, upcoming)
+     * Keywords (multi-select)
+   - Grants displayed as cards
+   - Each card shows:
+     * Title
+     * Source name + logo
+     * Deadline (with urgency indicator)
+     * Amount range
+     * Match score (if company profile complete)
+     * "View Details" button
+
+3. app/grants/[id]/page.tsx:
+   - Detailed grant view
+   - Sections:
+     * Overview (title, source, deadline, amount)
+     * Description
+     * Eligibility Criteria (checklist based on user's company)
+     * Application Requirements (documents needed)
+     * Match Analysis (why this grant fits the company)
+   - Actions:
+     * "Generate Application" button (goes to Phase 5)
+     * "Save for Later" bookmark
+     * External link to original source
+
+4. app/profile/page.tsx:
+   - Company profile form
+   - Fields from companies table
+   - "Save Profile" updates Supabase
+
+API ROUTES:
+
+1. app/api/grants/route.ts:
+   - GET: List grants with filters
+   - Query params: source, deadline, amount_min, amount_max, keywords, status
+   - Returns grants sorted by relevance/deadline
+
+2. app/api/grants/[id]/route.ts:
+   - GET: Single grant details
+   - Include eligibility matching based on logged-in user's company
+
+3. app/api/grants/match/route.ts:
+   - POST: Calculate match score between company and grant
+   - Uses company profile data + grant eligibility criteria
+   - Returns score (0-100) and explanation
+
+COMPONENTS TO CREATE:
+
+1. components/grants/GrantCard.tsx:
+   - Card component for grant listing
+   - Props: grant data, match score
+   - Show deadline urgency with color coding (red <7 days, yellow <30 days)
+
+2. components/grants/GrantFilters.tsx:
+   - Filter sidebar
+   - Uses shadcn Checkbox, Slider, Select
+
+3. components/grants/MatchIndicator.tsx:
+   - Visual match score (circular progress, color gradient)
+   - Tooltip explaining match factors
+
+4. components/grants/EligibilityChecklist.tsx:
+   - Shows eligibility criteria as checklist
+   - Green check if company meets criteria
+   - Red X if not
+   - Gray if unknown (missing company data)
+
+MATCHING LOGIC (basic):
+
+Create lib/matching.ts:
+```typescript
+export function calculateMatchScore(company, grant) {
+  let score = 0;
+  let maxScore = 100;
+  
+  // Industry match (30 points)
+  if (grant.target_group?.includes(company.industry)) {
+    score += 30;
+  }
+  
+  // Size match (20 points)
+  if (company.employees >= grant.eligibility_criteria?.min_employees &&
+      company.employees <= grant.eligibility_criteria?.max_employees) {
+    score += 20;
+  }
+  
+  // Revenue match (20 points)
+  if (company.revenue >= grant.eligibility_criteria?.min_revenue &&
+      company.revenue <= grant.eligibility_criteria?.max_revenue) {
+    score += 20;
+  }
+  
+  // Location match (15 points)
+  if (grant.eligibility_criteria?.regions?.includes(company.location)) {
+    score += 15;
+  }
+  
+  // Keywords overlap (15 points)
+  const companyKeywords = company.description.toLowerCase().split(' ');
+  const matchedKeywords = grant.keywords?.filter(k => 
+    companyKeywords.includes(k.toLowerCase())
+  ).length || 0;
+  score += Math.min(15, matchedKeywords * 3);
+  
+  return Math.min(score, maxScore);
+}
+```
+
+Implement the grant discovery interface with working filters and matching.

@@ -1,0 +1,71 @@
+
+FIX 03  Add sector mismatch penalty to scoring
+Root cause
+When the sector check returns 'no_match', the current code gives 0 points for that criterion. But 0 points still allows a law firm to accumulate enough points from geography, company type, and other passing criteria to exceed 60. Adding an explicit penalty for sector mismatches ensures that a fundamentally wrong industry match pulls the overall score down below the threshold.
+ 
+Files to change: client/src/lib/matching.ts
+📋  Replit Prompt
+ 
+═══════════════════════════════════════════════════════
+TASK: Add a sector mismatch penalty to the matching score.
+Only runs when structured_eligibility has sectors populated
+and the company's industry clearly does not match.
+═══════════════════════════════════════════════════════
+ 
+STEP 1 — Find the sector/industry check in matching.ts.
+ Look for: checkSector OR sectors.includes OR industry matching.
+ 
+STEP 2 — Update the sector scoring block:
+ 
+// Current (no penalty):
+// if (sectorCheck === 'match')   totalScore += 20;
+// if (sectorCheck === 'partial') totalScore += 10;
+// if (sectorCheck === 'unknown') totalScore += 6;  // 30% of 20
+// if (sectorCheck === 'no_match') totalScore += 0; // nothing
+ 
+// New (with penalty):
+const SECTOR_MAX = 20;
+const SECTOR_PENALTY = -15;
+ 
+if (sectorCheck === 'match') {
+ totalScore += SECTOR_MAX;
+ breakdown.sector = { score: SECTOR_MAX, max: SECTOR_MAX,
+   note: `Industry match: ${company.industry}` };
+} else if (sectorCheck === 'partial') {
+ totalScore += Math.round(SECTOR_MAX * 0.5);
+ breakdown.sector = { score: 10, max: SECTOR_MAX,
+   note: 'Partial sector match' };
+} else if (sectorCheck === 'unknown') {
+ totalScore += Math.round(SECTOR_MAX * 0.3);  // 30% for unknown
+ breakdown.sector = { score: 6, max: SECTOR_MAX,
+   note: 'Sector not specified in grant' };
+} else {  // no_match — apply penalty
+ totalScore += SECTOR_PENALTY;  // subtract 15 points
+ breakdown.sector = { score: SECTOR_PENALTY, max: SECTOR_MAX,
+   note: `Sector mismatch: grant needs ${eligibility.sectors.join(', ')}` };
+ blockers.push(`Industry mismatch: your sector (${company.industry})`,
+   `does not match grant focus (${eligibility.sectors.join(', ')})`);
+}
+ 
+STEP 3 — Cap the minimum total score at 0 (don't go negative):
+ At the end of the scoring function, before returning:
+ score = Math.max(0, Math.round((totalScore / maxScore) * 100));
+ 
+STEP 4 — IMPORTANT: Only apply the penalty when eligibility.sectors
+ is populated AND has at least one non-'all' value.
+ If sectors = [] or sectors = ['all'], treat as 'unknown', not 'no_match'.
+ 
+ const hasSectorData = eligibility.sectors?.length > 0 &&
+   !eligibility.sectors.includes('all');
+ const sectorCheck = hasSectorData
+   ? checkSector(company.industry, eligibility.sectors)
+   : 'unknown';
+ 
+STEP 5 — Run the test suite:
+ npx tsx scripts/test-matching-quality.ts
+✅  Verification
+11. Run test suite — C8 (law firm) must now pass Check E (fewer than 3 grants above 60)
+12. C1 (TechScale) top matches should still include Vinnova/EIC at score ≥70
+13. C2 (GreenBuild) should now clearly separate energy grants (high) from tech grants (low)
+14. Open grant detail for a clearly wrong match — confirm score is below 40 and sector mismatch appears in Concerns tab
+15. Run test suite a final time — target is 8/10 or higher passing all checks

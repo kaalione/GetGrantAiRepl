@@ -1,0 +1,42 @@
+Two specific bugs still visible after the last fix:
+
+BUG 1 — Expired grants still appear at top of /bidrag in matching mode.
+The grant "Increased robotics capabilities" with deadline 2 mars 2026 
+(today = 2 mars 2026, so "0 dagar kvar") is still the #1 result 
+in "Matchande bidrag" mode despite having score 19.
+
+The deadline filter added previously is not working. Debug why:
+- Check if the filter condition is actually being applied when matchProfile=true
+- Check if the date comparison is using the right timezone (server may be UTC, 
+  deadline stored as date-only string "2026-03-02")
+- Add explicit logging: console.log("Filtering expired:", grant.title, grant.deadline)
+  to confirm which grants are being filtered
+
+The fix should ensure: grants where deadline <= today never appear 
+in "Matchande bidrag" mode. Use strict less-than: deadline < tomorrow 
+(i.e., deadline <= today) means exclude it.
+
+BUG 2 — "Deadline inom 7 dagar" widget on the dashboard shows 
+irrelevant grants (Forskningsrådet marine ecosystems, EU robotics, 
+EU-African Union) for a Teknik & IT company.
+
+This widget only filters on deadline proximity, not on match relevance.
+Fix: In the dashboard deadline widget component, apply the same 
+sector-based minimum score threshold — only show grants where 
+matchScore >= 30 (or where the grant's sectors overlap with the 
+company's industry).
+
+If fetching match scores for the deadline widget is too expensive, 
+simpler alternative: exclude grants where ALL of these are true:
+- Source is "EU Funding & Tenders" AND
+- Grant has no Swedish geography (geography.regions does not include 
+  "hela_sverige" or Swedish regions) AND  
+- Grant sectors have zero overlap with company industry
+
+This would remove the obviously irrelevant EU grants from the 
+deadline widget without requiring full match score calculation.
+
+After fixing, verify:
+1. /bidrag "Matchande bidrag": zero grants with "0 dagar kvar" or "Idag" visible
+2. Dashboard deadline widget: no Forskningsrådet marine / EU robotics grants 
+   for a Teknik & IT SaaS company

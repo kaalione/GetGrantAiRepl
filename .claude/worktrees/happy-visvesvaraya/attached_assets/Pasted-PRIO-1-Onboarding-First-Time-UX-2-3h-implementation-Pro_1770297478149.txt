@@ -1,0 +1,290 @@
+PRIO 1: Onboarding & First-Time UX (2-3h implementation)
+Problem: När en ny användare registrerar sig - vad händer?
+
+Ser de tomma listor?
+Förstår de vad de ska göra först?
+Får de värde direkt?
+
+Förslag:
+A) Welcome flow efter signup:
+1. Välkommen! → Kort video/GIF som visar hur det funkar
+2. Skapa företagsprofil → Guided form
+3. Se dina första matchningar → Automatiskt genererat baserat på profil
+4. "Testa AI-analys gratis" → 1 free analysis på bästa matchen
+B) Empty states som är hjälpsamma:
+typescript// Om användare har 0 companies:
+<EmptyState
+  icon={Building}
+  title="Skapa din företagsprofil"
+  description="Lägg till ditt företag för att få AI-matchade bidrag"
+  action={
+    <Button onClick={goToCreateCompany}>
+      Skapa företagsprofil
+    </Button>
+  }
+/>
+```
+
+**C) Progress tracker:**
+```
+Dashboard visar:
+□ Företagsprofil skapad
+□ Första AI-matchning körd
+□ Första ansökan genererad
+```
+
+**Värde:** Denna enkla addition kan 10x:a activation rate (% av signups som blir aktiva användare).
+
+---
+
+### **PRIO 2: Monetization Strategy (1h planning, 2h implementation)**
+
+**Du har inget sätt att tjäna pengar just nu.** Med de kostnader du har (Claude API, Resend, hosting) så blöder du pengar per användare.
+
+**Förslag för freemium model:**
+```
+FREE TIER:
+✓ Se alla grants
+✓ Filtrera & söka
+✓ Basic matching (rule-based)
+✓ 3 AI semantic analyses/månad
+✓ 1 AI-generated application/månad
+✗ Email notifications
+✗ Deadline reminders
+
+PRO TIER (299 SEK/mån):
+✓ Allt i Free
+✓ 100 AI semantic analyses/månad
+✓ 25 AI applications/månad
+✓ Email notifications
+✓ Weekly digest
+✓ Priority support
+✓ Export till Word/PDF
+
+ENTERPRISE (2999 SEK/mån):
+✓ Allt i Pro
+✓ Unlimited AI usage
+✓ Team collaboration (3-5 users)
+✓ Custom scraper sources
+✓ Dedicated account manager
+✓ API access
+Quick implementation:
+sql-- Add to profiles table
+ALTER TABLE profiles ADD COLUMN plan TEXT DEFAULT 'free';
+-- 'free', 'pro', 'enterprise'
+typescript// Middleware
+function requirePlan(minPlan: 'pro' | 'enterprise') {
+  return (req, res, next) => {
+    const userPlan = req.user.profile.plan;
+    if (!hasAccess(userPlan, minPlan)) {
+      return res.status(402).json({
+        error: 'Upgrade required',
+        message: 'Denna funktion kräver Pro-plan',
+        upgradeUrl: '/pricing'
+      });
+    }
+    next();
+  };
+}
+
+// Apply to routes
+app.post('/api/notifications/enable', requireAuth, requirePlan('pro'), ...);
+Värde:
+
+100 free users = 0 SEK revenue
+10 pro users = 2,990 SEK/mån = 35,880 SEK/år
+Break even vid ~15 pro users (täcker AI costs)
+
+
+PRIO 3: Application Export Formats (2h)
+Problem: "Download" är nämnt men inte vilket format.
+Bidragsansökningar måste oftast:
+
+Vara i Word (.docx) för att myndigheter ska kunna kommentera
+Eller PDF för submission
+Ha proper formatting (headers, sections, page breaks)
+
+Förslag:
+A) Export till DOCX:
+bashnpm install docx
+typescriptimport { Document, Packer, Paragraph, TextRun } from 'docx';
+
+async function exportToDocx(application) {
+  const doc = new Document({
+    sections: [{
+      properties: {},
+      children: [
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: application.grant.title,
+              bold: true,
+              size: 32,
+            }),
+          ],
+        }),
+        new Paragraph({ text: '' }), // Line break
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'ANSÖKAN',
+              bold: true,
+              size: 28,
+            }),
+          ],
+        }),
+        new Paragraph({ text: '' }),
+        ...application.generatedContent.split('\n').map(
+          para => new Paragraph({ text: para })
+        ),
+      ],
+    }],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  return buffer;
+}
+
+// Route
+app.get('/api/applications/:id/export/docx', requireAuth, async (req, res) => {
+  const app = await getApplication(req.params.id, req.user.id);
+  const buffer = await exportToDocx(app);
+  
+  res.set({
+    'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'Content-Disposition': `attachment; filename="ansokan-${app.grant.title}.docx"`,
+  });
+  res.send(buffer);
+});
+B) Export till PDF:
+bashnpm install pdfkit
+Liknande implementation.
+Värde: Detta är nästan ett krav - ingen kommer skicka in en ansökan som plain text.
+
+PRIO 4: "Already Applied" Tracking (1h)
+Problem: Efter några månader - hur vet användare vilka bidrag de redan sökt?
+Förslag:
+sql-- Add to applications table
+ALTER TABLE applications 
+ADD COLUMN submitted_at TIMESTAMP,
+ADD COLUMN submission_method TEXT; -- 'bidragai', 'manual', 'external'
+typescript// On grant cards, show badge:
+{alreadyApplied && (
+  <Badge variant="secondary">
+    ✓ Sökt {new Date(application.submittedAt).toLocaleDateString('sv-SE')}
+  </Badge>
+)}
+Även bättre - Application states:
+typescripttype ApplicationStatus = 
+  | 'draft'           // AI-generated, not sent
+  | 'ready'           // User edited, ready to send
+  | 'submitted'       // Sent to myndighet
+  | 'under_review'    // Myndighet reviewing
+  | 'approved'        // 🎉 BEVILJAT
+  | 'rejected'        // ❌ Nekad
+  | 'withdrawn';      // User cancelled
+Detta låter dig bygga success tracking senare:
+
+"15% av våra användares ansökningar blir godkända"
+"Genomsnittlig utbetalning: 250,000 SEK"
+
+
+PRIO 5: More Data Sources (3-5h per source)
+Du har 379 grants från 2 källor. Här är de som skulle ge mest värde:
+High Impact (lägg till dessa):
+
+Energimyndigheten (hållbarhet, miljö, klimat)
+
+Många SME:s söker detta
+API finns: https://www.energimyndigheten.se/
+
+
+Naturvårdsverket - Klimatklivet (stort program)
+
+Kommuner + företag
+Tydlig struktur, lätt att scrapa
+
+
+Jordbruksverket (om du vill ha lantbruk/livsmedel)
+
+Mindre relevant för tech men stor sektor
+
+
+
+Medium Impact:
+
+KK-stiftelsen (högskola + företag samarbete)
+Mistra (miljöforskning)
+
+Skippa för nu:
+
+EU Horizon (för komplext, färre svenska SME:s)
+Stiftelser (för många, för olika, manuell curering bättre)
+
+Värde:
+
+2 källor → 379 grants (bra)
+4 källor → ~700-900 grants (excellent)
+6 källor → 1000+ grants (market leading)
+
+
+PRIO 6: Team Collaboration (Enterprise feature) (5-8h)
+För större företag/konsulter:
+sqlCREATE TABLE team_members (
+  id UUID PRIMARY KEY,
+  company_id UUID REFERENCES companies(id),
+  user_id UUID REFERENCES users(id),
+  role TEXT, -- 'owner', 'admin', 'member', 'viewer'
+  invited_by UUID REFERENCES users(id),
+  created_at TIMESTAMP
+);
+Features:
+
+Flera användare kan samarbeta på samma företagsprofil
+Dela ansökningar internt
+Kommentera och granska innan submission
+Audit log av vem som gjorde vad
+
+Värde: Detta låter dig sälja till konsulter/revisorer som har många klienter.
+
+PRIO 7: Analytics & Insights (2-3h)
+Beyond basic dashboard:
+typescript// New dashboard widgets:
+
+<Card>
+  <CardHeader>
+    <CardTitle>Din Success Rate</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <div className="text-3xl font-bold">23%</div>
+    <p className="text-sm text-muted-foreground">
+      5 av 22 ansökningar godkända
+    </p>
+    <Progress value={23} className="mt-2" />
+  </CardContent>
+</Card>
+
+<Card>
+  <CardHeader>
+    <CardTitle>Totalt beviljat</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <div className="text-3xl font-bold">1,250,000 SEK</div>
+    <p className="text-sm text-muted-foreground">
+      Genom 5 beviljade bidrag
+    </p>
+  </CardContent>
+</Card>
+
+<Card>
+  <CardHeader>
+    <CardTitle>Populäraste källor</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <div className="space-y-2">
+      <div>Vinnova <Badge>67% success</Badge></div>
+      <div>Tillväxtverket <Badge>45% success</Badge></div>
+    </div>
+  </CardContent>
+</Card>
+Värde: Social proof + user engagement

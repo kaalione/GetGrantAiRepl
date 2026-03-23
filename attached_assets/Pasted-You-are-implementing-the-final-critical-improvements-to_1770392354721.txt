@@ -1,0 +1,1000 @@
+You are implementing the final critical improvements to GetGrant.ai before beta launch. These are small but high-impact features that will significantly improve user experience and retention.
+
+CONTEXT:
+GetGrant.ai is ready for beta launch but needs 3 final touches:
+1. Recently Viewed Grants (helps users find grants they looked at before)
+2. Grant Bookmarks/Favorites (lets users save grants for later)
+3. Success Dashboard visibility in navigation
+
+Current tech stack:
+- Backend: Express.js + PostgreSQL + Drizzle ORM
+- Frontend: React + TypeScript + Vite
+- Auth: Replit Auth
+- i18n: Full Swedish/English support
+
+═══════════════════════════════════════════════════════════════════════════
+PART 1: RECENTLY VIEWED GRANTS (30 MINUTES)
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Show users the last 5 grants they viewed so they can easily return to them.
+
+STEP 1.1: Create Recently Viewed Hook
+
+Create `src/hooks/useRecentlyViewed.ts`:
+```typescript
+import { useEffect, useState } from 'react';
+
+interface RecentlyViewedGrant {
+  id: string;
+  title: string;
+  sourceName: string;
+  matchScore?: number;
+  viewedAt: number;
+}
+
+const STORAGE_KEY = 'getgrant_recently_viewed';
+const MAX_ITEMS = 5;
+
+export function useRecentlyViewed() {
+  const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedGrant[]>([]);
+
+  useEffect(() => {
+    loadRecentlyViewed();
+  }, []);
+
+  function loadRecentlyViewed() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setRecentlyViewed(parsed);
+      }
+    } catch (error) {
+      console.error('Failed to load recently viewed:', error);
+    }
+  }
+
+  function addToRecentlyViewed(grant: {
+    id: string;
+    title: string;
+    sourceName: string;
+    matchScore?: number;
+  }) {
+    try {
+      const existing = [...recentlyViewed];
+      
+      // Remove if already exists
+      const filtered = existing.filter(g => g.id !== grant.id);
+      
+      // Add to start
+      const updated = [
+        {
+          ...grant,
+          viewedAt: Date.now(),
+        },
+        ...filtered,
+      ].slice(0, MAX_ITEMS); // Keep only last 5
+
+      setRecentlyViewed(updated);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch (error) {
+      console.error('Failed to save recently viewed:', error);
+    }
+  }
+
+  function clearRecentlyViewed() {
+    setRecentlyViewed([]);
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  return {
+    recentlyViewed,
+    addToRecentlyViewed,
+    clearRecentlyViewed,
+  };
+}
+```
+
+STEP 1.2: Track Grant Views
+
+Update your grant detail page to track views:
+```typescript
+// In src/pages/GrantDetail.tsx
+
+import { useRecentlyViewed } from '@/hooks/useRecentlyViewed';
+
+export function GrantDetail({ grantId }: { grantId: string }) {
+  const [grant, setGrant] = useState<any>(null);
+  const [matchAnalysis, setMatchAnalysis] = useState<any>(null);
+  const { addToRecentlyViewed } = useRecentlyViewed();
+
+  useEffect(() => {
+    fetchGrantDetails();
+  }, [grantId]);
+
+  async function fetchGrantDetails() {
+    try {
+      const res = await fetch(`/api/grants/${grantId}`);
+      const data = await res.json();
+      
+      setGrant(data.grant);
+      setMatchAnalysis(data.matchAnalysis);
+
+      // Track this view
+      if (data.grant) {
+        addToRecentlyViewed({
+          id: data.grant.id,
+          title: data.grant.title,
+          sourceName: data.grant.sourceName,
+          matchScore: data.matchAnalysis?.score,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch grant:', error);
+    }
+  }
+
+  // ... rest of component
+}
+```
+
+STEP 1.3: Create Recently Viewed Component
+
+Create `src/components/RecentlyViewed.tsx`:
+```typescript
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Clock, X } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { sv } from 'date-fns/locale';
+import { useTranslation } from 'react-i18next';
+import { useRecentlyViewed } from '@/hooks/useRecentlyViewed';
+
+interface RecentlyViewedProps {
+  compact?: boolean;
+}
+
+export function RecentlyViewed({ compact = false }: RecentlyViewedProps) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language === 'sv' ? sv : undefined;
+  const { recentlyViewed, clearRecentlyViewed } = useRecentlyViewed();
+
+  if (recentlyViewed.length === 0) return null;
+
+  if (compact) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              {t('recentlyViewed.title')}
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearRecentlyViewed}
+              className="h-6 px-2 text-xs"
+            >
+              {t('recentlyViewed.clear')}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {recentlyViewed.map(grant => (
+            
+              key={grant.id}
+              href={`/grants/${grant.id}`}
+              className="block p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <div className="text-sm font-medium line-clamp-1 mb-1">
+                {grant.title}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <span>{grant.sourceName}</span>
+                {grant.matchScore && (
+                  <>
+                    <span>•</span>
+                    <span className="text-blue-600 font-semibold">
+                      {grant.matchScore}% {t('common.match')}
+                    </span>
+                  </>
+                )}
+              </div>
+            </a>
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            {t('recentlyViewed.title')}
+          </CardTitle>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearRecentlyViewed}
+          >
+            <X className="h-4 w-4 mr-1" />
+            {t('recentlyViewed.clear')}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {recentlyViewed.map(grant => (
+            
+              key={grant.id}
+              href={`/grants/${grant.id}`}
+              className="block p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <h3 className="font-semibold line-clamp-2 flex-1">
+                  {grant.title}
+                </h3>
+                {grant.matchScore && (
+                  <div className="text-2xl font-bold text-blue-600 flex-shrink-0">
+                    {grant.matchScore}%
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+                <span>{grant.sourceName}</span>
+                <span>•</span>
+                <span>
+                  {formatDistanceToNow(grant.viewedAt, {
+                    addSuffix: true,
+                    locale,
+                  })}
+                </span>
+              </div>
+            </a>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+STEP 1.4: Add to Dashboard Sidebar
+```typescript
+// In src/pages/Dashboard.tsx
+
+import { RecentlyViewed } from '@/components/RecentlyViewed';
+
+export function Dashboard() {
+  return (
+    <div className="container mx-auto p-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Hero, Progress Tracker, Deadlines, Top Matches, etc. */}
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Recently Viewed */}
+          <RecentlyViewed compact />
+
+          {/* Other sidebar widgets */}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+STEP 1.5: Add Translation Keys
+
+Swedish:
+```json
+{
+  "recentlyViewed": {
+    "title": "Senast visade",
+    "clear": "Rensa",
+    "empty": "Inga senast visade bidrag"
+  }
+}
+```
+
+English:
+```json
+{
+  "recentlyViewed": {
+    "title": "Recently Viewed",
+    "clear": "Clear",
+    "empty": "No recently viewed grants"
+  }
+}
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PART 2: GRANT BOOKMARKS/FAVORITES (45 MINUTES)
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Allow users to bookmark grants they want to apply to later.
+
+STEP 2.1: Create Database Schema
+
+Add to your schema:
+```typescript
+// In your schema file
+
+export const grantBookmarks = pgTable('grant_bookmarks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  grantId: uuid('grant_id').references(() => grants.id).notNull(),
+  notes: text('notes'), // Optional user notes
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Add unique constraint
+export const grantBookmarksRelations = relations(grantBookmarks, ({ one }) => ({
+  user: one(users, {
+    fields: [grantBookmarks.userId],
+    references: [users.id],
+  }),
+  grant: one(grants, {
+    fields: [grantBookmarks.grantId],
+    references: [grants.id],
+  }),
+}));
+
+// Ensure unique bookmark per user per grant
+// Add index: CREATE UNIQUE INDEX grant_bookmarks_user_grant_idx ON grant_bookmarks(user_id, grant_id);
+```
+
+Run migration:
+```bash
+npm run db:push
+```
+
+STEP 2.2: Create Bookmarks API
+
+Create `server/routes/bookmarks.ts`:
+```typescript
+import express from 'express';
+import { requireAuth } from '../middleware/auth';
+import { db } from '../db';
+import { grantBookmarks, grants } from '../db/schema';
+import { eq, and, desc } from 'drizzle-orm';
+
+const router = express.Router();
+
+// Get user's bookmarks
+router.get('/bookmarks', requireAuth, async (req, res) => {
+  try {
+    const bookmarks = await db.query.grantBookmarks.findMany({
+      where: eq(grantBookmarks.userId, req.user.id),
+      with: {
+        grant: true,
+      },
+      orderBy: [desc(grantBookmarks.createdAt)],
+    });
+
+    res.json(bookmarks);
+  } catch (error) {
+    console.error('Get bookmarks error:', error);
+    res.status(500).json({ error: 'Failed to fetch bookmarks' });
+  }
+});
+
+// Check if grant is bookmarked
+router.get('/bookmarks/check/:grantId', requireAuth, async (req, res) => {
+  try {
+    const bookmark = await db.query.grantBookmarks.findFirst({
+      where: and(
+        eq(grantBookmarks.userId, req.user.id),
+        eq(grantBookmarks.grantId, req.params.grantId)
+      ),
+    });
+
+    res.json({ bookmarked: !!bookmark });
+  } catch (error) {
+    console.error('Check bookmark error:', error);
+    res.status(500).json({ error: 'Failed to check bookmark' });
+  }
+});
+
+// Add bookmark
+router.post('/bookmarks', requireAuth, async (req, res) => {
+  try {
+    const { grantId, notes } = req.body;
+
+    if (!grantId) {
+      return res.status(400).json({ error: 'Grant ID is required' });
+    }
+
+    // Check if already bookmarked
+    const existing = await db.query.grantBookmarks.findFirst({
+      where: and(
+        eq(grantBookmarks.userId, req.user.id),
+        eq(grantBookmarks.grantId, grantId)
+      ),
+    });
+
+    if (existing) {
+      return res.status(400).json({ error: 'Already bookmarked' });
+    }
+
+    // Create bookmark
+    const [bookmark] = await db.insert(grantBookmarks)
+      .values({
+        userId: req.user.id,
+        grantId,
+        notes: notes || null,
+      })
+      .returning();
+
+    res.json(bookmark);
+  } catch (error) {
+    console.error('Add bookmark error:', error);
+    res.status(500).json({ error: 'Failed to add bookmark' });
+  }
+});
+
+// Remove bookmark
+router.delete('/bookmarks/:grantId', requireAuth, async (req, res) => {
+  try {
+    await db.delete(grantBookmarks)
+      .where(
+        and(
+          eq(grantBookmarks.userId, req.user.id),
+          eq(grantBookmarks.grantId, req.params.grantId)
+        )
+      );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Remove bookmark error:', error);
+    res.status(500).json({ error: 'Failed to remove bookmark' });
+  }
+});
+
+// Update bookmark notes
+router.patch('/bookmarks/:grantId', requireAuth, async (req, res) => {
+  try {
+    const { notes } = req.body;
+
+    const [bookmark] = await db.update(grantBookmarks)
+      .set({ notes })
+      .where(
+        and(
+          eq(grantBookmarks.userId, req.user.id),
+          eq(grantBookmarks.grantId, req.params.grantId)
+        )
+      )
+      .returning();
+
+    if (!bookmark) {
+      return res.status(404).json({ error: 'Bookmark not found' });
+    }
+
+    res.json(bookmark);
+  } catch (error) {
+    console.error('Update bookmark error:', error);
+    res.status(500).json({ error: 'Failed to update bookmark' });
+  }
+});
+
+export default router;
+```
+
+Add to your main routes file:
+```typescript
+// In server/index.ts or routes/index.ts
+import bookmarksRoutes from './routes/bookmarks';
+app.use('/api', bookmarksRoutes);
+```
+
+STEP 2.3: Create Bookmark Hook
+
+Create `src/hooks/useBookmark.ts`:
+```typescript
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
+
+export function useBookmark(grantId: string) {
+  const { t } = useTranslation();
+  const [bookmarked, setBookmarked] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    checkBookmark();
+  }, [grantId]);
+
+  async function checkBookmark() {
+    try {
+      const res = await fetch(`/api/bookmarks/check/${grantId}`);
+      const data = await res.json();
+      setBookmarked(data.bookmarked);
+    } catch (error) {
+      console.error('Failed to check bookmark:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggleBookmark() {
+    try {
+      if (bookmarked) {
+        // Remove bookmark
+        const res = await fetch(`/api/bookmarks/${grantId}`, {
+          method: 'DELETE',
+        });
+
+        if (!res.ok) throw new Error('Failed to remove bookmark');
+
+        setBookmarked(false);
+        toast.success(t('bookmarks.removed'));
+      } else {
+        // Add bookmark
+        const res = await fetch('/api/bookmarks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grantId }),
+        });
+
+        if (!res.ok) throw new Error('Failed to add bookmark');
+
+        setBookmarked(true);
+        toast.success(t('bookmarks.added'));
+      }
+    } catch (error) {
+      console.error('Toggle bookmark error:', error);
+      toast.error(t('bookmarks.error'));
+    }
+  }
+
+  return {
+    bookmarked,
+    loading,
+    toggleBookmark,
+  };
+}
+```
+
+STEP 2.4: Add Bookmark Button to Grant Cards
+```typescript
+// In src/components/GrantCard.tsx
+
+import { Star } from 'lucide-react';
+import { useBookmark } from '@/hooks/useBookmark';
+import { Button } from '@/components/ui/button';
+
+export function GrantCard({ grant }: { grant: any }) {
+  const { bookmarked, toggleBookmark } = useBookmark(grant.id);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold line-clamp-2">{grant.title}</h3>
+          </div>
+          
+          {/* Bookmark Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleBookmark();
+            }}
+            className="flex-shrink-0"
+          >
+            <Star
+              className={`h-4 w-4 ${
+                bookmarked
+                  ? 'fill-yellow-500 text-yellow-500'
+                  : 'text-gray-400'
+              }`}
+            />
+          </Button>
+        </div>
+      </CardHeader>
+      {/* ... rest of card ... */}
+    </Card>
+  );
+}
+```
+
+STEP 2.5: Add Bookmark Button to Grant Detail Page
+```typescript
+// In src/pages/GrantDetail.tsx
+
+import { Star } from 'lucide-react';
+import { useBookmark } from '@/hooks/useBookmark';
+
+export function GrantDetail({ grantId }: { grantId: string }) {
+  const { bookmarked, toggleBookmark } = useBookmark(grantId);
+
+  return (
+    <div className="container mx-auto p-6">
+      <div className="max-w-4xl mx-auto space-y-8">
+        {/* Header with bookmark */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold mb-4">{grant?.title}</h1>
+          </div>
+          
+          <Button
+            variant={bookmarked ? "default" : "outline"}
+            onClick={toggleBookmark}
+            className="flex-shrink-0"
+          >
+            <Star
+              className={`h-4 w-4 mr-2 ${
+                bookmarked ? 'fill-current' : ''
+              }`}
+            />
+            {bookmarked ? t('bookmarks.saved') : t('bookmarks.save')}
+          </Button>
+        </div>
+
+        {/* ... rest of grant detail ... */}
+      </div>
+    </div>
+  );
+}
+```
+
+STEP 2.6: Add Bookmarks Tab to Grants Page
+```typescript
+// In src/pages/Grants.tsx
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Star } from 'lucide-react';
+
+export function Grants() {
+  const [bookmarks, setBookmarks] = useState([]);
+  const [activeTab, setActiveTab] = useState('all');
+
+  useEffect(() => {
+    if (activeTab === 'bookmarks') {
+      fetchBookmarks();
+    }
+  }, [activeTab]);
+
+  async function fetchBookmarks() {
+    try {
+      const res = await fetch('/api/bookmarks');
+      const data = await res.json();
+      setBookmarks(data);
+    } catch (error) {
+      console.error('Failed to fetch bookmarks:', error);
+    }
+  }
+
+  return (
+    <div className="container mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-8">{t('grants.title')}</h1>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="all">
+            {t('grants.allGrants')}
+          </TabsTrigger>
+          <TabsTrigger value="bookmarks">
+            <Star className="h-4 w-4 mr-2" />
+            {t('grants.bookmarked')} ({bookmarks.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all">
+          {/* Existing grants list */}
+        </TabsContent>
+
+        <TabsContent value="bookmarks">
+          {bookmarks.length === 0 ? (
+            <div className="text-center py-12">
+              <Star className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                {t('bookmarks.empty')}
+              </p>
+              <Button onClick={() => setActiveTab('all')}>
+                {t('bookmarks.browseGrants')}
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3 mt-6">
+              {bookmarks.map(bookmark => (
+                <GrantCard key={bookmark.id} grant={bookmark.grant} />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+```
+
+STEP 2.7: Add Translation Keys
+
+Swedish:
+```json
+{
+  "bookmarks": {
+    "save": "Spara",
+    "saved": "Sparad",
+    "added": "Bidrag sparat",
+    "removed": "Bidrag borttaget från sparade",
+    "error": "Kunde inte spara bidrag",
+    "empty": "Inga sparade bidrag än",
+    "browseGrants": "Bläddra bland bidrag"
+  },
+  "grants": {
+    "allGrants": "Alla bidrag",
+    "bookmarked": "Sparade"
+  }
+}
+```
+
+English:
+```json
+{
+  "bookmarks": {
+    "save": "Save",
+    "saved": "Saved",
+    "added": "Grant bookmarked",
+    "removed": "Bookmark removed",
+    "error": "Could not bookmark grant",
+    "empty": "No bookmarked grants yet",
+    "browseGrants": "Browse grants"
+  },
+  "grants": {
+    "allGrants": "All grants",
+    "bookmarked": "Bookmarked"
+  }
+}
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PART 3: SUCCESS DASHBOARD IN NAVIGATION (5 MINUTES)
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Make Success Dashboard easily discoverable in navigation.
+
+STEP 3.1: Add to Main Navigation
+```typescript
+// In your navigation component (e.g., src/components/Navigation.tsx)
+
+import { Award, Trophy } from 'lucide-react';
+
+const navigationItems = [
+  {
+    label: t('nav.dashboard'),
+    href: '/dashboard',
+    icon: Home,
+  },
+  {
+    label: t('nav.grants'),
+    href: '/grants',
+    icon: Search,
+  },
+  {
+    label: t('nav.applications'),
+    href: '/applications',
+    icon: FileText,
+  },
+  // NEW: Success Dashboard
+  {
+    label: t('nav.success'),
+    href: '/success',
+    icon: Trophy,
+  },
+  {
+    label: t('nav.alerts'),
+    href: '/alerts',
+    icon: Bell,
+  },
+  {
+    label: t('nav.profile'),
+    href: '/profile',
+    icon: User,
+  },
+];
+```
+
+STEP 3.2: Add Success Dashboard Route
+```typescript
+// In your router (e.g., src/App.tsx or src/router.tsx)
+
+import { Success } from '@/pages/Success';
+
+const routes = [
+  // ... existing routes ...
+  {
+    path: '/success',
+    element: <Success />,
+  },
+];
+```
+
+STEP 3.3: Add Success Badge When User Has Approved Grants
+```typescript
+// In navigation component
+
+import { Badge } from '@/components/ui/badge';
+
+export function Navigation() {
+  const [approvedCount, setApprovedCount] = useState(0);
+
+  useEffect(() => {
+    // Fetch user's approved grants count
+    fetch('/api/analytics/success-stats')
+      .then(res => res.json())
+      .then(data => setApprovedCount(data.byStatus.approved));
+  }, []);
+
+  return (
+    <nav>
+      {/* ... other nav items ... */}
+      
+      <a href="/success" className="flex items-center gap-2">
+        <Trophy className="h-5 w-5" />
+        <span>{t('nav.success')}</span>
+        {approvedCount > 0 && (
+          <Badge className="bg-green-500">
+            {approvedCount}
+          </Badge>
+        )}
+      </a>
+    </nav>
+  );
+}
+```
+
+STEP 3.4: Add Translation Keys
+
+Swedish:
+```json
+{
+  "nav": {
+    "dashboard": "Översikt",
+    "grants": "Bidrag",
+    "applications": "Ansökningar",
+    "success": "Success",
+    "alerts": "Bevakningar",
+    "profile": "Profil"
+  }
+}
+```
+
+English:
+```json
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "grants": "Grants",
+    "applications": "Applications",
+    "success": "Success",
+    "alerts": "Alerts",
+    "profile": "Profile"
+  }
+}
+```
+
+═══════════════════════════════════════════════════════════════════════════
+PART 4: EMAIL TEMPLATE VERIFICATION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════
+
+Before beta launch, manually test ALL email templates by sending yourself examples.
+
+STEP 4.1: Create Email Testing Endpoint
+
+Add temporary testing endpoint:
+```typescript
+// In server/routes/test.ts (ONLY FOR DEVELOPMENT)
+
+import express from 'express';
+import { requireAuth } from '../middleware/auth';
+import { sendEmail } from '../services/email';
+
+const router = express.Router();
+
+// Only enable in development
+if (process.env.NODE_ENV !== 'production') {
+  router.post('/test/email/:type', requireAuth, async (req, res) => {
+    try {
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, req.user.id),
+      });
+
+      if (!user?.email) {
+        return res.status(400).json({ error: 'No email found' });
+      }
+
+      const { type } = req.params;
+
+      switch (type) {
+        case 'new-grant':
+          await sendNewGrantEmail(user.email, {
+            title: 'TEST: AI-innovation för hållbar mobilitet',
+            sourceName: 'Vinnova',
+            deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            amountMin: 500000,
+            amountMax: 2000000,
+          }, 'Test AB', 85);
+          break;
+
+        case 'deadline-reminder':
+          await sendDeadlineReminder(user.email, {
+            title: 'TEST: Energieffektivisering i industrin',
+            sourceName: 'Energimyndigheten',
+            deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+          }, 'Test AB', 3);
+          break;
+
+        case 'weekly-digest':
+          await sendWeeklyDigest(
+            user.email,
+            user.fullName || 'Test User',
+            [
+              { title: 'AI-bidrag test 1', matchScore: 90 },
+              { title: 'Hållbarhet test 2', matchScore: 85 },
+            ],
+            [
+              { title: 'Deadline test 1', deadline: new Date() },
+            ]
+          );
+          break;
+
+        case 'alert-match':
+          await sendAlertNotification(
+            user.email,
+            'AI-bidrag över 500k',
+            {
+              title: 'TEST: Digitalisering av SME',
+              sourceName: 'Tillväxtverket',
+            },
+            88
+          );
+          break;
+
+        default:
+          return res.status(400).json({ error: 'Unknown email type' });
+      }
+
+      res.json({ success: true, message: `Test email sent: ${type}` });
+    } catch (error) {
+      console.error('Test email error:', error);
+      res.status(500).json({ error: 'Failed to send test email' });
+    }
+  });
+}
+
+export default router;
+```
+
+STEP 4.2: Test All Email Types
+
+Run these commands in your browser console or via API client:
+```javascript
+// New grant match
+await fetch('/api/test/email/new-grant', { method: 'POST' });
+
+// Deadline reminder
+await fetch('/api/test/email/deadline-reminder', { method: 'POST' });
+
+// Weekly digest
+await fetch('/api/test/email/weekly-digest', { method: 'POST' });
+
+// Alert match
+await fetch('/api/test/email/alert-match', { method: 'POST' });
+```
+
+STEP 4.3: Email Checklist
+
+For EACH email type, verify:

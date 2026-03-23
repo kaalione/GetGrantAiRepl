@@ -1,0 +1,976 @@
+# 🚀 GETGRANT.AI — SCRAPER EXPANSION WAVE 2
+## For Replit Agent — Add EU Portal + Verksamt + Länsstyrelser + Eufonder
+## Expected result: ~470 → 800-1000+ grants
+
+```
+You are adding 4 major new scraper sources to GetGrant.ai's existing scraper system.
+The platform already has 17 working scrapers with ~473 grants. Your job is to add the
+sources that will have the highest impact on grant count.
+
+══════════════════════════════════════════════════════════════════
+EXISTING SYSTEM — READ CAREFULLY, DO NOT MODIFY
+══════════════════════════════════════════════════════════════════
+
+ARCHITECTURE (DO NOT CHANGE):
+- Backend: Express.js + PostgreSQL + Drizzle ORM
+- Scrapers: Python in /scrapers/ directory, separate from Node.js backend
+- Every scraper inherits from BaseScraper (in /scrapers/sources/base_scraper.py)
+- BaseScraper provides: fetch_page(), fetch_with_playwright(), rate_limit(),
+  parse_deadline(), extract_amount(), extract_keywords(), extract_target_groups(),
+  determine_status(), transform_to_grant(), and the main scrape() pipeline
+- Database helpers in /scrapers/utils/db.py: upsert_grant(), log_scrape_result()
+- Deduplication in /scrapers/utils/dedup.py: URL match, content hash, title similarity (Jaccard 85%)
+- Entry point: /scrapers/main.py routes source names to scraper classes
+
+EXISTING SCRAPERS (17 sources, ~473 grants) — DO NOT MODIFY THESE:
+- vinnova_api.py, tillvaxtverket.py, energimyndigheten.py, almi.py
+- naturvardsverket.py, formas.py, jordbruksverket.py, boverket.py
+- kulturradet.py, region_stockholm.py, region_vgr.py, region_skane.py
+- kk_stiftelsen.py, internetstiftelsen.py, postkodstiftelsen.py
+
+GRANTS TABLE SCHEMA (key columns):
+- id, title, description, funder, source_name, source_url, url
+- deadline, status (open/closed/upcoming)
+- amount_min, amount_max, amount_description
+- eligibility, eligibility_criteria (JSONB), keywords (JSONB array)
+- target_groups (JSONB array), application_requirements (JSONB)
+- organization, category
+- created_at, updated_at
+
+CRITICAL RULES:
+1. DO NOT modify any existing scraper files
+2. DO NOT change database schema
+3. ALL new scrapers MUST inherit from BaseScraper
+4. ALL new scrapers MUST implement fetch_grants() and transform_to_grant()
+5. Use self.rate_limit() between requests (2 second delay)
+6. Use self.upsert_grant() for database insertion (inherited from BaseScraper)
+7. Register each new source in scraper_sources database table
+8. Update main.py routing to include new scrapers
+9. Content is in SWEDISH — do not translate
+10. Handle errors gracefully — a single failed grant should not crash the entire scraper
+
+══════════════════════════════════════════════════════════════════
+SOURCE 1: EU FUNDING & TENDERS PORTAL (BIGGEST WIN — ~200-400 grants)
+══════════════════════════════════════════════════════════════════
+
+This is the single most valuable source to add. The EU Funding & Tenders Portal
+has an underlying JSON API that can be reverse-engineered from the portal's frontend.
+
+Create file: scrapers/sources/eu_funding_tenders.py
+
+APPROACH — API-BASED (NOT web scraping):
+
+The portal at https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-search
+makes XHR/fetch calls to an internal API. You need to:
+
+1. Use browser DevTools on the portal to identify the actual API endpoint
+   The portal frontend makes POST requests to a search API endpoint.
+   
+2. The API endpoint pattern is typically:
+   https://ec.europa.eu/info/funding-tenders/opportunities/data/topicSearch
+   
+   With a JSON POST body containing search filters like:
+   {
+     "callStatus": ["OPEN", "FORTHCOMING"],
+     "frameworkProgramme": ["43108390"],  // Horizon Europe
+     "sortBy": "deadlineDate",
+     "orderBy": "asc",
+     "pageSize": 100,
+     "pageNumber": 1
+   }
+
+3. ALTERNATIVE APPROACH — The portal also publishes a static data file:
+   https://ec.europa.eu/info/funding-tenders/opportunities/data/topic-list.html
+   or similar data endpoints.
+   
+   There is also an open-source reference project that successfully fetches
+   Horizon Europe calls: github.com/thisisjohnc/horizon-europe-tools
+   This project uses the portal's public data to build spreadsheets of calls.
+   Study its approach for the correct API endpoint and data format.
+
+4. If the JSON API approach proves difficult, FALL BACK to web scraping the
+   topic search results page with Playwright.
+
+IMPLEMENTATION STEPS:
+
+Step 1: Investigate the API
+- Open https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-search
+- Open browser Network tab
+- Apply filters: Status = "Open" or "Forthcoming"
+- Observe the XHR requests being made
+- Note the endpoint URL, headers, and request body format
+
+Step 2: Implement the scraper
+
+```python
+# scrapers/sources/eu_funding_tenders.py
+
+from sources.base_scraper import BaseScraper
+import requests
+import json
+import time
+
+class EUFundingTendersScraper(BaseScraper):
+    """
+    Scraper for EU Funding & Tenders Portal
+    Fetches open and forthcoming calls from Horizon Europe, EIC,
+    Digital Europe, LIFE, and other EU programs.
+    
+    Uses the portal's underlying search API (JSON).
+    """
+    
+    def __init__(self, source_id=None):
+        super().__init__(
+            source_name="EU Funding & Tenders",
+            base_url="https://ec.europa.eu/info/funding-tenders/opportunities/portal/",
+            source_type="eu",
+            default_category="eu",
+            source_id=source_id
+        )
+        # The actual API endpoint — this needs to be verified by inspecting
+        # the portal's network requests. Common patterns:
+        self.api_url = "https://ec.europa.eu/info/funding-tenders/opportunities/data/topicSearch"
+        
+        # EU programs relevant for Swedish businesses
+        self.relevant_programmes = [
+            "Horizon Europe",
+            "EIC Accelerator", 
+            "Digital Europe",
+            "LIFE",
+            "Creative Europe",
+            "Innovation Fund",
+            "Interreg",
+        ]
+    
+    def fetch_grants(self):
+        """
+        Fetch open and forthcoming calls from the EU F&T API.
+        
+        IMPORTANT: The exact API format needs to be determined by
+        inspecting the portal's network requests. The structure below
+        is a starting template — adapt based on actual API response.
+        """
+        all_grants = []
+        
+        for status in ["OPEN", "FORTHCOMING"]:
+            try:
+                # Attempt 1: JSON API
+                grants = self._fetch_via_api(status)
+                all_grants.extend(grants)
+            except Exception as e:
+                print(f"API approach failed for status {status}: {e}")
+                print("Falling back to web scraping...")
+                try:
+                    # Attempt 2: Web scraping fallback
+                    grants = self._fetch_via_scraping(status)
+                    all_grants.extend(grants)
+                except Exception as e2:
+                    print(f"Web scraping also failed: {e2}")
+        
+        return all_grants
+    
+    def _fetch_via_api(self, status):
+        """Try fetching via the portal's JSON API"""
+        grants = []
+        page = 1
+        
+        while True:
+            # Construct the API request
+            # NOTE: Adapt this payload based on actual API inspection
+            payload = {
+                "callStatus": [status],
+                "sortBy": "deadlineDate",
+                "orderBy": "asc", 
+                "pageSize": 50,
+                "pageNumber": page
+            }
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "GetGrant.ai Bot/1.0 (grant aggregator for Swedish businesses)"
+            }
+            
+            response = requests.post(
+                self.api_url,
+                json=payload,
+                headers=headers,
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract results — adapt field names based on actual API response
+            results = data.get("topics", data.get("results", data.get("data", [])))
+            
+            if not results:
+                break
+            
+            for item in results:
+                raw = self._parse_api_result(item)
+                if raw:
+                    grants.append(raw)
+            
+            # Check if there are more pages
+            total = data.get("totalCount", data.get("total", 0))
+            if page * 50 >= total:
+                break
+            
+            page += 1
+            self.rate_limit()
+        
+        return grants
+    
+    def _parse_api_result(self, item):
+        """Parse a single API result into raw grant data"""
+        # Adapt field names based on actual API response structure
+        return {
+            "title": item.get("title", item.get("topicTitle", "")),
+            "description": item.get("description", item.get("topicDescription", "")),
+            "url": f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{item.get('identifier', item.get('topicId', ''))}",
+            "deadline_text": item.get("deadlineDate", item.get("deadline", "")),
+            "status_text": item.get("status", item.get("callStatus", "")),
+            "amount_text": item.get("budget", item.get("indicativeBudget", "")),
+            "eligibility": item.get("eligibility", ""),
+            "programme": item.get("programmeName", item.get("programme", "")),
+            "category": "eu",
+        }
+    
+    def _fetch_via_scraping(self, status):
+        """Fallback: scrape the portal using Playwright"""
+        url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-search;callStatus={status}"
+        
+        soup = self.fetch_with_playwright(url, wait_selector=".topic-list-item, .sedia-result-item, [class*='result']")
+        if not soup:
+            return []
+        
+        grants = []
+        # Try common selector patterns for result items
+        items = soup.select(".topic-list-item, .sedia-result-item, [class*='ResultItem'], .eui-card")
+        
+        for item in items:
+            title_el = item.select_one("h3, h4, .title, [class*='title']")
+            link_el = item.select_one("a[href*='topic-details']")
+            deadline_el = item.select_one("[class*='deadline'], [class*='date'], time")
+            status_el = item.select_one("[class*='status'], .badge, .tag")
+            
+            if title_el:
+                grant_url = ""
+                if link_el and link_el.get("href"):
+                    href = link_el["href"]
+                    if href.startswith("/"):
+                        grant_url = f"https://ec.europa.eu{href}"
+                    elif href.startswith("http"):
+                        grant_url = href
+                
+                grants.append({
+                    "title": title_el.get_text(strip=True),
+                    "url": grant_url,
+                    "description": "",
+                    "deadline_text": deadline_el.get_text(strip=True) if deadline_el else "",
+                    "status_text": status_el.get_text(strip=True) if status_el else status,
+                    "amount_text": "",
+                    "eligibility": "",
+                    "category": "eu",
+                })
+        
+        return grants
+    
+    def transform_to_grant(self, raw):
+        """Transform EU F&T data to our grant schema"""
+        grant = super().transform_to_grant(raw)
+        
+        # Override source-specific fields
+        grant["source_name"] = "EU Funding & Tenders"
+        grant["organization"] = raw.get("programme", "European Commission")
+        grant["category"] = "eu"
+        
+        # Add EU-specific keywords
+        eu_keywords = ["eu", "horizon europe", "european commission"]
+        programme = raw.get("programme", "").lower()
+        if "horizon" in programme:
+            eu_keywords.append("horizon europe")
+        if "eic" in programme:
+            eu_keywords.extend(["eic", "startup", "deeptech"])
+        if "digital" in programme:
+            eu_keywords.extend(["digital", "ai", "cybersecurity"])
+        if "life" in programme:
+            eu_keywords.extend(["miljö", "klimat", "life"])
+        
+        existing_kw = grant.get("keywords", []) or []
+        grant["keywords"] = list(set(existing_kw + eu_keywords))
+        
+        return grant
+```
+
+IMPORTANT NOTES FOR EU F&T:
+- The exact API endpoint and payload format MUST be verified by inspecting
+  the portal's network requests in a browser. The code above is a template.
+- If the API requires authentication or CORS blocks requests, use the 
+  Playwright fallback approach.
+- Filter results to calls that are relevant for Swedish organizations
+  (most EU calls are open to all EU/EEA countries, so include everything).
+- The portal has hundreds of calls — paginate properly.
+- Some calls are for "tenders" (procurement), not "grants" — skip procurement
+  calls and focus on grant/funding opportunities only.
+
+══════════════════════════════════════════════════════════════════
+SOURCE 2: VERKSAMT.SE (AGGREGATOR — ~50-100 unique grants)
+══════════════════════════════════════════════════════════════════
+
+Verksamt.se is the Swedish government's official aggregator for business support.
+It collects grants from many other agencies. DEDUPLICATION IS CRITICAL because
+many grants here will overlap with Vinnova, Tillväxtverket, etc.
+
+Create file: scrapers/sources/verksamt.py
+
+URL: https://www.verksamt.se/driva/finansiera-din-start/sok-finansiering
+Method: Playwright (the search page is JavaScript-rendered)
+
+```python
+# scrapers/sources/verksamt.py
+
+from sources.base_scraper import BaseScraper
+from utils.dedup import is_duplicate, title_similarity
+import json
+
+class VerksamtScraper(BaseScraper):
+    """
+    Scraper for Verksamt.se — Sweden's official business support aggregator.
+    
+    IMPORTANT: This source aggregates grants from many agencies we already
+    scrape individually (Vinnova, Tillväxtverket, Almi, etc.).
+    Deduplication is critical to avoid inflating grant counts.
+    """
+    
+    def __init__(self, source_id=None):
+        super().__init__(
+            source_name="Verksamt.se",
+            base_url="https://www.verksamt.se/driva/finansiera-din-start/sok-finansiering",
+            source_type="aggregator",
+            default_category="general",
+            source_id=source_id
+        )
+    
+    def fetch_grants(self):
+        """
+        Scrape Verksamt.se search results using Playwright.
+        The page uses JavaScript to load and filter results.
+        """
+        grants = []
+        
+        # Use Playwright since the page is JS-rendered
+        soup = self.fetch_with_playwright(
+            self.base_url,
+            wait_selector=".search-result, .result-item, [class*='result'], .listing-item, article"
+        )
+        
+        if not soup:
+            print("Failed to load Verksamt.se — trying alternative selectors")
+            # Try loading with a longer wait
+            soup = self.fetch_with_playwright(
+                self.base_url,
+                wait_selector="body",
+                timeout=15000
+            )
+            if not soup:
+                raise Exception("Could not load Verksamt.se page")
+        
+        # Find all grant listing items
+        # Verksamt.se may use various CSS classes — try multiple selectors
+        items = soup.select(
+            ".search-result-item, .result-item, .listing-item, "
+            "[class*='SearchResult'], article.card, .card-body, "
+            "li.list-item, .finansiering-item"
+        )
+        
+        if not items:
+            # If no items found with specific selectors, try broader approach
+            # Look for links that point to financial support pages
+            items = soup.select("a[href*='finansi'], a[href*='stod'], a[href*='bidrag']")
+            
+            for link in items:
+                title = link.get_text(strip=True)
+                href = link.get("href", "")
+                
+                if not title or len(title) < 5:
+                    continue
+                
+                if href.startswith("/"):
+                    href = f"https://www.verksamt.se{href}"
+                
+                grants.append({
+                    "title": title,
+                    "url": href,
+                    "description": "",
+                    "deadline_text": "",
+                    "status_text": "",
+                    "amount_text": "",
+                    "eligibility": "",
+                })
+        else:
+            for item in items:
+                title_el = item.select_one("h2, h3, h4, .title, [class*='title'], a")
+                link_el = item.select_one("a[href]")
+                desc_el = item.select_one("p, .description, .summary, [class*='desc']")
+                
+                if not title_el:
+                    continue
+                
+                title = title_el.get_text(strip=True)
+                if not title or len(title) < 5:
+                    continue
+                
+                url = ""
+                if link_el and link_el.get("href"):
+                    href = link_el["href"]
+                    if href.startswith("/"):
+                        url = f"https://www.verksamt.se{href}"
+                    elif href.startswith("http"):
+                        url = href
+                
+                grants.append({
+                    "title": title,
+                    "url": url,
+                    "description": desc_el.get_text(strip=True) if desc_el else "",
+                    "deadline_text": "",
+                    "status_text": "",
+                    "amount_text": "",
+                    "eligibility": "",
+                })
+        
+        # For each grant, try to fetch the detail page for more info
+        enriched_grants = []
+        for grant in grants[:80]:  # Limit to 80 to avoid too many requests
+            if grant["url"]:
+                self.rate_limit()
+                try:
+                    detail_soup = self.fetch_page(grant["url"])
+                    if detail_soup:
+                        # Extract more details from the detail page
+                        desc = detail_soup.select_one(
+                            ".body-text, .content, article, .main-content, "
+                            "[class*='description'], .text-content"
+                        )
+                        if desc:
+                            grant["description"] = desc.get_text(strip=True)[:2000]
+                        
+                        # Look for deadline info
+                        deadline_el = detail_soup.find(
+                            string=lambda t: t and any(w in t.lower() for w in 
+                            ["sista dag", "deadline", "ansök senast", "sista ansökningsdag"])
+                        )
+                        if deadline_el:
+                            grant["deadline_text"] = deadline_el.strip()
+                        
+                        # Look for amount info
+                        amount_el = detail_soup.find(
+                            string=lambda t: t and any(w in t.lower() for w in 
+                            ["belopp", "kronor", "miljoner", "max", "upp till"])
+                        )
+                        if amount_el:
+                            grant["amount_text"] = amount_el.strip()
+                except Exception as e:
+                    print(f"  Could not fetch detail for {grant['title']}: {e}")
+            
+            enriched_grants.append(grant)
+        
+        return enriched_grants
+    
+    def transform_to_grant(self, raw):
+        """Transform Verksamt.se data to our schema"""
+        grant = super().transform_to_grant(raw)
+        grant["source_name"] = "Verksamt.se"
+        grant["organization"] = "Verksamt.se (Aggregator)"
+        return grant
+```
+
+CRITICAL DEDUP NOTE FOR VERKSAMT:
+Verksamt.se aggregates grants from agencies you already scrape.
+The existing deduplication in base_scraper.py should catch most overlaps
+via URL matching and title similarity. But verify after running that
+you don't get duplicate entries for the same Vinnova/Tillväxtverket grants.
+
+══════════════════════════════════════════════════════════════════
+SOURCE 3: LÄNSSTYRELSERNA — ALL 21 COUNTIES (~50-100 grants)
+══════════════════════════════════════════════════════════════════
+
+All 21 Swedish county administrative boards (Länsstyrelser) follow the same
+URL pattern. Implement ONE scraper that loops over all 21.
+
+Create file: scrapers/sources/lansstyrelse.py
+
+URL pattern: https://www.lansstyrelsen.se/{COUNTY}/foretag-och-foreningar/stod-och-finansiering.html
+
+```python
+# scrapers/sources/lansstyrelse.py
+
+from sources.base_scraper import BaseScraper
+import time
+
+class LansstyrelseScraper(BaseScraper):
+    """
+    Template-based scraper for all 21 Swedish County Administrative Boards.
+    All follow the same URL pattern with county-specific paths.
+    """
+    
+    # All 21 Swedish counties and their URL slugs
+    COUNTIES = [
+        {"name": "Stockholm", "slug": "stockholm"},
+        {"name": "Uppsala", "slug": "uppsala"},
+        {"name": "Södermanland", "slug": "sodermanland"},
+        {"name": "Östergötland", "slug": "ostergotland"},
+        {"name": "Jönköping", "slug": "jonkoping"},
+        {"name": "Kronoberg", "slug": "kronoberg"},
+        {"name": "Kalmar", "slug": "kalmar"},
+        {"name": "Gotland", "slug": "gotland"},
+        {"name": "Blekinge", "slug": "blekinge"},
+        {"name": "Skåne", "slug": "skane"},
+        {"name": "Halland", "slug": "halland"},
+        {"name": "Västra Götaland", "slug": "vastra-gotaland"},
+        {"name": "Värmland", "slug": "varmland"},
+        {"name": "Örebro", "slug": "orebro"},
+        {"name": "Västmanland", "slug": "vastmanland"},
+        {"name": "Dalarna", "slug": "dalarna"},
+        {"name": "Gävleborg", "slug": "gavleborg"},
+        {"name": "Västernorrland", "slug": "vasternorrland"},
+        {"name": "Jämtland", "slug": "jamtland"},
+        {"name": "Västerbotten", "slug": "vasterbotten"},
+        {"name": "Norrbotten", "slug": "norrbotten"},
+    ]
+    
+    def __init__(self, source_id=None):
+        super().__init__(
+            source_name="Länsstyrelserna",
+            base_url="https://www.lansstyrelsen.se",
+            source_type="regional",
+            default_category="regional",
+            source_id=source_id
+        )
+    
+    def fetch_grants(self):
+        """Fetch grants from all 21 county boards"""
+        all_grants = []
+        
+        for county in self.COUNTIES:
+            print(f"  Scraping Länsstyrelsen {county['name']}...")
+            
+            url = f"{self.base_url}/{county['slug']}/foretag-och-foreningar/stod-och-finansiering.html"
+            
+            try:
+                soup = self.fetch_page(url)
+                if not soup:
+                    # Try alternative URL patterns
+                    alt_urls = [
+                        f"{self.base_url}/{county['slug']}/foretag-och-foreningar/stod-och-finansiering/",
+                        f"{self.base_url}/{county['slug']}/foretag/stod-och-finansiering.html",
+                        f"{self.base_url}/{county['slug']}/stod-och-bidrag.html",
+                    ]
+                    for alt_url in alt_urls:
+                        soup = self.fetch_page(alt_url)
+                        if soup:
+                            url = alt_url
+                            break
+                
+                if not soup:
+                    print(f"    Could not load any URL for {county['name']}")
+                    continue
+                
+                # Find grant/support links on the page
+                # Länsstyrelserna pages typically have a list of links to different
+                # types of support and grants
+                items = soup.select(
+                    ".sv-text-portlet-content a, .page-content a, "
+                    "article a, .listing a, .link-list a, "
+                    "main a[href*='stod'], main a[href*='bidrag'], main a[href*='finansiering']"
+                )
+                
+                seen_urls = set()
+                for item in items:
+                    href = item.get("href", "")
+                    title = item.get_text(strip=True)
+                    
+                    # Skip navigation, footer, and irrelevant links
+                    if not title or len(title) < 5 or len(title) > 200:
+                        continue
+                    if any(skip in title.lower() for skip in [
+                        "kontakt", "om oss", "english", "press", "nyheter",
+                        "logga in", "sök", "meny", "stäng", "cookie"
+                    ]):
+                        continue
+                    
+                    # Build full URL
+                    if href.startswith("/"):
+                        full_url = f"{self.base_url}{href}"
+                    elif href.startswith("http"):
+                        full_url = href
+                    else:
+                        continue
+                    
+                    # Skip if we've already seen this URL
+                    if full_url in seen_urls:
+                        continue
+                    seen_urls.add(full_url)
+                    
+                    # Only include links that seem like support/grants
+                    relevant_keywords = [
+                        "stöd", "stod", "bidrag", "finansiering", "ersättning",
+                        "tillstånd", "tillstand", "fond", "projekt"
+                    ]
+                    if not any(kw in href.lower() or kw in title.lower() for kw in relevant_keywords):
+                        continue
+                    
+                    all_grants.append({
+                        "title": f"{title}",
+                        "url": full_url,
+                        "description": "",
+                        "deadline_text": "",
+                        "status_text": "",
+                        "amount_text": "",
+                        "eligibility": "",
+                        "county": county["name"],
+                        "category": "regional",
+                    })
+                
+                print(f"    Found {len([g for g in all_grants if g.get('county') == county['name']])} items from {county['name']}")
+                
+            except Exception as e:
+                print(f"    Error scraping {county['name']}: {e}")
+            
+            self.rate_limit()
+        
+        # Optionally: fetch detail pages for the first N grants to enrich data
+        # (careful with rate limiting — 21 counties × multiple grants = lots of requests)
+        # Only fetch details for grants that don't already have descriptions
+        enriched = []
+        for grant in all_grants[:150]:  # Cap at 150 detail fetches
+            if not grant["description"] and grant["url"]:
+                self.rate_limit()
+                try:
+                    detail_soup = self.fetch_page(grant["url"])
+                    if detail_soup:
+                        main_content = detail_soup.select_one(
+                            "main, .sv-text-portlet-content, .page-content, article"
+                        )
+                        if main_content:
+                            grant["description"] = main_content.get_text(strip=True)[:1500]
+                except:
+                    pass
+            enriched.append(grant)
+        
+        return enriched
+    
+    def transform_to_grant(self, raw):
+        """Transform county board data to our schema"""
+        grant = super().transform_to_grant(raw)
+        
+        county = raw.get("county", "")
+        grant["source_name"] = f"Länsstyrelsen {county}"
+        grant["organization"] = f"Länsstyrelsen {county}"
+        grant["category"] = "regional"
+        
+        # Add county as keyword and location info
+        existing_kw = grant.get("keywords", []) or []
+        county_keywords = [county.lower(), "regional", "länsstyrelsen"]
+        grant["keywords"] = list(set(existing_kw + county_keywords))
+        
+        return grant
+```
+
+NOTES ON LÄNSSTYRELSER:
+- All 21 boards SHOULD follow the same URL pattern, but some may have
+  slightly different structures or URLs. The scraper includes fallback URLs.
+- Many links on these pages are informational (not specific grant calls).
+  Filter aggressively for actual support/grant pages.
+- Don't fetch too many detail pages — cap at ~150 total to keep runtime reasonable.
+- Some boards may have very few grants (1-2), others may have 10+.
+
+══════════════════════════════════════════════════════════════════
+SOURCE 4: EUFONDER.SE (EU AGGREGATOR — ~30-50 grants)
+══════════════════════════════════════════════════════════════════
+
+Eufonder.se is a Swedish-language aggregator for EU funding opportunities.
+Simpler to scrape than the EU portal directly, and content is already in Swedish.
+
+Create file: scrapers/sources/eufonder.py
+
+URL: https://eufonder.se/aktuellt/utlysningar.html
+Method: BeautifulSoup (static HTML)
+
+```python
+# scrapers/sources/eufonder.py
+
+from sources.base_scraper import BaseScraper
+
+class EuFonderScraper(BaseScraper):
+    """
+    Scraper for Eufonder.se — Swedish-language EU funding aggregator.
+    
+    Provides EU funding info in Swedish, complementing the EU F&T Portal.
+    Will have overlap with EU F&T Portal — dedup handles this.
+    """
+    
+    def __init__(self, source_id=None):
+        super().__init__(
+            source_name="Eufonder.se",
+            base_url="https://eufonder.se/aktuellt/utlysningar.html",
+            source_type="aggregator",
+            default_category="eu",
+            source_id=source_id
+        )
+    
+    def fetch_grants(self):
+        """Fetch EU grant listings from Eufonder.se"""
+        grants = []
+        
+        # Fetch main utlysningar page
+        soup = self.fetch_page(self.base_url)
+        if not soup:
+            # Try alternative URLs
+            alt_urls = [
+                "https://eufonder.se/aktuellt/utlysningar/",
+                "https://eufonder.se/utlysningar.html",
+                "https://eufonder.se/utlysningar/",
+            ]
+            for alt in alt_urls:
+                soup = self.fetch_page(alt)
+                if soup:
+                    break
+        
+        if not soup:
+            raise Exception("Could not load Eufonder.se")
+        
+        # Find grant listing items
+        items = soup.select(
+            "article, .article-item, .news-item, .utlysning, "
+            ".listing-item, .content-item, .entry, "
+            "li.item, .card, [class*='utlysning']"
+        )
+        
+        if not items:
+            # Broader fallback: find all internal links that look like grants
+            items = soup.select("a[href*='utlys'], a[href*='fond'], a[href*='program']")
+            
+            for link in items:
+                title = link.get_text(strip=True)
+                href = link.get("href", "")
+                
+                if not title or len(title) < 10:
+                    continue
+                
+                if href.startswith("/"):
+                    href = f"https://eufonder.se{href}"
+                elif not href.startswith("http"):
+                    href = f"https://eufonder.se/{href}"
+                
+                grants.append({
+                    "title": title,
+                    "url": href,
+                    "description": "",
+                    "deadline_text": "",
+                    "status_text": "",
+                    "amount_text": "",
+                    "eligibility": "",
+                })
+        else:
+            for item in items:
+                title_el = item.select_one("h2, h3, h4, .title, a")
+                link_el = item.select_one("a[href]")
+                desc_el = item.select_one("p, .summary, .excerpt, .description")
+                date_el = item.select_one("time, .date, [class*='date']")
+                
+                if not title_el:
+                    continue
+                
+                title = title_el.get_text(strip=True)
+                if not title or len(title) < 5:
+                    continue
+                
+                url = ""
+                if link_el and link_el.get("href"):
+                    href = link_el["href"]
+                    if href.startswith("/"):
+                        url = f"https://eufonder.se{href}"
+                    elif href.startswith("http"):
+                        url = href
+                    else:
+                        url = f"https://eufonder.se/{href}"
+                
+                grants.append({
+                    "title": title,
+                    "url": url,
+                    "description": desc_el.get_text(strip=True) if desc_el else "",
+                    "deadline_text": date_el.get_text(strip=True) if date_el else "",
+                    "status_text": "",
+                    "amount_text": "",
+                    "eligibility": "",
+                })
+        
+        # Fetch detail pages for grants missing descriptions
+        for grant in grants[:60]:
+            if not grant["description"] and grant["url"]:
+                self.rate_limit()
+                try:
+                    detail = self.fetch_page(grant["url"])
+                    if detail:
+                        content = detail.select_one(
+                            "article, .content, .article-content, "
+                            ".entry-content, main, .text-content"
+                        )
+                        if content:
+                            grant["description"] = content.get_text(strip=True)[:2000]
+                except:
+                    pass
+        
+        return grants
+    
+    def transform_to_grant(self, raw):
+        """Transform Eufonder.se data to our schema"""
+        grant = super().transform_to_grant(raw)
+        grant["source_name"] = "Eufonder.se"
+        grant["organization"] = "EU (via Eufonder.se)"
+        grant["category"] = "eu"
+        
+        # Add EU keywords
+        existing_kw = grant.get("keywords", []) or []
+        grant["keywords"] = list(set(existing_kw + ["eu", "europeisk"]))
+        
+        return grant
+```
+
+══════════════════════════════════════════════════════════════════
+UPDATE MAIN.PY — ADD ROUTING FOR NEW SCRAPERS
+══════════════════════════════════════════════════════════════════
+
+Add these new scrapers to the existing routing in main.py's get_scraper_for_source()
+function (or equivalent routing mechanism):
+
+```python
+# Add these elif blocks to the existing routing in main.py:
+
+elif 'eu funding' in name or 'eu f&t' in name or 'funding & tenders' in name or 'funding tenders' in name:
+    from sources.eu_funding_tenders import EUFundingTendersScraper
+    return EUFundingTendersScraper(source_id)
+
+elif 'verksamt' in name:
+    from sources.verksamt import VerksamtScraper
+    return VerksamtScraper(source_id)
+
+elif 'länsstyrelse' in name or 'lansstyrelse' in name:
+    from sources.lansstyrelse import LansstyrelseScraper
+    return LansstyrelseScraper(source_id)
+
+elif 'eufonder' in name:
+    from sources.eufonder import EuFonderScraper
+    return EuFonderScraper(source_id)
+```
+
+══════════════════════════════════════════════════════════════════
+REGISTER SOURCES IN DATABASE
+══════════════════════════════════════════════════════════════════
+
+Add these sources via admin UI or SQL:
+
+```sql
+INSERT INTO scraper_sources (name, type, url, scraper_type, active, update_frequency) VALUES
+('EU Funding & Tenders Portal', 'api', 'https://ec.europa.eu/info/funding-tenders/opportunities/portal/', 'api', true, 'daily'),
+('Verksamt.se', 'scrape', 'https://www.verksamt.se/driva/finansiera-din-start/sok-finansiering', 'playwright', true, 'weekly'),
+('Länsstyrelserna (21 län)', 'scrape', 'https://www.lansstyrelsen.se/', 'beautifulsoup', true, 'weekly'),
+('Eufonder.se', 'scrape', 'https://eufonder.se/aktuellt/utlysningar.html', 'beautifulsoup', true, 'weekly');
+```
+
+══════════════════════════════════════════════════════════════════
+TESTING — DO EACH SOURCE ONE AT A TIME
+══════════════════════════════════════════════════════════════════
+
+Test each scraper individually before running all together:
+
+1. Start with Eufonder.se (simplest, BS4-only):
+   ```bash
+   cd scrapers && python3 -c "
+   from sources.eufonder import EuFonderScraper
+   s = EuFonderScraper()
+   s.scrape()
+   "
+   ```
+
+2. Then Länsstyrelserna (takes longer, loops 21 counties):
+   ```bash
+   cd scrapers && python3 -c "
+   from sources.lansstyrelse import LansstyrelseScraper
+   s = LansstyrelseScraper()
+   s.scrape()
+   "
+   ```
+
+3. Then Verksamt.se (requires Playwright):
+   ```bash
+   cd scrapers && python3 -c "
+   from sources.verksamt import VerksamtScraper
+   s = VerksamtScraper()
+   s.scrape()
+   "
+   ```
+
+4. Finally EU F&T Portal (most complex, may need API adjustments):
+   ```bash
+   cd scrapers && python3 -c "
+   from sources.eu_funding_tenders import EUFundingTendersScraper
+   s = EUFundingTendersScraper()
+   s.scrape()
+   "
+   ```
+
+After each test, verify:
+```sql
+SELECT source_name, COUNT(*) as grant_count 
+FROM grants 
+GROUP BY source_name 
+ORDER BY grant_count DESC;
+```
+
+══════════════════════════════════════════════════════════════════
+DEDUPLICATION VERIFICATION
+══════════════════════════════════════════════════════════════════
+
+After running all scrapers, check for duplicates:
+
+```sql
+-- Check for exact title duplicates across sources
+SELECT title, array_agg(source_name) as sources, COUNT(*) 
+FROM grants 
+GROUP BY title 
+HAVING COUNT(*) > 1
+ORDER BY COUNT(*) DESC
+LIMIT 20;
+
+-- Check total unique grants vs total rows
+SELECT 
+  COUNT(*) as total_rows,
+  COUNT(DISTINCT url) as unique_urls,
+  COUNT(DISTINCT title) as unique_titles
+FROM grants;
+```
+
+If there are many duplicates from Verksamt.se overlapping with other sources,
+the dedup system should have caught them. If not, verify that base_scraper.py's
+dedup check is running before upsert_grant().
+
+══════════════════════════════════════════════════════════════════
+IMPLEMENTATION ORDER — DO NOT SKIP AHEAD
+══════════════════════════════════════════════════════════════════
+
+1. Eufonder.se first (simplest, BS4 only, quick win)
+2. Länsstyrelserna second (template scraper, many small sources)
+3. Verksamt.se third (Playwright, needs dedup verification)
+4. EU F&T Portal last (most complex, API investigation needed)
+
+After each: test → verify data → check dedup → move to next.
+
+EXPECTED RESULTS:
+- Eufonder.se: +30-50 grants
+- Länsstyrelserna: +50-100 grants
+- Verksamt.se: +20-50 unique grants (after dedup)
+- EU F&T Portal: +200-400 grants
+- TOTAL: ~470 existing + 300-600 new = 770-1070 grants
+```

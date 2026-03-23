@@ -1,0 +1,166 @@
+HIGH 1: "Why does this match?" AI Explanation
+Add transparent AI match explanations to every grant match result, showing users 
+exactly why a grant was recommended for them.
+
+## Context
+Currently the AI matching returns a score but no explanation. Users don't know 
+why a grant matched, which reduces trust and engagement. This adds a "Why this 
+match?" feature inspired by Instrumentl's AI Prospecting Assistant.
+
+## Backend changes
+
+### Update the matching service
+
+In `server/services/matching.ts` (or wherever AI matching runs), add explanation 
+generation to the existing match response.
+
+Add this function:
+```typescript
+export async function generateMatchExplanation(
+  grant: Grant,
+  companyProfile: CompanyProfile,
+  matchScore: number
+): Promise<MatchExplanation> {
+  const client = new Anthropic();
+  
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5',  // Use Haiku for cost efficiency — this runs per grant
+    max_tokens: 300,
+    messages: [{
+      role: 'user',
+      content: `Explain in 2-3 bullet points why this grant matches this company.
+Be specific — reference actual details from both. Be direct and concrete.
+Write in the same language as the grant (Swedish for Swedish grants, English for EU grants).
+
+GRANT: ${grant.title}
+FUNDER: ${grant.source}  
+GRANT FOCUS: ${grant.description?.substring(0, 300)}
+SECTORS TARGETED: ${grant.sectors?.join(', ') || 'Not specified'}
+
+COMPANY: ${companyProfile.name}
+SECTOR: ${companyProfile.sector}
+DESCRIPTION: ${companyProfile.description?.substring(0, 200)}
+REGION: ${companyProfile.region}
+
+MATCH SCORE: ${matchScore}/100
+
+Respond with JSON:
+{
+  "headline": "One sentence summary of the match (max 15 words)",
+  "reasons": [
+    "Specific reason 1 — reference actual grant criteria and company detail",
+    "Specific reason 2",
+    "Specific reason 3 (optional)"
+  ],
+  "bestFitAspect": "The single strongest alignment point in 8 words or less"
+}`
+    }]
+  });
+  
+  const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      headline: `Strong match for ${companyProfile.sector} companies`,
+      reasons: ['Grant focus aligns with your sector', 'Your region is covered'],
+      bestFitAspect: 'Sector alignment'
+    };
+  }
+}
+```
+
+### Update match API response
+
+Add `explanation` field to match results:
+```typescript
+// In the match results endpoint, add explanation to top N matches
+// Only generate explanations for top 10 matches to control API costs
+
+const matchesWithExplanations = await Promise.all(
+  topMatches.slice(0, 10).map(async (match) => ({
+    ...match,
+    explanation: await generateMatchExplanation(
+      match.grant, 
+      companyProfile, 
+      match.score
+    )
+  }))
+);
+
+// Remaining matches (11-50) get explanation: null — shown on demand
+```
+
+### New endpoint for on-demand explanation
+POST /api/grants/:id/explain-match
+Body: { companyProfile: CompanyProfile }
+Response: { explanation: MatchExplanation }
+
+Cache explanations per grant+user for the session.
+
+## Frontend: MatchExplanation component
+
+Create `client/src/components/MatchExplanation.tsx`:
+```tsx
+// Collapsed state (default on grant cards):
+<div className="match-explanation-collapsed">
+  <span className="match-score">87% match</span>
+  <button onClick={() => setExpanded(true)}>
+    Why? <ChevronDown size={14} />
+  </button>
+</div>
+
+// Expanded state:
+<div className="match-explanation-expanded">
+  <div className="explanation-headline">
+    {explanation.headline}
+  </div>
+  <ul className="explanation-reasons">
+    {explanation.reasons.map(reason => (
+      <li key={reason}>
+        <CheckCircle size={14} className="text-green-500" />
+        {reason}
+      </li>
+    ))}
+  </ul>
+  <div className="best-fit-badge">
+    ⭐ Best fit: {explanation.bestFitAspect}
+  </div>
+</div>
+```
+
+**Loading state**: When explanation is null and user clicks "Why?", show spinner 
+for 1-2 seconds while fetching on-demand.
+
+## Visual design requirements
+
+The explanation should feel like a confident advisor, not a disclaimer:
+
+- Use green checkmarks (✅) for reasons, not bullets
+- Headline in slightly larger, bolder text
+- "Best fit aspect" as a small badge/pill with star icon
+- Smooth expand/collapse animation (max-height transition)
+- On mobile: expand inline below the grant card, don't use modal
+
+## Integration
+
+Add MatchExplanation to:
+1. AI Match results page — next to each match score
+2. Grant detail page — in the "Why we recommend this" section (if coming from match)
+3. Bookmarks — show match explanation for saved grants
+
+## Cost optimization
+- Use `claude-haiku-4-5` model only (5-10x cheaper than Opus for this task)  
+- Generate for top 10 matches automatically, rest on-demand
+- Cache in localStorage for current session: `matchExplanation:${grantId}:${userId}`
+- Skip generation if match score < 40 (low matches don't need explanation)
+
+## Testing checklist
+- [ ] Explanation appears for top 10 match results automatically
+- [ ] "Why?" button works for matches 11-50, fetches on demand
+- [ ] Explanations reference actual company and grant data (not generic)
+- [ ] Swedish grants generate Swedish explanations
+- [ ] EU grants generate English explanations
+- [ ] Loading state shows during on-demand fetch
+- [ ] Cached explanations load instantly on second view
+- [ ] Mobile layout works correctly

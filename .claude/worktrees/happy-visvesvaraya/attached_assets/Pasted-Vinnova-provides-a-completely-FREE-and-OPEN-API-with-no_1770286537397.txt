@@ -1,0 +1,472 @@
+Vinnova provides a completely FREE and OPEN API with no authentication required.
+This is much simpler than GDP API and should be your first data source.
+
+API DETAILS:
+- Base URL: https://data.vinnova.se/api
+- Authentication: NONE (completely open)
+- License: Public Domain Mark (CC0)
+- Format: JSON
+- No rate limits mentioned
+
+KEY ENDPOINTS:
+1. /ansokningsomgangar/{date} - Get grant calls (ansökningsomgångar)
+   Example: https://data.vinnova.se/api/ansokningsomgangar/2024-01-01
+   Returns all calls modified since that date
+
+2. /utlysningar/{date} - Get announcements (utlysningar)
+   Example: https://data.vinnova.se/api/utlysningar/2024-01-01
+
+3. /projekt/{date} - Get funded projects
+   Example: https://data.vinnova.se/api/projekt/2024-01-01
+
+4. /file/{document_id} - Download documents
+   Example: https://data.vinnova.se/api/file/2016-04968_2
+
+STEP 1.1: Create Vinnova API Client
+
+Create file: scrapers/sources/vinnova_api.py
+```python
+import requests
+from datetime import datetime, timedelta
+from utils.db import upsert_grant, log_scrape_result
+
+class VinnovaApiClient:
+    """
+    Client for Vinnova's free open data API
+    No authentication required - completely open
+    Docs: https://data.vinnova.se
+    """
+    
+    def __init__(self):
+        self.base_url = "https://data.vinnova.se/api"
+        # No API key needed!
+    
+    def fetch_ansokningsomgangar(self, from_date=None):
+        """
+        Fetch grant calls (ansökningsomgångar) modified since from_date
+        
+        Args:
+            from_date: Date string in format YYYY-MM-DD
+                      If None, fetches from 90 days ago
+        
+        Returns list of ansökningsomgångar in Vinnova format
+        """
+        if not from_date:
+            # Default to last 90 days
+            date_90_days_ago = datetime.now() - timedelta(days=90)
+            from_date = date_90_days_ago.strftime('%Y-%m-%d')
+        
+        try:
+            url = f"{self.base_url}/ansokningsomgangar/{from_date}"
+            
+            print(f"Fetching from: {url}")
+            
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Data is returned as array directly
+            if isinstance(data, list):
+                print(f"Found {len(data)} ansökningsomgångar")
+                return data
+            else:
+                print("Unexpected response format")
+                return []
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching Vinnova data: {e}")
+            return []
+    
+    def transform_to_grant(self, vinnova_item):
+        """
+        Transform Vinnova ansökningsomgång format to BidragAI grant schema
+        
+        Vinnova fields:
+        - Diarienummer: Case ID (unique identifier)
+        - Titel: Title
+        - Beskrivning: Description
+        - Stangningsdatum: Closing date (deadline)
+        - Oppningsdatum: Opening date
+        - DokumentLista: List of downloadable documents
+        - LankLista: Links to application pages
+        - WebTextLista: Short texts about What/Who/How
+        - Publik: 1=public, 0=invite-only
+        - Extern: 1=external submission, 0=via Vinnova
+        """
+        
+        # Parse deadline (Stängningsdatum)
+        deadline = None
+        if vinnova_item.get('Stangningsdatum'):
+            try:
+                # Format: "2017-03-02T14:00:00"
+                deadline = datetime.fromisoformat(
+                    vinnova_item['Stangningsdatum'].replace('Z', '')
+                )
+            except Exception as e:
+                print(f"Could not parse deadline: {e}")
+        
+        # Determine status
+        status = 'closed'
+        if deadline and deadline > datetime.now():
+            status = 'open'
+        
+        # Extract application URL from LankLista
+        application_url = None
+        if vinnova_item.get('LankLista'):
+            for link in vinnova_item['LankLista']:
+                if 'ansök' in link.get('Beskrivning', '').lower():
+                    application_url = link.get('URL')
+                    break
+        
+        # Build URL to Vinnova page
+        diarienummer = vinnova_item.get('Diarienummer', '')
+        vinnova_page_url = f"https://www.vinnova.se/e/{diarienummer}/"
+        
+        # Extract keywords from WebTextLista
+        keywords = []
+        description_parts = []
+        
+        if vinnova_item.get('WebTextLista'):
+            for web_text in vinnova_item['WebTextLista']:
+                text_sv = web_text.get('TextSv', '')
+                if text_sv:
+                    description_parts.append(text_sv)
+                    # Extract keywords from text
+                    keywords.extend(self._extract_keywords_from_text(text_sv))
+        
+        # Build full description
+        main_description = vinnova_item.get('Beskrivning', '')
+        if description_parts:
+            full_description = f"{main_description}\n\n" + "\n\n".join(description_parts)
+        else:
+            full_description = main_description
+        
+        # Determine target groups
+        target_groups = self._determine_target_groups(full_description)
+        
+        # Build grant object matching our DB schema
+        grant = {
+            'title': vinnova_item.get('Titel', 'Untitled'),
+            'description': full_description,
+            'source_name': 'Vinnova',
+            'source_type': 'myndighet',
+            'url': application_url or vinnova_page_url,
+            'deadline': deadline,
+            'amount_min': None,  # Vinnova doesn't provide amounts in API
+            'amount_max': None,
+            'eligibility_criteria': {
+                'diarienummer': diarienummer,
+                'public': vinnova_item.get('Publik') == 1,
+                'external_submission': vinnova_item.get('Extern') == 1
+            },
+            'target_group': target_groups,
+            'keywords': list(set(keywords))[:15],  # Unique keywords, max 15
+            'application_requirements': {
+                'documents': [
+                    {
+                        'title': doc.get('Titel'),
+                        'url': doc.get('fileURL')
+                    }
+                    for doc in vinnova_item.get('DokumentLista', [])
+                ]
+            },
+            'status': status,
+            'raw_data': vinnova_item  # Store original for reference
+        }
+        
+        return grant
+    
+    def _extract_keywords_from_text(self, text):
+        """Extract relevant keywords from Swedish text"""
+        keywords = []
+        text_lower = text.lower()
+        
+        # Common Swedish grant keywords
+        keyword_patterns = [
+            'innovation', 'forskning', 'utveckling', 'hållbarhet',
+            'digitalisering', 'export', 'miljö', 'transport',
+            'cirkulär ekonomi', 'ai', 'artificiell intelligens',
+            'grön omställning', 'klimat', 'energi', 'life science',
+            'startup', 'sme', 'företag', 'universitet', 'högskola'
+        ]
+        
+        for keyword in keyword_patterns:
+            if keyword in text_lower:
+                keywords.append(keyword)
+        
+        return keywords
+    
+    def _determine_target_groups(self, description):
+        """Determine target groups from description text"""
+        target_groups = []
+        desc_lower = description.lower()
+        
+        # Pattern matching
+        patterns = {
+            'startup': ['startup', 'nystartade', 'nya företag', 'nyföretagande'],
+            'sme': ['små och medelstora', 'sme', 'små företag', 'mkb'],
+            'research': ['forskare', 'universitet', 'högskola', 'forskning', 'akademi'],
+            'nonprofit': ['ideell', 'idéburen', 'förening', 'organisation'],
+            'enterprise': ['storföretag', 'koncern']
+        }
+        
+        for group, keywords in patterns.items():
+            if any(keyword in desc_lower for keyword in keywords):
+                target_groups.append(group)
+        
+        # Default if nothing matched
+        if not target_groups:
+            target_groups.append('all')
+        
+        return target_groups
+    
+    def scrape(self, source_id, from_date=None):
+        """
+        Main scraping function called by scheduler
+        
+        Args:
+            source_id: ID from scraper_sources table
+            from_date: Optional date to fetch from (YYYY-MM-DD)
+        """
+        print(f"Starting Vinnova API scrape...")
+        
+        try:
+            # Fetch ansökningsomgångar from API
+            items = self.fetch_ansokningsomgangar(from_date)
+            print(f"Fetched {len(items)} items from Vinnova API")
+            
+            grants_inserted = 0
+            grants_skipped = 0
+            
+            # Transform and insert each grant
+            for item in items:
+                grant = self.transform_to_grant(item)
+                
+                # Only insert if it has minimum required fields
+                if grant['title'] and grant['url']:
+                    upsert_grant(grant)
+                    grants_inserted += 1
+                else:
+                    grants_skipped += 1
+                    print(f"Skipped: {item.get('Diarienummer')} - missing required fields")
+            
+            # Log successful scrape
+            log_scrape_result(
+                source_id=source_id,
+                status='success',
+                grants_found=grants_inserted,
+                error_message=None
+            )
+            
+            print(f"✓ Successfully inserted/updated {grants_inserted} grants")
+            print(f"⊘ Skipped {grants_skipped} grants")
+            return grants_inserted
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"✗ Vinnova scrape failed: {error_msg}")
+            
+            log_scrape_result(
+                source_id=source_id,
+                status='failed',
+                grants_found=0,
+                error_message=error_msg
+            )
+            
+            return 0
+
+# Main execution for testing
+if __name__ == "__main__":
+    import sys
+    
+    # Allow passing a custom date as argument
+    from_date = sys.argv[1] if len(sys.argv) > 1 else None
+    
+    client = VinnovaApiClient()
+    result = client.scrape(source_id=None, from_date=from_date)
+    
+    print(f"\n{'='*50}")
+    print(f"Scrape complete: {result} grants processed")
+    print(f"{'='*50}")
+```
+
+STEP 1.2: Update Main Scraper Runner
+
+Update scrapers/main.py:
+```python
+import sys
+import argparse
+from sources.vinnova_api import VinnovaApiClient
+from sources.gdp_api import GDPApiClient  # Keep GDP for later if needed
+from sources.tillvaxtverket import TillvaxtverketScraper
+from sources.generic_scraper import GenericScraper
+from utils.db import get_active_sources, get_source_by_id
+
+def run_single_scraper(source_id):
+    """Run a specific scraper by ID"""
+    source = get_source_by_id(source_id)
+    
+    if not source:
+        print(f"Source {source_id} not found")
+        return
+    
+    print(f"Running scraper: {source['name']}")
+    
+    source_name_lower = source['name'].lower()
+    
+    # Route to appropriate scraper based on source name
+    if 'vinnova' in source_name_lower and source.get('type') == 'api':
+        client = VinnovaApiClient()
+        client.scrape(source_id)
+    elif 'gdp' in source_name_lower:
+        client = GDPApiClient()
+        client.scrape(source_id)
+    elif 'tillväxtverket' in source_name_lower or 'tillvaxtverket' in source_name_lower:
+        scraper = TillvaxtverketScraper(source_id)
+        scraper.scrape()
+    else:
+        # Use generic scraper for web scraping
+        scraper = GenericScraper(source)
+        scraper.scrape()
+
+def run_all_scrapers():
+    """Run all active scrapers"""
+    sources = get_active_sources()
+    
+    print(f"Found {len(sources)} active sources")
+    
+    for source in sources:
+        print(f"\n{'='*60}")
+        run_single_scraper(source['id'])
+        print(f"{'='*60}\n")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Run BidragAI scrapers')
+    parser.add_argument('--source-id', type=str, help='Run specific source by ID')
+    parser.add_argument('--all', action='store_true', help='Run all active sources')
+    parser.add_argument('--test-vinnova', action='store_true', help='Test Vinnova API directly')
+    
+    args = parser.parse_args()
+    
+    if args.test_vinnova:
+        print("Testing Vinnova API...")
+        client = VinnovaApiClient()
+        result = client.scrape(source_id=None)
+        print(f"Test complete: {result} grants")
+    elif args.source_id:
+        run_single_scraper(args.source_id)
+    elif args.all:
+        run_all_scrapers()
+    else:
+        print("Usage:")
+        print("  python main.py --source-id <id>    # Run specific source")
+        print("  python main.py --all               # Run all active sources")
+        print("  python main.py --test-vinnova      # Test Vinnova API")
+```
+
+STEP 1.3: Add Vinnova Source in Admin UI
+
+The Vinnova API source should be added via admin interface with these settings:
+Name: Vinnova API (Free & Open)
+Type: api
+URL: https://data.vinnova.se/api
+Scraper Type: api
+Active: true
+Update Frequency: daily
+API Config: {} (no config needed - it's open!)
+
+Or add directly to database:
+```sql
+INSERT INTO scraper_sources (name, type, url, scraper_type, active, update_frequency, api_config)
+VALUES (
+  'Vinnova API (Free & Open)',
+  'api',
+  'https://data.vinnova.se/api',
+  'api',
+  true,
+  'daily',
+  '{}'  -- No API key needed!
+);
+```
+
+STEP 1.4: Test Vinnova Scraper
+
+Three ways to test:
+
+**Method 1: Direct Python execution**
+```bash
+cd scrapers
+python3 sources/vinnova_api.py
+```
+
+**Method 2: Via main.py**
+```bash
+cd scrapers
+python3 main.py --test-vinnova
+```
+
+**Method 3: Via API endpoint**
+
+Create test endpoint: app/api/test/vinnova/route.ts
+```typescript
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
+export async function GET(request: Request) {
+  try {
+    // Run Vinnova scraper directly
+    const { stdout, stderr } = await execAsync(
+      'cd scrapers && python3 main.py --test-vinnova'
+    );
+    
+    return Response.json({
+      success: true,
+      output: stdout,
+      errors: stderr || null
+    });
+  } catch (error) {
+    return Response.json({
+      success: false,
+      error: error.message
+    }, { status: 500 });
+  }
+}
+```
+
+Visit http://localhost:3000/api/test/vinnova to run the scraper.
+
+STEP 1.5: Verify Results
+
+After running the scraper, check:
+
+1. **Database**: 
+```sql
+   SELECT COUNT(*) FROM grants WHERE source_name = 'Vinnova';
+```
+   
+   You should see 50-200 grants depending on the date range.
+
+2. **Scraper Logs**:
+```sql
+   SELECT * FROM scraper_logs 
+   WHERE source_id = (SELECT id FROM scraper_sources WHERE name LIKE '%Vinnova%')
+   ORDER BY scraped_at DESC 
+   LIMIT 5;
+```
+
+3. **Grant Details**: Check that grants have:
+   - Proper Swedish titles
+   - Deadlines parsed correctly
+   - Target groups identified
+   - Keywords extracted
+   - URLs working
+
+EXPECTED OUTPUT:
+Starting Vinnova API scrape...
+Fetching from: https://data.vinnova.se/api/ansokningsomgangar/2024-11-01
+Found 87 ansökningsomgångar
+✓ Successfully inserted/updated 87 grants
+⊘ Skipped 0 grants

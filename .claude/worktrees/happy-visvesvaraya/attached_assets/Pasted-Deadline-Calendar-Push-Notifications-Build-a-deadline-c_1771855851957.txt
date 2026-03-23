@@ -1,0 +1,225 @@
+Deadline Calendar + Push Notifications
+Build a deadline calendar that shows upcoming deadlines for grants the user has 
+bookmarked or that match their profile, with email and browser push notifications.
+
+## Overview
+Users can see all their relevant grant deadlines in one calendar view and set 
+reminders. Inspired by Instrumentl's grant calendar and GrantHub.
+
+## Backend
+
+### New notification preferences schema
+
+Add to schema.ts:
+```typescript
+export const notificationPreferences = pgTable('notification_preferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: varchar('user_id').notNull().unique(),
+  emailEnabled: boolean('email_enabled').default(true),
+  pushEnabled: boolean('push_enabled').default(false),
+  reminderDaysBefore: integer('reminder_days_before').array().default([30, 14, 7, 1]),
+  // 30 days, 14 days, 1 week, 1 day before deadline
+  digestFrequency: varchar('digest_frequency').default('weekly'), // daily | weekly | never
+  pushSubscription: jsonb('push_subscription'), // Web Push subscription object
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+```
+
+### New API endpoints
+
+**GET /api/calendar/events**
+Returns calendar events for the logged-in user.
+
+Query params:
+- `start`: ISO date string (default: today)
+- `end`: ISO date string (default: today + 3 months)
+- `sources`: 'bookmarks' | 'matches' | 'all' (default: 'all')
+
+Response:
+```json
+{
+  "events": [
+    {
+      "id": "grant-uuid",
+      "title": "Vinnova: Innovationsprojekt i företag",
+      "deadline": "2026-03-15T23:59:00Z",
+      "daysUntil": 24,
+      "urgency": "medium",    // urgent (<7 days) | medium (7-30) | upcoming (>30)
+      "source": "Vinnova",
+      "amount": "500000",
+      "matchScore": 87,
+      "isBookmarked": true,
+      "url": "https://vinnova.se/..."
+    }
+  ],
+  "summary": {
+    "urgent": 2,
+    "thisMonth": 5,
+    "nextMonth": 8
+  }
+}
+```
+
+**PUT /api/notifications/preferences**
+Update notification preferences.
+
+**POST /api/notifications/push-subscribe**
+Register a browser push subscription.
+
+Body: `{ subscription: PushSubscription }` (Web Push API object)
+
+**DELETE /api/notifications/push-subscribe**
+Unsubscribe from push notifications.
+
+### Scheduled notification job
+
+Create `server/jobs/deadlineNotifier.ts`:
+```typescript
+import { CronJob } from 'cron';
+
+// Run daily at 08:00 Stockholm time
+export const deadlineNotifierJob = new CronJob(
+  '0 8 * * *',
+  async () => {
+    const users = await getUsersWithNotificationsEnabled();
+    
+    for (const user of users) {
+      const prefs = user.notificationPreferences;
+      const grants = await getGrantsForUser(user.id); // bookmarks + top matches
+      
+      for (const grant of grants) {
+        if (!grant.deadline) continue;
+        
+        const daysUntil = getDaysUntil(grant.deadline);
+        
+        // Check if today matches any of user's reminder thresholds
+        if (prefs.reminderDaysBefore.includes(daysUntil)) {
+          if (prefs.emailEnabled) {
+            await sendDeadlineEmail(user, grant, daysUntil);
+          }
+          if (prefs.pushEnabled && prefs.pushSubscription) {
+            await sendPushNotification(user.pushSubscription, {
+              title: `Deadline: ${grant.title}`,
+              body: `${daysUntil} day${daysUntil !== 1 ? 's' : ''} left to apply`,
+              url: `/grants/${grant.id}`,
+              icon: '/favicon.ico'
+            });
+          }
+        }
+      }
+      
+      // Weekly digest
+      if (prefs.digestFrequency === 'weekly' && isMonday()) {
+        const upcomingDeadlines = grants
+          .filter(g => g.deadline && getDaysUntil(g.deadline) <= 30)
+          .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+        
+        if (upcomingDeadlines.length > 0) {
+          await sendWeeklyDigestEmail(user, upcomingDeadlines);
+        }
+      }
+    }
+  },
+  null,
+  true,
+  'Europe/Stockholm'
+);
+```
+
+### Email templates
+
+Create `server/emails/deadlineReminder.tsx` using React Email or simple HTML:
+Subject: ⏰ {daysUntil} dagar kvar — {grantTitle}
+Hi {firstName},
+Du har {daysUntil} dagar kvar att söka:
+📋 {grantTitle}
+💰 Upp till {maxAmount} SEK
+🏢 {source}
+📅 Deadline: {deadline}
+🎯 Match: {matchScore}%
+[Öppna ansökan →]  [Skriv ansökan med AI →]
+--
+GetGrant.ai — Hitta och sök rätt bidrag
+[Avsluta påminnelser]
+
+## Frontend: Calendar page
+
+Create `client/src/pages/calendar.tsx`:
+
+### Calendar view (top half of page)
+
+Use `react-big-calendar` (install: `npm install react-big-calendar date-fns`):
+```tsx
+import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
+
+// Configure calendar with Swedish locale
+// Color-code events by urgency:
+// 🔴 Red: < 7 days
+// 🟡 Yellow: 7-30 days  
+// 🟢 Green: > 30 days
+// 🔵 Blue: bookmarked grants
+```
+
+### List view (bottom half / toggle)
+
+Toggle between calendar and list view:
+UPCOMING DEADLINES
+🔴 URGENT (next 7 days)
+• Energimyndigheten: Gröna innovationer  →  3 days left  [Apply with AI]
+🟡 THIS MONTH
+• Vinnova: Innovationsprojekt  →  Feb 28  [Apply with AI]
+• Tillväxtverket: Regional tillväxt  →  Mar 5  [Apply with AI]
+🟢 NEXT MONTH
+• EU Horizon: EIC Accelerator  →  Apr 3  [Apply with AI]
+...
+
+### Notification settings panel (sidebar or modal)
+📬 Notification Settings
+Email reminders:
+[✅] 30 days before deadline
+[✅] 14 days before deadline
+[✅] 7 days before deadline
+[✅] 1 day before deadline
+Weekly digest: [✅ Every Monday]
+Browser notifications:
+[Enable browser notifications]  ← triggers Web Push permission request
+[Save settings]
+
+### Add to calendar button
+
+On each grant deadline, show "Add to calendar" with:
+- Google Calendar link (generate URL with event details)
+- `.ics` file download (for Apple Calendar, Outlook)
+
+Generate `.ics` format:
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+DTSTART:20260315T235900Z
+DTEND:20260316T000000Z
+SUMMARY:Deadline: Vinnova Innovationsprojekt
+DESCRIPTION:Apply at https://getgrant.ai/grants/{id}
+URL:https://getgrant.ai/grants/{id}
+END:VEVENT
+END:VCALENDAR
+
+## Navigation
+
+Add calendar icon to main navigation (between "Grants" and "Profile"):
+- Show badge with count of urgent deadlines (red dot with number if >0)
+
+## Testing checklist
+- [ ] Calendar loads and shows events from bookmarks
+- [ ] Color coding works (red/yellow/green by urgency)
+- [ ] List view toggle works
+- [ ] Add to Google Calendar link opens correctly
+- [ ] .ics download works and imports into calendar apps
+- [ ] Email preferences save correctly
+- [ ] Test email sends when deadline is X days away (use seeded test data)
+- [ ] Push notification permission request appears
+- [ ] Push notification received in browser
+- [ ] Weekly digest email sends on Monday (test with manual trigger endpoint)
+- [ ] Notification badge shows in nav when urgent deadlines exist
+- [ ] Mobile calendar view is usable (consider switching to list-only on mobile)

@@ -1,0 +1,290 @@
+ 
+Build a matching quality test suite for GetGrant.ai.
+This is a standalone test script — do NOT modify production code.
+ 
+CREATE FILE: scripts/test-matching-quality.ts
+ 
+PURPOSE:
+ Run 10 predefined company profiles through the live matching engine
+ and output a structured quality report. The report shows which grants
+ were returned, their scores, and flags potential problems automatically.
+ 
+═══════════════════════════════════════════════════════════════
+SECTION 1 — TEST COMPANY PROFILES
+═══════════════════════════════════════════════════════════════
+ 
+Define TEST_COMPANIES as a typed array with these 10 profiles:
+ 
+const TEST_COMPANIES: TestCompany[] = [
+ {
+   id: 'C1', label: 'TechScale AB — AI SaaS startup Stockholm',
+   market: 'SE',
+   profile: {
+     companyName: 'TechScale AB', industry: 'Tech/IT',
+     employees: 8, revenue: 2100000, foundedYear: 2024,
+     location: 'Stockholm', focusAreas: ['AI','Digitalization','SaaS'],
+     orgType: 'Aktiebolag'
+   },
+   expectedInTop10: ['vinnova','tillvaxtverket','eic'],
+   expectedNotInTop10: ['klimatklivet','jordbruksverket','kulturradet'],
+   maxAcceptableScoreForExclusions: 40,
+ },
+ {
+   id: 'C2', label: 'GreenBuild — Construction energy renovation Gothenburg',
+   market: 'SE',
+   profile: {
+     companyName: 'GreenBuild Entreprenad AB', industry: 'Construction',
+     employees: 45, revenue: 38000000, foundedYear: 2010,
+     location: 'Göteborg', focusAreas: ['Sustainability','Energy','Construction'],
+     orgType: 'Aktiebolag'
+   },
+   expectedInTop10: ['energimyndigheten','boverket','klimatklivet'],
+   expectedNotInTop10: ['eic','kulturradet','jordbruksverket'],
+   maxAcceptableScoreForExclusions: 35,
+ },
+ {
+   id: 'C3', label: 'NordAqua — AgTech sensors Luleå Norrbotten',
+   market: 'SE',
+   profile: {
+     companyName: 'NordAqua Fisketeknik AB', industry: 'Agriculture/AgTech',
+     employees: 12, revenue: 6500000, foundedYear: 2019,
+     location: 'Luleå', focusAreas: ['AgTech','Sustainability','Sensors','AI'],
+     orgType: 'Aktiebolag'
+   },
+   expectedInTop10: ['jordbruksverket','vinnova','norrbotten','formas'],
+   expectedNotInTop10: ['kulturradet','arvsfonden','trafikverket'],
+   maxAcceptableScoreForExclusions: 35,
+ },
+ {
+   id: 'C4', label: 'Medianova — MedTech digital health Malmö',
+   market: 'SE',
+   profile: {
+     companyName: 'Medianova Health AB', industry: 'Health/MedTech',
+     employees: 22, revenue: 14000000, foundedYear: 2021,
+     location: 'Malmö', focusAreas: ['HealthTech','AI','MedTech'],
+     orgType: 'Aktiebolag'
+   },
+   expectedInTop10: ['forte','ihi','vinnova','skane'],
+   expectedNotInTop10: ['jordbruksverket','klimatklivet','boverket'],
+   maxAcceptableScoreForExclusions: 35,
+ },
+ {
+   id: 'C5', label: 'Kulturkompaniet — Creative film Östersund HB',
+   market: 'SE',
+   profile: {
+     companyName: 'Kulturkompaniet i Östersund HB', industry: 'Culture/Creative',
+     employees: 0, revenue: 850000, foundedYear: 2017,
+     location: 'Östersund', focusAreas: ['Culture','Media','Creative'],
+     orgType: 'Handelsbolag'
+   },
+   expectedInTop10: ['kulturradet','creative_europe','konstnarsnamnden'],
+   expectedNotInTop10: ['eic','vinnova_innovation','energimyndigheten','klimatklivet'],
+   maxAcceptableScoreForExclusions: 30,
+ },
+ {
+   id: 'C6', label: 'ExportTech — Manufacturing export Västerås large SME',
+   market: 'SE',
+   profile: {
+     companyName: 'ExportTech Solutions AB', industry: 'Manufacturing',
+     employees: 67, revenue: 112000000, foundedYear: 2003,
+     location: 'Västerås', focusAreas: ['Manufacturing','Export','Automation'],
+     orgType: 'Aktiebolag'
+   },
+   expectedInTop10: ['ekn','vinnova_industri','tillvaxtverket'],
+   expectedNotInTop10: ['eic_startup','arvsfonden','kulturradet'],
+   maxAcceptableScoreForExclusions: 35,
+ },
+ {
+   id: 'C7', label: 'Solkraft — Energy cooperative Dalarna ekonomisk förening',
+   market: 'SE',
+   profile: {
+     companyName: 'Solkraft Kooperativ', industry: 'Energy',
+     employees: 3, revenue: 4200000, foundedYear: 2020,
+     location: 'Falun', focusAreas: ['Energy','Sustainability','Cleantech'],
+     orgType: 'Ekonomisk förening'
+   },
+   expectedInTop10: ['energimyndigheten','klimatklivet','naturvardsverket'],
+   expectedNotInTop10: ['eic','vinnova_deeptech','kulturradet'],
+   maxAcceptableScoreForExclusions: 35,
+ },
+ {
+   id: 'C8',
+   label: 'NEGATIVE CONTROL — Law firm Stockholm no R&D',
+   market: 'SE',
+   isNegativeControl: true,
+   profile: {
+     companyName: 'Björk & Partners Advokatbyrå AB', industry: 'Professional Services',
+     employees: 15, revenue: 18000000, foundedYear: 2008,
+     location: 'Stockholm', focusAreas: ['Legal','IP'],
+     orgType: 'Aktiebolag'
+   },
+   expectedInTop10: [],
+   expectedNotInTop10: ['vinnova','eic','energimyndigheten','klimatklivet'],
+   maxAcceptableScoreForExclusions: 30,
+   // PASS condition: fewer than 3 grants score above 60
+   negativeControlMaxHighScores: 3,
+   negativeControlScoreThreshold: 60,
+ },
+ {
+   id: 'C9', label: 'BioNord Pharma AS — Norwegian biotech Oslo',
+   market: 'NO',
+   profile: {
+     companyName: 'BioNord Pharma AS', industry: 'Health/Life Science',
+     employees: 34, revenue: 28000000, foundedYear: 2018,
+     location: 'Oslo', focusAreas: ['LifeScience','BioTech','MedTech'],
+     orgType: 'AS'
+   },
+   expectedInTop10: ['innovasjon_norge','forskningsradet','horizon'],
+   expectedNotInTop10: ['vinnova','region_stockholm','lansstyrelse'],
+   maxAcceptableScoreForExclusions: 25,
+   // CRITICAL: Swedish-only grants must NEVER appear for Norwegian company
+   marketSegmentationTest: true,
+   forbiddenMarkets: ['SE'],
+ },
+ {
+   id: 'C10', label: 'HelsinginTech Oy — Finnish quantum deeptech Helsinki',
+   market: 'FI',
+   profile: {
+     companyName: 'HelsinginTech Oy', industry: 'Tech/IT',
+     employees: 6, revenue: 1100000, foundedYear: 2022,
+     location: 'Helsinki', focusAreas: ['AI','Quantum','DeepTech'],
+     orgType: 'Oy'
+   },
+   expectedInTop10: ['business_finland','eic','horizon'],
+   expectedNotInTop10: ['vinnova','energimyndigheten','region_skane','jordbruksverket'],
+   maxAcceptableScoreForExclusions: 25,
+   marketSegmentationTest: true,
+   forbiddenMarkets: ['SE'],
+ },
+];
+ 
+═══════════════════════════════════════════════════════════════
+SECTION 2 — TEST RUNNER LOGIC
+═══════════════════════════════════════════════════════════════
+ 
+For each company in TEST_COMPANIES, the test runner should:
+ 
+1. Create a temporary in-memory company object matching the profile.
+  Do NOT insert into the database. Use the existing matching functions
+  directly by passing the company object as a parameter.
+ 
+2. Call the matching function from client/src/lib/matching.ts
+  (or the equivalent server-side function) with the temp company
+  and retrieve the full list of grants with scores.
+  Sort by score descending. Take top 20.
+ 
+3. Run these automated checks:
+ 
+  CHECK A — Relevance (top 10):
+    For each sourceName in the top 10 results,
+    check if any expectedInTop10 keyword appears in the sourceName (case-insensitive).
+    Count how many expected sources appear.
+    PASS if count >= Math.ceil(expectedInTop10.length * 0.6)   // 60% hit rate
+ 
+  CHECK B — Exclusion (top 10):
+    For each grant in top 10, check if any expectedNotInTop10 keyword
+    appears in sourceName or grant title (case-insensitive).
+    PASS if zero exclusions appear in top 10.
+ 
+  CHECK C — Score differentiation:
+    score1 = results[0].score  // highest
+    score10 = results[9].score // 10th
+    spread = score1 - score10
+    PASS if score1 >= 65 AND spread >= 25
+ 
+  CHECK D — Market segmentation (only for C9, C10):
+    For each grant in top 20, query the grants table for the grant's market field.
+    PASS if NO grant with market = forbiddenMarkets appears.
+ 
+  CHECK E — Negative control (only for C8):
+    Count grants in top 20 where score > negativeControlScoreThreshold.
+    PASS if count < negativeControlMaxHighScores.
+ 
+4. Store results per company as a typed TestResult object.
+ 
+═══════════════════════════════════════════════════════════════
+SECTION 3 — OUTPUT REPORT
+═══════════════════════════════════════════════════════════════
+ 
+After all 10 companies are tested, generate TWO outputs:
+ 
+OUTPUT A — Console summary (run with: npx tsx scripts/test-matching-quality.ts)
+ 
+ Format each company result like this:
+ ┌─────────────────────────────────────────────────┐
+ │ C1 — TechScale AB                               │
+ │ Checks: A ✅  B ✅  C ❌  D n/a  E n/a          │
+ │ Top 5 matches:                                  │
+ │   1. Vinnova Innovationsprojekt      score: 84  │
+ │   2. Tillväxtverket digitalisering   score: 78  │
+ │   3. EIC Accelerator                score: 71  │
+ │   4. EU F&T Horizon MSCA            score: 55  │
+ │   5. Klimatklivet [⚠️ EXCLUSION]    score: 48  │
+ │ Issues: Check C failed — spread only 18 pts    │
+ └─────────────────────────────────────────────────┘
+ 
+ End with an overall summary:
+ Overall: 8/10 companies passed all checks.
+ Failed companies: C1 (Check C), C8 (Check E)
+ Critical failures: 0 (market segmentation)
+ 
+OUTPUT B — JSON report saved to: scripts/matching-test-results.json
+ 
+ {
+   'runAt': '<ISO timestamp>',
+   'totalCompanies': 10,
+   'passed': 8,
+   'failed': 2,
+   'criticalFailures': 0,
+   'results': [
+     {
+       'companyId': 'C1',
+       'label': 'TechScale AB...',
+       'checks': { 'A': true, 'B': true, 'C': false, 'D': null, 'E': null },
+       'top20Grants': [
+         { 'rank': 1, 'title': '...', 'sourceName': '...', 'score': 84,
+           'isExpectedMatch': true, 'isExpectedExclusion': false }
+       ],
+       'issues': ['Check C: spread 18pts (need 25+)']
+     }
+   ]
+ }
+ 
+═══════════════════════════════════════════════════════════════
+SECTION 4 — ALSO CREATE: Admin UI endpoint
+═══════════════════════════════════════════════════════════════
+ 
+Add GET /api/admin/matching-test to server/routes.ts (admin auth required).
+ 
+This endpoint:
+ 1. Reads the most recent scripts/matching-test-results.json
+ 2. Returns it as JSON
+ 3. If no file exists, returns { 'status': 'not_run', 'message': 'Run test first' }
+ 
+Add a 'Matching Quality' card to the Admin dashboard (admin pages) that shows:
+ - Date of last test run
+ - Overall pass/fail count (e.g. '8/10 passed')
+ - A red badge if any criticalFailures > 0
+ - A 'Run test' button that calls:
+   POST /api/admin/matching-test/run
+   (This endpoint shells out to run the TypeScript test file in background
+   and returns immediately with { status: 'running' })
+ 
+═══════════════════════════════════════════════════════════════
+SECTION 5 — PACKAGE.JSON SCRIPT
+═══════════════════════════════════════════════════════════════
+ 
+Add to package.json scripts section:
+ "test:matching": "npx tsx scripts/test-matching-quality.ts"
+ 
+VERIFICATION STEPS after implementation:
+ 1. Run: npm run test:matching
+ 2. Confirm output shows all 10 companies with individual check results.
+ 3. Confirm matching-test-results.json is created in /scripts/
+ 4. Open /admin — confirm 'Matching Quality' card is visible.
+ 5. Check C8 (law firm) — if it scores high on many grants, that is a
+    real matching problem, not a test problem. Document it as a finding.
+ 6. Check C9 and C10 — if Swedish grants appear for Norwegian/Finnish
+    companies, market segmentation is broken. Fix is in the grants query
+    filter: WHERE market = company.market OR market IS NULL.
+ 

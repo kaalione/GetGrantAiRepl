@@ -1,0 +1,65 @@
+
+FIX 02  Set correct default score for grants with no eligibility data
+Root cause
+When a grant has no structured_eligibility (or eligibility with confidence_score < 0.3), the fallback matching gives maximum points for every criterion because there is nothing to fail against. This means a law firm scores 100 on a Vinnova deeptech grant just because Vinnova hasn't described who can't apply. The fix is a single number change: default score = 35, not 100.
+ 
+Files to change: client/src/lib/matching.ts  ·  server/services/matching.ts (if exists)
+📋  Replit Prompt
+ 
+═══════════════════════════════════════════════════════
+TASK: Fix the fallback score for grants without eligibility data.
+This is the single highest-impact change in this entire fix plan.
+═══════════════════════════════════════════════════════
+ 
+STEP 1 — Find the fallback matching function.
+ Search for: fallbackBasicMatch OR fallback OR 'no structured'
+ It will be in client/src/lib/matching.ts or a server equivalent.
+ 
+STEP 2 — Find where the default/fallback score is set.
+ Look for patterns like:
+   return { score: 50, ... }   // when criteria is null
+   score += maxPoints;         // when check result is 'unknown'
+   if (!criteria) return base; // base is probably 50-100
+ 
+STEP 3 — Change the fallback score logic:
+ 
+// OLD (wrong): unknown/missing data = full points
+// if (sizeCheck === 'unknown') totalScore += 25;  // gives 25
+// if (sectorCheck === 'unknown') totalScore += 20; // gives 20
+ 
+// NEW (correct): unknown = partial credit only
+const UNKNOWN_WEIGHT = 0.3;  // unknown criteria give 30% of max points
+ 
+// For each criterion where result === 'unknown':
+// totalScore += Math.round(maxPoints * UNKNOWN_WEIGHT);
+ 
+STEP 4 — Add an explicit early return for truly empty grants:
+ 
+if (!structuredEligibility ||
+   structuredEligibility.confidence_score < 0.3) {
+ // Grant has no reliable eligibility data.
+ // Return a neutral-low score: visible but deprioritised.
+ // Do NOT return 0 — these grants might still be relevant.
+ return {
+   score: 35,
+   breakdown: { noData: { score: 35, max: 100,
+     note: 'No structured eligibility data — score estimated' } },
+   eligible: false,  // unknown, show as uncertain
+   blockers: [],
+   warnings: ['Eligibility criteria not yet extracted for this grant'],
+ };
+}
+ 
+STEP 5 — Verify the change does not affect grants WITH good eligibility data.
+ The early return only fires when confidence_score < 0.3.
+ Grants with real structured data (confidence >= 0.3) go through
+ the full scoring logic unchanged.
+ 
+STEP 6 — Run the test suite:
+ npx tsx scripts/test-matching-quality.ts
+✅  Verification
+6. Run test suite — Check C (score spread) should now pass for most companies
+7. C8 (law firm) should have fewer than 3 grants scoring above 60 (Check E pass)
+8. Verify the top-matches for C1 (TechScale) still include Vinnova at score ≥70
+9. Confirm grants WITH structured_eligibility still score correctly (not all 35)
+10. Open /bidrag in the browser — top matches should look more differentiated than before

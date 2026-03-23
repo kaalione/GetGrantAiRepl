@@ -1,0 +1,53 @@
+Run the following SQL query in your database console (Replit DB tab or psql). The output tells you exactly where to focus extraction effort — which sources have the worst coverage, how many grants are in each bucket, and what the extraction API cost will be.
+ 
+-- Coverage breakdown by source
+-- Run this before the prompt to understand scope
+SELECT
+ source_name,
+ COUNT(*) AS total,
+ COUNT(*) FILTER (WHERE structured_eligibility IS NOT NULL
+   AND (structured_eligibility->>'confidence_score')::float >= 0.3
+ ) AS high_conf,
+ COUNT(*) FILTER (WHERE structured_eligibility IS NULL) AS not_extracted,
+ COUNT(*) FILTER (
+   WHERE structured_eligibility IS NOT NULL
+   AND (structured_eligibility->>'confidence_score')::float < 0.3
+ ) AS low_conf,
+ ROUND(100.0 * COUNT(*) FILTER (
+   WHERE structured_eligibility IS NOT NULL
+   AND (structured_eligibility->>'confidence_score')::float >= 0.3
+ ) / COUNT(*), 0) AS pct_good
+FROM grants
+WHERE status IN ('open', 'upcoming')
+GROUP BY source_name
+ORDER BY pct_good ASC, not_extracted DESC;
+ 
+Also run this summary to see the overall numbers before and after:
+ 
+-- Overall structured eligibility summary
+SELECT
+ COUNT(*) AS total_open,
+ COUNT(*) FILTER (WHERE structured_eligibility IS NOT NULL
+   AND (structured_eligibility->>'confidence_score')::float >= 0.3
+ ) AS good_coverage,
+ COUNT(*) FILTER (WHERE structured_eligibility IS NULL) AS never_extracted,
+ COUNT(*) FILTER (
+   WHERE structured_eligibility IS NOT NULL
+   AND (structured_eligibility->>'confidence_score')::float < 0.3
+ ) AS needs_retry,
+ ROUND(100.0 * COUNT(*) FILTER (
+   WHERE structured_eligibility IS NOT NULL
+   AND (structured_eligibility->>'confidence_score')::float >= 0.3
+ ) / COUNT(*), 1) AS pct_coverage
+FROM grants
+WHERE status IN ('open', 'upcoming');
+ 
+What to do with the output
+Sources at 0% good coverage:  These need full extraction — prioritise first.
+Sources at 1–50% good coverage:  Partial extraction — re-run on the missing grants.
+Sources at 50–80% good coverage:  Spot-check quality, re-run low-confidence ones.
+Sources at 80%+:  Already good — don't re-extract, save API budget.
+ 
+Typical pattern: EU Funding & Tenders will have many grants because
+the raw description is often a one-line summary with no eligibility detail.
+These are expected low-confidence outputs — flag them rather than re-running.

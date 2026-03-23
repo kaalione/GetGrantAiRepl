@@ -1,0 +1,986 @@
+Build an AI-powered onboarding wizard for GetGrant.ai that lets users enter
+their company website URL and automatically populates their company profile
+using AI. This replaces the current manual form-filling experience with an
+intelligent, conversational flow that dramatically reduces time-to-value.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1: DATABASE SCHEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add to shared/schema.ts and run npm run db:push.
+```typescript
+// Track each onboarding attempt — useful for analytics and debugging
+export const onboardingSessions = pgTable('onboarding_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: varchar('user_id').notNull(),
+  companyId: uuid('company_id').references(() => companies.id),
+
+  // Which step the user is currently on
+  currentStep: integer('current_step').default(1),
+  // 1=welcome | 2=url_input | 3=ai_extraction | 4=review_profile |
+  // 5=sector_goals | 6=complete
+  totalSteps: integer('total_steps').default(6),
+  completedAt: timestamp('completed_at'),
+  skippedAt: timestamp('skipped_at'),           // if user clicked "skip wizard"
+  abandonedAt: timestamp('abandoned_at'),        // if session went stale (7+ days)
+
+  // URL extraction attempt
+  websiteUrl: varchar('website_url'),
+  extractionStatus: varchar('extraction_status'),
+  // idle | scraping | extracting | success | partial | failed | skipped
+  extractionAttempts: integer('extraction_attempts').default(0),
+  lastExtractionAt: timestamp('last_extraction_at'),
+
+  // What the AI extracted (raw, before user edits)
+  rawExtractedData: jsonb('raw_extracted_data').default('{}'),
+  // Full ExtractedCompanyData object stored here
+
+  // Confidence scores per field (0-100)
+  confidenceScores: jsonb('confidence_scores').default('{}'),
+  // { companyName: 95, description: 80, sector: 70, ... }
+
+  // Which fields were auto-filled vs manually entered
+  autoFilledFields: varchar('auto_filled_fields').array().default('[]'),
+  // ['companyName', 'description', 'sector', ...]
+  userEditedFields: varchar('user_edited_fields').array().default('[]'),
+  // fields user changed after AI suggestion
+
+  // User feedback on extraction quality
+  extractionRating: integer('extraction_rating'),    // 1-5 stars
+  extractionFeedback: text('extraction_feedback'),
+
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Store scraped page content for reuse and debugging
+export const websiteScrapeCache = pgTable('website_scrape_cache', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  url: varchar('url').notNull().unique(),
+  normalizedUrl: varchar('normalized_url').notNull(),    // canonical form
+  scrapedContent: text('scraped_content'),               // extracted text content
+  scrapedAt: timestamp('scraped_at').defaultNow(),
+  statusCode: integer('status_code'),
+  errorMessage: varchar('error_message'),
+  contentLength: integer('content_length'),              // chars
+  // Cache valid for 7 days
+  expiresAt: timestamp('expires_at'),
+});
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2: WEBSITE SCRAPING & AI EXTRACTION SERVICE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create server/services/websiteExtractor.ts:
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import * as cheerio from 'cheerio';    // npm install cheerio
+
+// ─── Types ────────────────────────────────────────────────────────────────
+
+export interface ExtractedCompanyData {
+  // Core identity
+  companyName: string | null;
+  description: string | null;          // 2-4 sentence company description
+  tagline: string | null;              // short one-liner if found
+  foundedYear: number | null;
+  orgNumber: string | null;            // Swedish org number if found
+
+  // Sector & industry
+  sector: string | null;
+  // Maps to GetGrant.ai sector options:
+  // 'tech' | 'cleantech' | 'life_science' | 'manufacturing' |
+  // 'creative' | 'agriculture' | 'social' | 'other'
+  industryKeywords: string[];          // e.g. ['AI', 'SaaS', 'B2B']
+  naicsCode: string | null;           // if determinable
+
+  // Size & stage
+  employeeCount: string | null;
+  // '1-10' | '11-50' | '51-200' | '201-500' | '500+'
+  companyStage: string | null;
+  // 'idea' | 'startup' | 'growth' | 'established' | 'enterprise'
+  revenueRange: string | null;
+  // '<1M' | '1-10M' | '10-50M' | '50M+'
+
+  // Geography
+  city: string | null;
+  region: string | null;              // e.g. 'Stockholm', 'Västra Götaland'
+  country: string | null;
+  isSwedish: boolean;
+
+  // Technology & innovation
+  technologyAreas: string[];          // e.g. ['Machine Learning', 'IoT']
+  hasRdFocus: boolean;                // does the company do R&D?
+  innovationLevel: string | null;
+  // 'product_innovation' | 'process_innovation' | 'research'
+
+  // Business model
+  businessModel: string | null;       // 'B2B' | 'B2C' | 'B2G' | 'mixed'
+  isExportFocused: boolean;
+  targetMarkets: string[];
+
+  // Sustainability
+  sustainabilityFocus: boolean;
+  sustainabilityAreas: string[];      // e.g. ['circular economy', 'clean energy']
+
+  // Confidence scores (0-100) per field
+  confidence: {
+    companyName: number;
+    description: number;
+    sector: number;
+    employeeCount: number;
+    city: number;
+    technologyAreas: number;
+    [key: string]: number;
+  };
+
+  // Source info
+  extractedFrom: string[];            // which URLs were used
+  extractionNotes: string | null;     // AI notes on what was/wasn't found
+}
+
+// ─── URL normalization ────────────────────────────────────────────────────
+
+export function normalizeUrl(input: string): string {
+  let url = input.trim();
+  
+  // Add protocol if missing
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = `https://${url}`;
+  }
+  
+  try {
+    const parsed = new URL(url);
+    // Normalize: remove trailing slash, force https
+    return `https://${parsed.hostname}${parsed.pathname.replace(/\/$/, '')}`;
+  } catch {
+    throw new Error(`Ogiltig URL: ${input}`);
+  }
+}
+
+// ─── Multi-page scraping ──────────────────────────────────────────────────
+
+export async function scrapeWebsite(
+  baseUrl: string
+): Promise<{ content: string; pagesScraped: string[]; errors: string[] }> {
+  const normalizedBase = normalizeUrl(baseUrl);
+  const hostname = new URL(normalizedBase).hostname;
+  
+  // Pages to try scraping (in order of information richness)
+  const pagesToTry = [
+    normalizedBase,                          // homepage
+    `${normalizedBase}/om-oss`,              // Swedish "about us"
+    `${normalizedBase}/about`,
+    `${normalizedBase}/about-us`,
+    `${normalizedBase}/om`,
+    `${normalizedBase}/foretaget`,
+    `${normalizedBase}/vi`,
+    `${normalizedBase}/team`,
+  ].filter((url, index, self) => self.indexOf(url) === index); // deduplicate
+
+  const scrapedContent: string[] = [];
+  const pagesScraped: string[] = [];
+  const errors: string[] = [];
+  
+  const SCRAPE_TIMEOUT_MS = 8000;
+  const MAX_CONTENT_LENGTH = 15000;          // chars per page
+  
+  for (const pageUrl of pagesToTry) {
+    // Stop if we have enough content
+    if (scrapedContent.join('\n').length > 30000) break;
+    
+    // Check cache first
+    const cached = await db.query.websiteScrapeCache.findFirst({
+      where: and(
+        eq(websiteScrapeCache.normalizedUrl, pageUrl),
+        gt(websiteScrapeCache.expiresAt, new Date())
+      )
+    });
+    
+    if (cached?.scrapedContent) {
+      scrapedContent.push(`[${pageUrl}]\n${cached.scrapedContent}`);
+      pagesScraped.push(pageUrl);
+      continue;
+    }
+    
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), SCRAPE_TIMEOUT_MS);
+      
+      const response = await fetch(pageUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; GetGrant.ai/1.0; +https://getgrant.ai/bot)',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'sv-SE,sv;q=0.9,en;q=0.8'
+        }
+      });
+      clearTimeout(timeout);
+      
+      if (!response.ok) {
+        // 404 on /om-oss is expected and not an error worth logging
+        if (response.status !== 404) {
+          errors.push(`${pageUrl}: HTTP ${response.status}`);
+        }
+        continue;
+      }
+      
+      const html = await response.text();
+      const extracted = extractTextFromHtml(html, MAX_CONTENT_LENGTH);
+      
+      // Cache the result
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await db.insert(websiteScrapeCache).values({
+        url: pageUrl,
+        normalizedUrl: pageUrl,
+        scrapedContent: extracted,
+        statusCode: response.status,
+        contentLength: extracted.length,
+        expiresAt
+      }).onConflictDoUpdate({
+        target: websiteScrapeCache.url,
+        set: { scrapedContent: extracted, scrapedAt: new Date(), expiresAt }
+      });
+      
+      scrapedContent.push(`[${pageUrl}]\n${extracted}`);
+      pagesScraped.push(pageUrl);
+      
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        errors.push(`${pageUrl}: Timeout efter ${SCRAPE_TIMEOUT_MS / 1000}s`);
+      } else if (pageUrl !== normalizedBase) {
+        // Silently skip sub-pages that fail
+      } else {
+        errors.push(`${pageUrl}: ${error.message}`);
+      }
+    }
+    
+    // Rate limit: wait 500ms between requests to same domain
+    await new Promise(r => setTimeout(r, 500));
+  }
+  
+  return {
+    content: scrapedContent.join('\n\n---\n\n'),
+    pagesScraped,
+    errors
+  };
+}
+
+function extractTextFromHtml(html: string, maxLength: number): string {
+  const $ = cheerio.load(html);
+  
+  // Remove non-content elements
+  $('script, style, nav, footer, header, aside, iframe, noscript, ' +
+    '.cookie-banner, .cookie-notice, #cookie, [aria-hidden="true"]').remove();
+  
+  // Prioritize semantic content areas
+  const contentSelectors = [
+    'main', 'article', '[role="main"]',
+    '.about, .om-oss, .company, .foretag',
+    'h1, h2, h3', 'p', 'li'
+  ];
+  
+  let text = '';
+  
+  // Extract meta description first (often best summary)
+  const metaDescription = $('meta[name="description"]').attr('content');
+  if (metaDescription) {
+    text += `[Meta description]: ${metaDescription}\n\n`;
+  }
+  
+  // Extract title
+  const title = $('title').text().trim();
+  if (title) text += `[Title]: ${title}\n\n`;
+  
+  // Extract body text
+  text += $('body').text()
+    .replace(/\s+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  
+  return text.substring(0, maxLength);
+}
+
+// ─── AI extraction ────────────────────────────────────────────────────────
+
+export async function extractCompanyDataFromWebsite(
+  websiteContent: string,
+  websiteUrl: string
+): Promise<ExtractedCompanyData> {
+  const client = new Anthropic();
+  
+  const prompt = `You are analyzing a Swedish company's website to extract structured information
+for a grant-matching platform called GetGrant.ai.
+
+WEBSITE URL: ${websiteUrl}
+WEBSITE CONTENT:
+${websiteContent}
+
+Extract ALL available information about this company. Be precise and conservative —
+only extract what is clearly stated or strongly implied. Do not guess or invent data.
+
+For each field, assign a confidence score (0-100):
+- 95-100: Explicitly stated (e.g., "Founded in 2018")
+- 70-94: Strongly implied (e.g., tech company clearly doing R&D)
+- 40-69: Reasonable inference (e.g., company size from team page size)
+- 0-39: Low confidence guess — prefer null over a bad guess
+
+SECTOR OPTIONS (pick the best match):
+- tech: Software, SaaS, IT, digital services, apps
+- cleantech: Clean energy, sustainability, environmental technology
+- life_science: Medical devices, pharma, biotech, health technology
+- manufacturing: Industrial production, hardware, physical products
+- creative: Media, design, gaming, entertainment, marketing
+- agriculture: Food production, agritech, farming
+- social: Social enterprise, NGO, welfare services
+- other: Doesn't fit above categories
+
+EMPLOYEE COUNT OPTIONS: '1-10', '11-50', '51-200', '201-500', '500+'
+
+COMPANY STAGE OPTIONS:
+- idea: Pre-revenue, concept stage
+- startup: Early revenue, <3 years old OR explicitly called startup
+- growth: Scaling, growing team/revenue
+- established: Stable, profitable, 5+ years
+- enterprise: Large, complex organization
+
+REGION OPTIONS (Swedish regions):
+Stockholm, Uppsala, Södermanland, Östergötland, Jönköping, Kronoberg,
+Kalmar, Gotland, Blekinge, Skåne, Halland, Västra Götaland, Värmland,
+Örebro, Västmanland, Dalarna, Gävleborg, Västernorrland, Jämtland,
+Västerbotten, Norrbotten
+
+Respond ONLY with a valid JSON object matching this exact structure:
+{
+  "companyName": string | null,
+  "description": string | null,        // 2-4 sentences in Swedish if company is Swedish
+  "tagline": string | null,
+  "foundedYear": number | null,
+  "orgNumber": string | null,          // format: XXXXXX-XXXX or null
+  "sector": string | null,             // from SECTOR OPTIONS above
+  "industryKeywords": string[],        // max 6 keywords
+  "employeeCount": string | null,      // from EMPLOYEE COUNT OPTIONS
+  "companyStage": string | null,       // from COMPANY STAGE OPTIONS
+  "revenueRange": string | null,       // '<1M' | '1-10M' | '10-50M' | '50M+' | null
+  "city": string | null,
+  "region": string | null,             // from REGION OPTIONS or null
+  "country": string | null,
+  "isSwedish": boolean,
+  "technologyAreas": string[],         // e.g. ['Machine Learning', 'IoT'] — max 5
+  "hasRdFocus": boolean,
+  "innovationLevel": string | null,    // 'product_innovation' | 'process_innovation' | 'research' | null
+  "businessModel": string | null,      // 'B2B' | 'B2C' | 'B2G' | 'mixed' | null
+  "isExportFocused": boolean,
+  "targetMarkets": string[],           // countries or regions, max 5
+  "sustainabilityFocus": boolean,
+  "sustainabilityAreas": string[],     // max 4
+  "confidence": {
+    "companyName": number,
+    "description": number,
+    "sector": number,
+    "employeeCount": number,
+    "city": number,
+    "technologyAreas": number,
+    "foundedYear": number,
+    "businessModel": number,
+    "companyStage": number
+  },
+  "extractedFrom": string[],           // which page URLs had the best info
+  "extractionNotes": string | null     // brief note on what was/wasn't found
+}`;
+
+  const response = await client.messages.create({
+    model: 'claude-opus-4-5',
+    max_tokens: 1500,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  
+  const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+  
+  try {
+    const data = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return data as ExtractedCompanyData;
+  } catch {
+    // If parsing fails, return minimal structure with low confidence
+    return {
+      companyName: null, description: null, tagline: null,
+      foundedYear: null, orgNumber: null, sector: null,
+      industryKeywords: [], employeeCount: null, companyStage: null,
+      revenueRange: null, city: null, region: null, country: null,
+      isSwedish: false, technologyAreas: [], hasRdFocus: false,
+      innovationLevel: null, businessModel: null, isExportFocused: false,
+      targetMarkets: [], sustainabilityFocus: false, sustainabilityAreas: [],
+      confidence: {
+        companyName: 0, description: 0, sector: 0,
+        employeeCount: 0, city: 0, technologyAreas: 0,
+        foundedYear: 0, businessModel: 0, companyStage: 0
+      },
+      extractedFrom: [],
+      extractionNotes: 'Kunde inte analysera webbplatsen — fyll i uppgifterna manuellt.'
+    };
+  }
+}
+
+// ─── Map extracted data to company profile fields ─────────────────────────
+
+export function mapExtractedDataToCompanyProfile(
+  data: ExtractedCompanyData
+): Partial<CompanyProfile> {
+  return {
+    name: data.companyName || undefined,
+    description: data.description || undefined,
+    website: undefined,                          // already provided by user
+    foundedYear: data.foundedYear || undefined,
+    orgNumber: data.orgNumber || undefined,
+    sector: data.sector || undefined,
+    employeeCount: data.employeeCount || undefined,
+    companyStage: data.companyStage || undefined,
+    city: data.city || undefined,
+    region: data.region || undefined,
+    country: data.country || 'Sverige',
+    technologyKeywords: data.technologyAreas,
+    industryKeywords: data.industryKeywords,
+    hasRdFocus: data.hasRdFocus,
+    businessModel: data.businessModel || undefined,
+    isExportFocused: data.isExportFocused,
+    sustainabilityFocus: data.sustainabilityFocus,
+    sustainabilityAreas: data.sustainabilityAreas,
+  };
+}
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3: API ROUTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create server/routes/onboarding.ts. Mount at /api/onboarding.
+POST /api/onboarding/start
+Start or resume an onboarding session for the current user.
+Process:
+
+Check if existing incomplete session → return it
+Otherwise create new session with currentStep: 1
+If user already has a company profile, set currentStep to the
+first incomplete step
+
+Response: {
+sessionId: string,
+currentStep: number,
+completedAt: string | null,
+existingProfile: boolean,     // true if user already has some profile data
+resuming: boolean             // true if resuming an existing session
+}
+POST /api/onboarding/extract
+Main endpoint — scrape website and extract company data.
+Body: { sessionId: string, websiteUrl: string }
+Validation:
+
+Session must belong to the current user
+URL must be valid and not a localhost/private IP
+Rate limit: max 3 extraction attempts per session, 10 per user per day
+
+Process:
+
+Update session: extractionStatus='scraping', websiteUrl=normalizedUrl
+Scrape website (scrapeWebsite())
+Update session: extractionStatus='extracting'
+Extract company data with AI (extractCompanyDataFromWebsite())
+Store raw result in session.rawExtractedData
+Store confidence scores in session.confidenceScores
+Update session: extractionStatus='success' (or 'partial' if many nulls)
+Increment extractionAttempts
+
+Response: {
+sessionId: string,
+status: 'success' | 'partial' | 'failed',
+extractedData: ExtractedCompanyData,
+mappedProfile: Partial<CompanyProfile>,
+fieldsFound: number,           // how many non-null fields extracted
+totalFields: number,
+confidenceScores: Record<string, number>,
+pagesScraped: string[],
+message: string                // human-readable summary
+}
+Error responses:
+
+400: Invalid URL
+400: URL appears to be localhost or private IP
+429: Too many extraction attempts
+422: Website unreachable or returned no content
+{ error: 'website_unreachable', message: string, suggestion: string }
+504: Scraping timed out
+{ error: 'timeout', message: string }
+
+GET /api/onboarding/session
+Get current session state for the logged-in user.
+Response: full session object including rawExtractedData
+PUT /api/onboarding/step
+Update the current step.
+Body: { sessionId: string, step: number }
+POST /api/onboarding/save-profile
+Save the reviewed/edited profile data to the companies table.
+Body: {
+sessionId: string,
+profileData: CompanyProfile,
+autoFilledFields: string[],    // which fields came from AI
+userEditedFields: string[]     // which fields user manually changed
+}
+Process:
+
+Validate all required fields present
+Upsert company profile in companies table
+Update session: currentStep = 5 (sector/goals step)
+Track which fields were auto-filled vs edited
+
+Response: { companyId: string, profileCompletion: number }
+POST /api/onboarding/complete
+Mark onboarding as complete.
+Body: { sessionId: string, extractionRating?: number, extractionFeedback?: string }
+Process:
+
+Set session.completedAt = now()
+Store user feedback if provided
+Trigger first AI grant matching run for the company
+Return redirect destination
+
+Response: {
+redirectTo: string,            // '/grants?firstVisit=true' or '/dashboard'
+matchesReady: boolean,
+message: string
+}
+POST /api/onboarding/skip
+Skip the wizard entirely — go straight to manual profile form.
+Body: { sessionId: string }
+Sets session.skippedAt = now()
+POST /api/onboarding/retry-extraction
+Retry extraction with the same or a different URL.
+Body: { sessionId: string, websiteUrl?: string }
+Reuses existing session, increments extractionAttempts.
+Returns same structure as /extract.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 4: FRONTEND — ONBOARDING WIZARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create client/src/pages/onboarding.tsx.
+Route: /onboarding (redirect here after first login if no company profile).
+
+Use a full-page wizard layout — no main nav, just the wizard UI.
+Progress indicator at the top shows current step.
+
+## Step 1 — Välkommen
+[GetGrant.ai logotyp]
+Välkommen till GetGrant.ai, {firstName}! 👋
+Vi hjälper dig hitta rätt bidrag på under 5 minuter.
+Steg 1 av 5: Berätta om ditt företag →
+Det enklaste sättet: klistra in din hemsideadress
+så analyserar vår AI din webbplats och fyller i
+företagsprofilen automatiskt.
+Du kan granska och ändra allt innan vi sparar.
+──────────────────────────────────
+[Kom igång →]
+[Jag vill fylla i manuellt]    ← smaller, secondary link
+
+## Step 2 — Webbplatsanalys (URL input)
+[Progress: ●●○○○○]
+🌐 Ange din företagswebbplats
+Vi analyserar din webbplats och skapar
+din företagsprofil automatiskt.
+┌──────────────────────────────────────────────────────┐
+│  https://dittforetag.se                              │
+│  [Analysera min webbplats →]                         │
+└──────────────────────────────────────────────────────┘
+Tips: Fungerar bäst med webbplatser som har
+en "Om oss"-sida.
+[Har ingen webbplats? Fyll i manuellt]
+─── WHILE SCRAPING (show animated states) ─────────────
+State 1 (0-3s):
+⏳ Hämtar din webbplats...
+Vi laddar din webbplats och eventuella undersidor.
+State 2 (3-8s):
+🔍 Analyserar innehållet...
+Vår AI läser igenom webbplatsen.
+State 3 (8-15s):
+✨ Skapar din företagsprofil...
+Nästan klart!
+─── SUCCESS STATE ──────────────────────────────────────
+✅ Vi hittade information om ditt företag!
+Vi extraherade {fieldsFound} uppgifter från
+din webbplats. Granska och justera på nästa sida.
+[Granska uppgifterna →]
+─── PARTIAL SUCCESS ────────────────────────────────────
+⚠️ Vi hittade en del information
+Vi extraherade {fieldsFound} av {totalFields} uppgifter.
+Du behöver fylla i resten manuellt.
+[Granska och komplettera →]
+─── FAILURE STATE ──────────────────────────────────────
+😕 Kunde inte analysera webbplatsen
+{specificReason}:
+
+Webbplatsen är inte tillgänglig
+Innehållet är skyddat
+Sidan laddar med JavaScript (vi kan inte läsa den)
+
+[Prova en annan URL]  [Fyll i manuellt]
+
+## Step 3 — Granska företagsprofil
+[Progress: ●●●○○○]
+✨ Granska din företagsprofil
+Vi har fyllt i uppgifterna baserat på din webbplats.
+Kontrollera att allt stämmer — du kan ändra vad som helst.
+──────────────────────────────────────────────────────────
+GRUNDINFORMATION
+Företagsnamn *
+┌──────────────────────────────────────────┐
+│ Acme Tech AB                        ✅ AI │  ← badge shows AI-filled
+└──────────────────────────────────────────┘
+Org.nummer
+┌──────────────────────────────────────────┐
+│ 556123-4567                         ✅ AI │
+└──────────────────────────────────────────┘
+Grundat år
+┌──────────────────────────────────────────┐
+│ 2019                                ✅ AI │
+└──────────────────────────────────────────┘
+Beskrivning *
+┌──────────────────────────────────────────┐
+│ Acme Tech AB utvecklar AI-drivna         │  ← editable textarea
+│ lösningar för logistikbranschen.         │  AI
+│ Företaget grundades 2019 i Stockholm     │
+│ och har idag 15 anställda.              │
+└──────────────────────────────────────────┘
+AI-konfidens: ████████░░ 82%              ← shown under low-confidence fields
+──────────────────────────────────────────────────────────
+BRANSCH & TEKNIK
+Sektor *
+[Tech & Mjukvara ▼]  ✅ AI
+Teknikområden
+[AI/ML] [Logistik] [SaaS] [+ Lägg till]  ✅ AI
+Antal anställda *
+[11-50 ▼]  ⚠️ Osäker (konfidens: 45%)   ← amber warning for low confidence
+──────────────────────────────────────────────────────────
+GEOGRAFI
+Stad *
+┌──────────────────────────────────────────┐
+│ Stockholm                           ✅ AI │
+└──────────────────────────────────────────┘
+Län/Region *
+[Stockholm ▼]  ✅ AI
+──────────────────────────────────────────────────────────
+FÖR BÄTTRE MATCHNING (optional)
+Affärsmodell
+[B2B ▼]  ✅ AI
+Exportfokus
+[✅] Vi säljer internationellt
+F&U-fokus (forskning & utveckling)
+[✅] Vi bedriver aktiv forskning och produktutveckling
+Hållbarhetsfokus
+[ ] Hållbarhet är centralt för vår verksamhet
+──────────────────────────────────────────────────────────
+[← Ändra URL]          [Spara och fortsätt →]
+
+Field badge system:
+- ✅ AI (green) → AI-filled with high confidence (≥70)
+- ⚠️ AI (amber) → AI-filled with low confidence (<70) — user should verify
+- (no badge) → field is empty, user needs to fill in
+
+## Step 4 — Bidragsmål
+[Progress: ●●●●○○]
+🎯 Vad vill du använda bidragen till?
+Vi använder detta för att prioritera de bidrag
+som passar bäst för ditt företag just nu.
+Vad är ditt primära mål? (välj ett)
+○ Produktutveckling / R&D
+○ Marknadsetablering / export
+○ Rekrytering / kompetensförsörjning
+○ Hållbarhetsomställning
+○ Digitalisering
+○ Infrastruktur / lokaler
+Hur stor finansiering letar du efter?
+○ Upp till 500 000 SEK (seed/tidig fas)
+○ 500 000 – 2 000 000 SEK (tillväxt)
+○ 2 000 000 – 10 000 000 SEK (scale-up)
+○ Över 10 000 000 SEK (stora projekt)
+○ Vet inte ännu
+Hur snabbt behöver du finansiering?
+○ Inom 3 månader
+○ 3–12 månader
+○ Inget akut — utforskar möjligheter
+[← Tillbaka]          [Se mina bidragsmatchningar →]
+
+## Step 5 — E-postnotifieringar
+[Progress: ●●●●●○]
+🔔 Håll dig uppdaterad om nya bidrag
+Vi hittar kontinuerligt nya bidrag som matchar
+ditt företag. Hur vill du bli notifierad?
+[✅] Veckovis sammanfattning av nya matchningar
+(rekommenderas)
+[ ] Direktnotifiering vid nya bidrag
+[ ] Deadline-påminnelser (7 och 1 dag innan)
+E-post: anna@acmetech.se ✓ (förfylld)
+[← Tillbaka]          [Klar — visa mina bidrag →]
+
+## Step 6 — Klart!
+🎉 Välkommen till GetGrant.ai!
+Din profil är klar. Vi hittade redan
+{matchCount} bidrag som matchar ditt företag.
+┌──────────────────────────────────────────────┐
+│  🏆 Bästa matchning                          │
+│  Vinnova: Innovationsprojekt i företag       │
+│  Matchning: 87%  |  Deadline: 15 apr 2026   │
+│  [Läs mer →]                                 │
+└──────────────────────────────────────────────┘
+[Se alla {matchCount} matchningar →]
+──────────────────────────────────────────────
+Hur bra stämde AI-analysen?
+★ ★ ★ ★ ★  [stjärnbetyg, 1-5]
+Kommentar (valfritt):
+[________________________]
+[Skicka feedback]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 5: EXISTING PROFILE EDIT — ADD URL BUTTON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The AI extraction should also be available from the existing company
+profile edit page — not just during onboarding.
+
+Add to client/src/pages/profile.tsx (or wherever CompanyProfileForm lives):
+```tsx
+// At the top of the profile edit form, above all fields:
+
+<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+  <div className="flex items-start gap-3">
+    <Sparkles className="text-blue-600 mt-0.5" size={18} />
+    <div className="flex-1">
+      <p className="font-medium text-blue-900 text-sm">
+        Fyll i profilen automatiskt med AI
+      </p>
+      <p className="text-blue-700 text-sm mt-0.5">
+        Ange din webbplatsadress så hjälper AI:n till att fylla i uppgifterna.
+      </p>
+      <div className="flex gap-2 mt-2">
+        <input
+          type="url"
+          placeholder="https://dittforetag.se"
+          value={websiteUrl}
+          onChange={e => setWebsiteUrl(e.target.value)}
+          className="flex-1 text-sm border rounded px-3 py-1.5"
+        />
+        <Button 
+          size="sm" 
+          onClick={handleExtract}
+          disabled={isExtracting || !websiteUrl}
+        >
+          {isExtracting ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
+          {isExtracting ? 'Analyserar...' : 'Analysera'}
+        </Button>
+      </div>
+    </div>
+  </div>
+</div>
+
+// After extraction, show a diff of what changed:
+// "AI hittade dessa uppgifter — klicka för att tillämpa:"
+// [Företagsnamn: Acme Tech AB ✓] [Sektor: Tech ✓] [Stad: Stockholm ✓]
+// [Tillämpa alla] [Välj enskilt]
+```
+
+Implement `handleExtract` to call POST /api/onboarding/extract (reuse
+the same endpoint, with a special flag `{ context: 'profile_edit' }`)
+and then show a modal or inline diff of what was found.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 6: ROUTING & REDIRECT LOGIC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add this redirect logic to the auth flow (wherever the app redirects
+after login):
+```typescript
+// In the post-login redirect handler:
+
+async function getPostLoginRedirect(userId: string): Promise<string> {
+  const company = await getUserCompany(userId);
+  
+  if (!company) {
+    // Brand new user — send to onboarding
+    return '/onboarding';
+  }
+  
+  const profileCompletion = calculateProfileCompletion(company);
+  
+  if (profileCompletion < 40) {
+    // Very incomplete profile — nudge to onboarding
+    const session = await getOrCreateOnboardingSession(userId, company.id);
+    return `/onboarding?resume=${session.id}`;
+  }
+  
+  // Profile exists and is reasonable — go to dashboard
+  return '/dashboard';
+}
+```
+
+Also: add a persistent banner on the dashboard for users with
+incomplete profiles (completion < 70%):
+┌────────────────────────────────────────────────────────────┐
+│  ⚡ Din profil är {completion}% klar                       │
+│  Fyll i resterande uppgifter för bättre matchning.        │
+│  [Fyll i profil →]  [Stäng]                               │
+└────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 7: ANALYTICS & QUALITY TRACKING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Track these events via the existing AnalyticsService:
+```typescript
+// Track on POST /api/onboarding/extract
+analytics.track('onboarding_extraction_started', {
+  sessionId, websiteUrl, attemptNumber
+});
+
+// Track on success
+analytics.track('onboarding_extraction_completed', {
+  sessionId,
+  status: 'success' | 'partial' | 'failed',
+  fieldsFound,
+  avgConfidence,
+  pagesScraped: pagesScraped.length,
+  durationMs
+});
+
+// Track when user edits AI-filled fields
+analytics.track('onboarding_field_edited', {
+  sessionId,
+  fieldName,
+  originalValue,        // AI's suggestion (anonymized if PII)
+  wasAiFilled: true,
+  confidenceScore
+});
+
+// Track wizard completion
+analytics.track('onboarding_completed', {
+  sessionId,
+  totalSteps,
+  timeToCompleteMs,
+  usedAiExtraction: true,
+  fieldsAutoFilled,
+  fieldsUserEdited,
+  extractionRating
+});
+
+// Track skip
+analytics.track('onboarding_skipped', { sessionId, skippedAtStep });
+```
+
+Use this data to continuously improve:
+- Which fields have lowest user acceptance (most often edited)
+- Which websites fail to extract (URL patterns to improve scraping for)
+- Correlation between extraction quality and profile completion rate
+- Conversion: users who use AI extraction vs manual → time to first match
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 8: INSTALL DEPENDENCIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Run in the project root:
+```bash
+# HTML parsing for scraping
+npm install cheerio
+npm install --save-dev @types/cheerio
+```
+
+No other new dependencies needed — the feature uses:
+- Anthropic SDK (already installed)
+- Built-in fetch for HTTP requests
+- Existing Drizzle/PostgreSQL setup
+- Existing React + TanStack Query frontend stack
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 9: TESTING CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DATABASE
+- [ ] onboardingSessions table created
+- [ ] websiteScrapeCache table created
+- [ ] Foreign keys work correctly
+
+URL VALIDATION
+- [ ] "acmetech.se" (no protocol) → normalized to "https://acmetech.se"
+- [ ] "http://acmetech.se" → allowed
+- [ ] "localhost:3000" → rejected with clear error
+- [ ] "192.168.1.1" → rejected (private IP)
+- [ ] Completely invalid string "not a url" → rejected with validation error
+- [ ] URL with path "acmetech.se/about" → uses hostname as base
+
+SCRAPING
+- [ ] Homepage scraped successfully
+- [ ] /om-oss attempted if homepage scraped OK
+- [ ] /about attempted as fallback
+- [ ] 404 on sub-pages silently skipped (no error shown to user)
+- [ ] Timeout (>8s) handled gracefully with user-friendly message
+- [ ] Scripts and nav elements stripped from extracted text
+- [ ] Meta description included in extracted content
+- [ ] Scrape cache: same URL within 7 days doesn't re-scrape
+- [ ] Rate limiting: 3 extractions per session, 10 per user per day
+
+AI EXTRACTION
+- [ ] companyName extracted from page title and/or headings
+- [ ] description generated as 2-4 Swedish sentences
+- [ ] Swedish company's region correctly identified
+- [ ] Sector mapped to correct option (not free-text)
+- [ ] employeeCount maps to one of the defined options
+- [ ] Low-confidence fields (< 70) have amber badge in UI
+- [ ] Fields not found are null (not hallucinated)
+- [ ] JSON parse error handled gracefully → falls back to manual form
+
+WIZARD FLOW
+- [ ] New user → redirected to /onboarding after login
+- [ ] Step 1: Welcome page loads correctly
+- [ ] Step 2: URL input field focused on load
+- [ ] Step 2: Loading animation shows correct state transitions
+- [ ] Step 2: Success state shows fields found count
+- [ ] Step 2: Partial state shows correct messaging
+- [ ] Step 2: Failure state shows specific error reason + alternatives
+- [ ] Step 3: All extracted fields shown with correct badge
+- [ ] Step 3: AI badge shown in green for high confidence (≥70)
+- [ ] Step 3: AI badge shown in amber for low confidence (<70)
+- [ ] Step 3: User can edit any field — badge stays but field is marked as edited
+- [ ] Step 3: Empty required fields highlighted before allowing next step
+- [ ] Step 4: Goal selection saves to company profile
+- [ ] Step 5: Notification preferences saved to existing notification system
+- [ ] Step 6: Match count shown correctly (triggers AI matching run)
+- [ ] Step 6: Feedback stars save to session.extractionRating
+- [ ] Skip wizard → goes to manual profile form directly
+- [ ] Resume session: returning user picks up at correct step
+
+PROFILE EDIT INTEGRATION
+- [ ] "Fyll i med AI" button visible on profile edit page
+- [ ] Extraction works from profile edit page
+- [ ] Diff shows which fields will change
+- [ ] "Tillämpa alla" applies all changes to form
+- [ ] "Välj enskilt" lets user pick which to apply
+- [ ] Existing values NOT overwritten without user confirmation
+
+REDIRECT LOGIC
+- [ ] User with no company → /onboarding
+- [ ] User with <40% profile → /onboarding?resume=...
+- [ ] User with ≥40% profile → /dashboard
+- [ ] Incomplete profile banner shows on dashboard for <70% completion
+- [ ] Banner dismisses correctly and doesn't re-show same session
+
+ANALYTICS
+- [ ] extraction_started event fires when URL submitted
+- [ ] extraction_completed event fires with correct fieldsFound count
+- [ ] field_edited event fires when user changes AI-filled field
+- [ ] onboarding_completed event fires with correct metadata
+- [ ] onboarding_skipped fires when user clicks skip
+
+EDGE CASES
+- [ ] Website in English → description generated in Swedish anyway
+- [ ] Company website with no text content (all images) → graceful failure
+- [ ] Very long homepage (>15,000 chars) → truncated correctly, still extracts
+- [ ] Org number in various formats (556123-4567 / 5561234567) → normalized
+- [ ] User submits same URL twice → cache hit, no new scrape
+- [ ] Concurrent extraction attempts → second request returns existing result
