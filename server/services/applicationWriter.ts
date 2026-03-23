@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { createHash } from "crypto";
 import type { Grant, Company, ApplicationSection } from "@shared/schema";
 import { findRelevantContentBlocks } from "./contentLibrary";
 
@@ -6,6 +7,17 @@ const anthropic = new Anthropic({
   apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
+
+const APPLICATION_CACHE = new Map<string, { result: GeneratedApplication; expiresAt: number }>();
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function buildCacheKey(grant: Grant, company: Company, project: ProjectData): string {
+  const projectHash = createHash("sha256")
+    .update(JSON.stringify(project))
+    .digest("hex")
+    .slice(0, 12);
+  return `${grant.id}:${company.id}:${projectHash}`;
+}
 
 export interface SectionTemplate {
   key: string;
@@ -545,57 +557,66 @@ export async function generateStructuredApplication(
   project: ProjectData,
   companyId?: string
 ): Promise<GeneratedApplication> {
+  const cacheKey = buildCacheKey(grant, company, project);
+  const cached = APPLICATION_CACHE.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.result;
+  }
+
   const template = resolveTemplate(grant);
   const isSwedish = isSwedishGrant(grant);
 
-  const sections: ApplicationSection[] = [];
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
-
-  for (const sectionTemplate of template.sections) {
-    let libraryBlocks: { contentType: string; content: string }[] = [];
-    if (companyId) {
-      try {
-        const blocks = await findRelevantContentBlocks(
-          sectionTemplate.key,
-          companyId,
-          isSwedish ? "sv" : "en"
-        );
-        libraryBlocks = blocks.map(b => ({ contentType: b.contentType, content: b.content }));
-      } catch (e) {
+  const sectionResults = await Promise.all(
+    template.sections.map(async (sectionTemplate) => {
+      let libraryBlocks: { contentType: string; content: string }[] = [];
+      if (companyId) {
+        try {
+          const blocks = await findRelevantContentBlocks(
+            sectionTemplate.key,
+            companyId,
+            isSwedish ? "sv" : "en"
+          );
+          libraryBlocks = blocks.map(b => ({ contentType: b.contentType, content: b.content }));
+        } catch (e) {
+        }
       }
-    }
 
-    const prompt = buildSectionPrompt(
-      grant,
-      company,
-      project,
-      sectionTemplate,
-      isSwedish,
-      libraryBlocks
-    );
+      const prompt = buildSectionPrompt(
+        grant,
+        company,
+        project,
+        sectionTemplate,
+        isSwedish,
+        libraryBlocks
+      );
 
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-5-20250929",
-      max_tokens: 1500,
-      messages: [{ role: "user", content: prompt }],
-    });
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: prompt }],
+      });
 
-    const textContent = response.content.find((c) => c.type === "text");
-    const content = textContent?.type === "text" ? textContent.text.trim() : "";
+      const textContent = response.content.find((c) => c.type === "text");
+      const content = textContent?.type === "text" ? textContent.text.trim() : "";
 
-    totalInputTokens += response.usage.input_tokens;
-    totalOutputTokens += response.usage.output_tokens;
+      return {
+        section: {
+          sectionKey: sectionTemplate.key,
+          sectionTitle: sectionTemplate.title,
+          content,
+          wordCount: content.split(/\s+/).filter(Boolean).length,
+          maxWords: sectionTemplate.maxWords,
+          evaluationCriteria: sectionTemplate.evaluationCriteria,
+        } as ApplicationSection,
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      };
+    })
+  );
 
-    sections.push({
-      sectionKey: sectionTemplate.key,
-      sectionTitle: sectionTemplate.title,
-      content,
-      wordCount: content.split(/\s+/).filter(Boolean).length,
-      maxWords: sectionTemplate.maxWords,
-      evaluationCriteria: sectionTemplate.evaluationCriteria,
-    });
-  }
+  const sections = sectionResults.map(r => r.section);
+  const totalInputTokens = sectionResults.reduce((sum, r) => sum + r.inputTokens, 0);
+  const totalOutputTokens = sectionResults.reduce((sum, r) => sum + r.outputTokens, 0);
 
   const warnings = generateWarnings(grant, project);
 
@@ -612,7 +633,7 @@ export async function generateStructuredApplication(
     )
   );
 
-  return {
+  const result: GeneratedApplication = {
     sections,
     warnings,
     overallScore,
@@ -622,6 +643,10 @@ export async function generateStructuredApplication(
       estimatedCostSEK: calculateCost(totalInputTokens, totalOutputTokens),
     },
   };
+
+  APPLICATION_CACHE.set(cacheKey, { result, expiresAt: Date.now() + CACHE_TTL_MS });
+
+  return result;
 }
 
 export async function regenerateSection(
