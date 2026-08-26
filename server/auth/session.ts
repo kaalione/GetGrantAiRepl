@@ -1,12 +1,14 @@
 import session from "express-session";
 import connectPg from "connect-pg-simple";
+import { pool } from "../db";
 
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 
 export function getSession() {
   const pgStore = connectPg(session);
+  // Reuses the app pool so TLS settings (Supabase) apply here too.
   const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
+    pool,
     createTableIfMissing: false,
     ttl: SESSION_TTL_MS,
     tableName: "sessions",

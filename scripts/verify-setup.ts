@@ -25,7 +25,11 @@ async function checkDatabase() {
   if (missing("Database", ["DATABASE_URL"])) return;
   try {
     const pg = (await import("pg")).default;
-    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+    // Same TLS behavior as server/db.ts — encrypt, skip CA verification.
+    const pool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL!.replace("sslmode=require", "sslmode=no-verify"),
+      max: 1,
+    });
     const { rows } = await pool.query(
       "select (select count(*) from grants) as grants, (select count(*) from users) as users, (select count(*) from sessions) as sessions"
     );

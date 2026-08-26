@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import type { IncomingMessage } from "http";
-import { db } from "../db";
+import { db, pool } from "../db";
 import { applicationCollaborators, applications, companies } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import cookie from "cookie";
@@ -64,8 +64,9 @@ async function getUserIdFromSession(req: IncomingMessage): Promise<string | null
     if (!unsignedSid) return null;
 
     const PgStore = pgSession(session);
+    // Reuses the app pool so TLS settings (Supabase) apply here too.
     const store = new PgStore({
-      conString: process.env.DATABASE_URL,
+      pool,
       createTableIfMissing: false,
       tableName: "sessions",
     });
