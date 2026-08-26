@@ -3,7 +3,7 @@ import { pgTable, text, varchar, timestamp, numeric, integer, boolean, jsonb, da
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Export auth models (required for Replit Auth)
+// Export auth models (users + sessions)
 export * from "./models/auth";
 
 // Grants table - stores scraped grant information
