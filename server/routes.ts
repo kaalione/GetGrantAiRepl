@@ -1605,7 +1605,7 @@ export async function registerRoutes(
 
       // Trigger the Python scraper asynchronously using spawn (no shell)
       const scraperPath = path.join(process.cwd(), 'scrapers', 'main.py');
-      const pythonProcess = spawn('python3', [scraperPath, '--source-id', source.id], {
+      const pythonProcess = spawn(process.env.PYTHON_BIN || 'python3', [scraperPath, '--source-id', source.id], {
         env: { ...process.env },
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: false,
@@ -1734,7 +1734,7 @@ export async function registerRoutes(
         
         // Trigger Python scraper asynchronously
         const scraperPath = path.join(process.cwd(), 'scrapers', 'main.py');
-        const pythonProcess = spawn('python3', [scraperPath, '--source-id', source.id], {
+        const pythonProcess = spawn(process.env.PYTHON_BIN || 'python3', [scraperPath, '--source-id', source.id], {
           env: { ...process.env },
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: false,
@@ -1830,7 +1830,7 @@ export async function registerRoutes(
         });
         
         const scraperPath = path.join(process.cwd(), 'scrapers', 'main.py');
-        const pythonProcess = spawn('python3', [scraperPath, '--source-id', source.id], {
+        const pythonProcess = spawn(process.env.PYTHON_BIN || 'python3', [scraperPath, '--source-id', source.id], {
           env: { ...process.env },
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: false,
