@@ -5,6 +5,14 @@ from psycopg2.extras import RealDictCursor, Json
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
+# Load DATABASE_URL from the repo-root .env when running outside a
+# pre-configured environment (local dev, cron).
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '.env'))
+except ImportError:
+    pass
+
 def get_connection():
     """Get a connection to the PostgreSQL database."""
     database_url = os.environ.get('DATABASE_URL')
