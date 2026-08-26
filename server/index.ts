@@ -45,6 +45,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// Liveness probe for the hosting platform — registered before the rate
+// limiters so healthchecks never consume API quota.
+app.get("/healthz", (_req, res) => res.json({ ok: true }));
+
 app.use("/api", apiLimiter);
 app.use("/api/cron", cronLimiter);
 
