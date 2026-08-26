@@ -48,6 +48,20 @@ app.use((req, res, next) => {
 app.use("/api", apiLimiter);
 app.use("/api/cron", cronLimiter);
 
+// Cron endpoints historically take the key as body.apiKey or x-api-key.
+// External schedulers (GitHub Actions, Vercel Cron) conventionally send
+// "Authorization: Bearer <CRON_API_KEY>" — normalize that to x-api-key so
+// every existing check keeps working.
+app.use((req, _res, next) => {
+  if (!req.headers["x-api-key"]) {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) {
+      req.headers["x-api-key"] = auth.slice("Bearer ".length);
+    }
+  }
+  next();
+});
+
 // Stripe webhook route MUST be registered BEFORE express.json()
 // This is critical - webhook needs raw Buffer, not parsed JSON
 app.post(

@@ -239,7 +239,7 @@ router.put('/admin/partners/:partnerId', isAuthenticated, async (req: any, res: 
 router.post('/cron/partner-maintenance', async (req: Request, res: Response) => {
   try {
     const body = req.body || {};
-    const apiKey = body.apiKey;
+    const apiKey = body.apiKey || req.headers['x-api-key'];
 
     const cronKey = process.env.CRON_API_KEY;
     if (!cronKey) {
