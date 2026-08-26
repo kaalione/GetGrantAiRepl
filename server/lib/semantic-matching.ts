@@ -1,10 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "./anthropic";
 import type { Grant, Company } from "@shared/schema";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
 
 export interface SemanticMatchResult {
   score: number;

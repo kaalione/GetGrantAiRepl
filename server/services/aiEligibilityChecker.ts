@@ -1,11 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "../lib/anthropic";
 import type { Grant, Company, EligibilityCheckResult, EligibilityCriterion } from "@shared/schema";
 import { checkEligibility as checkStructuredEligibility } from "./eligibilityChecker";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 

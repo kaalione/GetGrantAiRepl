@@ -1,13 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "../lib/anthropic";
 import { db } from "../db";
 import { contentLibrary, contentLibraryUsage } from "@shared/schema";
 import type { ContentBlock, Application, Company, Grant } from "@shared/schema";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
 
 export interface ExtractedContent {
   contentType: string;

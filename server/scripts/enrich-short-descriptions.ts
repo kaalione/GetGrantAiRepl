@@ -1,13 +1,8 @@
 import "dotenv/config";
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "../lib/anthropic";
 import { db } from "../db";
 import { grants } from "@shared/schema";
 import { eq, sql, and, or, isNull } from "drizzle-orm";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
 
 const RAW_DATA_TEXT_KEYS = [
   "Beskrivning", "BeskrivningEngelska", "description",

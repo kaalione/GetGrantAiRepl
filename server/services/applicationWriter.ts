@@ -1,12 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "../lib/anthropic";
 import { createHash } from "crypto";
 import type { Grant, Company, ApplicationSection } from "@shared/schema";
 import { findRelevantContentBlocks } from "./contentLibrary";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
 
 const APPLICATION_CACHE = new Map<string, { result: GeneratedApplication; expiresAt: number }>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
