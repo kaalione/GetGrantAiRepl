@@ -24,10 +24,11 @@ declare module "http" {
   }
 }
 
+const port = parseInt(process.env.PORT || "5000", 10);
 const allowedOrigins = [
-  process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null,
-  "http://localhost:5000",
-  "http://0.0.0.0:5000",
+  process.env.APP_URL || null,
+  `http://localhost:${port}`,
+  `http://127.0.0.1:${port}`,
 ].filter(Boolean) as string[];
 
 app.use((req, res, next) => {
@@ -249,16 +250,12 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
+  // Serve API and client on PORT (default 5000). HOST defaults to 0.0.0.0 so
+  // the same setup works locally and in containers.
   httpServer.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host: process.env.HOST || "0.0.0.0",
     },
     () => {
       log(`serving on port ${port}`);

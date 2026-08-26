@@ -2,12 +2,7 @@ import { db } from '../db';
 import { partners, partnerClients, partnerUsageStats, partnerActivityLog, applications, companies } from '@shared/schema';
 import { eq, and, lt, count, gte, inArray, sql } from 'drizzle-orm';
 import { sendEmail } from '../lib/resend';
-
-const BASE_URL = process.env.REPLIT_DEV_DOMAIN
-  ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-  : process.env.REPL_SLUG
-    ? `https://${process.env.REPL_SLUG}.replit.app`
-    : 'https://getgrant.ai';
+import { APP_URL as BASE_URL } from '../lib/appUrl';
 
 export async function runNightlyStatsCache(): Promise<{ partnersUpdated: number }> {
   const now = new Date();

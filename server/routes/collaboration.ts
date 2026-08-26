@@ -13,6 +13,7 @@ import { eq, and, desc, isNull } from "drizzle-orm";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { requireApplicationAccess } from "../middleware/collaboration-auth";
 import { sendEmail } from "../lib/resend";
+import { APP_URL } from "../lib/appUrl";
 import crypto from "crypto";
 
 const router = Router();
@@ -27,14 +28,7 @@ function getPresenceColor(index: number): string {
 }
 
 function getAppUrl(): string {
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  }
-  if (process.env.REPLIT_DOMAINS) {
-    const domains = process.env.REPLIT_DOMAINS.split(',');
-    if (domains.length > 0) return `https://${domains[0]}`;
-  }
-  return 'http://localhost:5000';
+  return APP_URL;
 }
 
 function getRoleDescription(role: string): string {

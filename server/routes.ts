@@ -18,6 +18,7 @@ import { getStripePublishableKey } from "./lib/stripeClient";
 import { db } from "./db";
 import { eq, sql } from "drizzle-orm";
 import { requirePlan } from "./middleware/plan-check";
+import { APP_URL } from "./lib/appUrl";
 import collaborationRoutes from "./routes/collaboration";
 import contentLibraryRoutes from "./routes/contentLibrary";
 import projectRoutes from "./routes/projects";
@@ -2445,7 +2446,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid plan. Must be 'pro' or 'enterprise'" });
       }
 
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const baseUrl = APP_URL;
       
       const session = await createCheckoutSession(
         userId,
@@ -2476,7 +2477,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No active subscription found" });
       }
 
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const baseUrl = APP_URL;
       
       const session = await createCustomerPortalSession(
         user.stripeCustomerId,
