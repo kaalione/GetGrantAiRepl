@@ -1198,7 +1198,24 @@
     "daysOverdue": "päivää myöhässä",
     "overdue": "Myöhässä",
     "milestones": "Virstanpylväät",
-    "budget": "Budjetti",
+    "budget": {
+      "totalApproved": "Hyväksytty yhteensä",
+      "spent": "Käytetty",
+      "spentCol": "Käytetty",
+      "remaining": "Jäljellä",
+      "remainingCol": "Jäljellä",
+      "burnRate": "Kulutusnopeus/kk",
+      "category": "Kategoria",
+      "budgeted": "Budjetoitu",
+      "addExpense": "Lisää kustannus",
+      "initialize": "Alusta budjettikategoriat",
+      "noCategories": "Ei budjettikategorioita. Alusta oletuskategoriat alla.",
+      "expenseLog": "Kustannusloki",
+      "date": "Päivämäärä",
+      "description": "Kuvaus",
+      "amount": "Summa",
+      "type": "Tyyppi"
+    },
     "dialog": {
       "step1Title": "Onnittelut myönnetystä avustuksesta!",
       "step2Title": "Pikamääritys",
@@ -1319,24 +1336,6 @@
       "emptyTitle": "Ei raportteja",
       "emptyDesc": "Lisää raportteja seurataksesi määräaikoja."
     },
-    "budget": {
-      "totalApproved": "Hyväksytty yhteensä",
-      "spent": "Käytetty",
-      "spentCol": "Käytetty",
-      "remaining": "Jäljellä",
-      "remainingCol": "Jäljellä",
-      "burnRate": "Kulutusnopeus/kk",
-      "category": "Kategoria",
-      "budgeted": "Budjetoitu",
-      "addExpense": "Lisää kustannus",
-      "initialize": "Alusta budjettikategoriat",
-      "noCategories": "Ei budjettikategorioita. Alusta oletuskategoriat alla.",
-      "expenseLog": "Kustannusloki",
-      "date": "Päivämäärä",
-      "description": "Kuvaus",
-      "amount": "Summa",
-      "type": "Tyyppi"
-    },
     "team": {
       "add": "Lisää jäsen",
       "edit": "Muokkaa",
@@ -1415,5 +1414,21 @@
       "documentDeleted": "Dokumentti poistettu",
       "documentError": "Dokumentin käsittely epäonnistui"
     }
+  },
+  "auth": {
+    "title": "Kirjaudu sisään",
+    "subtitle": "Kirjaudu sisään tai luo tili löytääksesi yrityksellesi sopivia rahoituksia",
+    "logIn": "Kirjaudu sisään",
+    "signUp": "Luo tili",
+    "email": "Sähköposti",
+    "password": "Salasana",
+    "continueWithGoogle": "Jatka Googlella",
+    "continueWithGithub": "Jatka GitHubilla",
+    "orWithEmail": "tai sähköpostilla",
+    "confirmEmailSent": "Tarkista sähköpostisi — lähetimme vahvistuslinkin.",
+    "signingIn": "Kirjaudutaan...",
+    "backToLogin": "Takaisin kirjautumiseen",
+    "callbackFailed": "Kirjautumista ei voitu suorittaa loppuun. Yritä uudelleen.",
+    "notConfigured": "Kirjautumista ei ole määritetty. Aseta VITE_SUPABASE_URL ja VITE_SUPABASE_ANON_KEY."
   }
 }

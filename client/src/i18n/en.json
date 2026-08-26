@@ -1196,7 +1196,24 @@
     "daysOverdue": "days overdue",
     "overdue": "Overdue",
     "milestones": "Milestones",
-    "budget": "Budget",
+    "budget": {
+      "totalApproved": "Total approved",
+      "spent": "Spent",
+      "spentCol": "Spent",
+      "remaining": "Remaining",
+      "remainingCol": "Remaining",
+      "burnRate": "Burn rate/month",
+      "category": "Category",
+      "budgeted": "Budgeted",
+      "addExpense": "Add expense",
+      "initialize": "Initialize budget categories",
+      "noCategories": "No budget categories. Initialize default categories below.",
+      "expenseLog": "Expense log",
+      "date": "Date",
+      "description": "Description",
+      "amount": "Amount",
+      "type": "Type"
+    },
     "dialog": {
       "step1Title": "Congratulations on the approved grant!",
       "step2Title": "Quick setup",
@@ -1317,24 +1334,6 @@
       "emptyTitle": "No reports",
       "emptyDesc": "Add reports to stay on top of deadlines."
     },
-    "budget": {
-      "totalApproved": "Total approved",
-      "spent": "Spent",
-      "spentCol": "Spent",
-      "remaining": "Remaining",
-      "remainingCol": "Remaining",
-      "burnRate": "Burn rate/month",
-      "category": "Category",
-      "budgeted": "Budgeted",
-      "addExpense": "Add expense",
-      "initialize": "Initialize budget categories",
-      "noCategories": "No budget categories. Initialize default categories below.",
-      "expenseLog": "Expense log",
-      "date": "Date",
-      "description": "Description",
-      "amount": "Amount",
-      "type": "Type"
-    },
     "team": {
       "add": "Add member",
       "edit": "Edit",
@@ -1413,5 +1412,21 @@
       "documentDeleted": "Document deleted",
       "documentError": "Could not handle document"
     }
+  },
+  "auth": {
+    "title": "Log in",
+    "subtitle": "Log in or create an account to find grants that match your company",
+    "logIn": "Log in",
+    "signUp": "Create account",
+    "email": "Email",
+    "password": "Password",
+    "continueWithGoogle": "Continue with Google",
+    "continueWithGithub": "Continue with GitHub",
+    "orWithEmail": "or with email",
+    "confirmEmailSent": "Check your inbox — we've sent you a confirmation link.",
+    "signingIn": "Signing in...",
+    "backToLogin": "Back to login",
+    "callbackFailed": "Could not complete sign-in. Please try again.",
+    "notConfigured": "Login is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
   }
 }

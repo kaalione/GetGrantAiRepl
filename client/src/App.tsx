@@ -18,6 +18,8 @@ import { SEO } from "@/components/seo";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import "@/i18n";
 import Landing from "@/pages/landing";
+import AuthPage from "@/pages/auth";
+import AuthCallbackPage from "@/pages/auth-callback";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Grants from "@/pages/grants";
@@ -102,6 +104,8 @@ function Router() {
       <Route path="/partner/settings" component={PartnerSettings} />
       <Route path="/join/:token" component={PartnerJoin} />
       <Route path="/invites/:token" component={InviteAccept} />
+      <Route path="/auth/callback" component={AuthCallbackPage} />
+      <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -162,6 +166,12 @@ function AppContent() {
   }
 
   if (!userStatus?.isAuthenticated) {
+    if (window.location.pathname.startsWith('/auth/callback')) {
+      return <AuthCallbackPage />;
+    }
+    if (window.location.pathname.startsWith('/auth')) {
+      return <AuthPage />;
+    }
     if (window.location.pathname.startsWith('/join/')) {
       return <PartnerJoin />;
     }

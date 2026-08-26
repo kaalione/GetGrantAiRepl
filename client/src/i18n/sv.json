@@ -1198,7 +1198,24 @@
     "daysOverdue": "dagar försenad",
     "overdue": "Försenad",
     "milestones": "Milstolpar",
-    "budget": "Budget",
+    "budget": {
+      "totalApproved": "Totalt godkänt",
+      "spent": "Förbrukat",
+      "spentCol": "Förbrukat",
+      "remaining": "Återstående",
+      "remainingCol": "Kvar",
+      "burnRate": "Burn rate/mån",
+      "category": "Kategori",
+      "budgeted": "Budgeterat",
+      "addExpense": "Lägg till kostnad",
+      "initialize": "Initiera budgetkategorier",
+      "noCategories": "Inga budgetkategorier. Initiera standardkategorier nedan.",
+      "expenseLog": "Kostnadslogg",
+      "date": "Datum",
+      "description": "Beskrivning",
+      "amount": "Belopp",
+      "type": "Typ"
+    },
     "dialog": {
       "step1Title": "Grattis till godkänt bidrag!",
       "step2Title": "Snabbkonfiguration",
@@ -1319,24 +1336,6 @@
       "emptyTitle": "Inga rapporter",
       "emptyDesc": "Lägg till rapporter för att hålla koll på deadlines."
     },
-    "budget": {
-      "totalApproved": "Totalt godkänt",
-      "spent": "Förbrukat",
-      "spentCol": "Förbrukat",
-      "remaining": "Återstående",
-      "remainingCol": "Kvar",
-      "burnRate": "Burn rate/mån",
-      "category": "Kategori",
-      "budgeted": "Budgeterat",
-      "addExpense": "Lägg till kostnad",
-      "initialize": "Initiera budgetkategorier",
-      "noCategories": "Inga budgetkategorier. Initiera standardkategorier nedan.",
-      "expenseLog": "Kostnadslogg",
-      "date": "Datum",
-      "description": "Beskrivning",
-      "amount": "Belopp",
-      "type": "Typ"
-    },
     "team": {
       "add": "Lägg till medlem",
       "edit": "Redigera",
@@ -1415,5 +1414,21 @@
       "documentDeleted": "Dokument borttaget",
       "documentError": "Kunde inte hantera dokument"
     }
+  },
+  "auth": {
+    "title": "Logga in",
+    "subtitle": "Logga in eller skapa ett konto för att hitta bidrag som matchar ditt företag",
+    "logIn": "Logga in",
+    "signUp": "Skapa konto",
+    "email": "E-post",
+    "password": "Lösenord",
+    "continueWithGoogle": "Fortsätt med Google",
+    "continueWithGithub": "Fortsätt med GitHub",
+    "orWithEmail": "eller med e-post",
+    "confirmEmailSent": "Kolla din inkorg — vi har skickat en bekräftelselänk.",
+    "signingIn": "Loggar in...",
+    "backToLogin": "Tillbaka till inloggning",
+    "callbackFailed": "Kunde inte slutföra inloggningen. Försök igen.",
+    "notConfigured": "Inloggning är inte konfigurerad. Sätt VITE_SUPABASE_URL och VITE_SUPABASE_ANON_KEY."
   }
 }

@@ -18,6 +18,13 @@ async function fetchUser(): Promise<User | null> {
 }
 
 async function logout(): Promise<void> {
+  // Clear the Supabase client session first, then the server session.
+  try {
+    const { supabase } = await import("@/lib/supabase");
+    await supabase?.auth.signOut();
+  } catch {
+    // Best-effort — the server logout is what matters.
+  }
   window.location.href = "/api/logout";
 }
 
