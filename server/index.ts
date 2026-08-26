@@ -6,9 +6,8 @@ import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { apiLimiter, cronLimiter } from "./middleware/rate-limit";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
-import { runMigrations } from 'stripe-replit-sync';
-import { getStripeSync } from "./lib/stripeClient";
-import { WebhookHandlers } from "./lib/webhookHandlers";
+import { verifyWebhookEvent } from "./lib/stripeClient";
+import { handleSubscriptionWebhook } from "./lib/webhookHandlers";
 import { handleSuccessFeeWebhook } from "./services/successFeeWebhook";
 import { handlePartnerStripeWebhook } from "./services/partnerStripeWebhook";
 import { setupCollaborationWS } from "./websocket/collaboration";
@@ -69,16 +68,19 @@ app.post(
         return res.status(500).json({ error: 'Webhook processing error' });
       }
 
-      await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+      // Signature verification — rejects the request before any handler runs.
+      const event = verifyWebhookEvent(req.body as Buffer, sig);
+
+      await handleSubscriptionWebhook(event);
 
       try {
-        await handleSuccessFeeWebhook(JSON.parse(req.body.toString()));
+        await handleSuccessFeeWebhook(event);
       } catch (sfError) {
         // Non-critical: success fee webhook handling is best-effort
       }
 
       try {
-        await handlePartnerStripeWebhook(JSON.parse(req.body.toString()));
+        await handlePartnerStripeWebhook(event);
       } catch (partnerError) {
         // Non-critical: partner webhook handling is best-effort
       }
@@ -142,49 +144,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Initialize Stripe schema and sync
-  const databaseUrl = process.env.DATABASE_URL;
-  if (databaseUrl) {
-    try {
-      console.log('Initializing Stripe schema...');
-      await runMigrations({ 
-        databaseUrl
-      });
-      console.log('Stripe schema ready');
-
-      const stripeSync = await getStripeSync();
-
-      const replitDomains = process.env.REPLIT_DOMAINS;
-      if (replitDomains && replitDomains.length > 0) {
-        const webhookBaseUrl = `https://${replitDomains.split(',')[0]}`;
-        console.log('Setting up managed webhook...');
-        try {
-          const result = await stripeSync.findOrCreateManagedWebhook(
-            `${webhookBaseUrl}/api/stripe/webhook`
-          );
-          if (result?.webhook?.url) {
-            console.log(`Webhook configured: ${result.webhook.url}`);
-          } else {
-            console.log('Webhook setup completed (URL not returned)');
-          }
-        } catch (webhookError) {
-          console.warn('Could not set up managed webhook:', webhookError);
-          console.log('Manual webhook setup may be required for production');
-        }
-      } else {
-        console.log('REPLIT_DOMAINS not set - skipping managed webhook setup');
-      }
-
-      console.log('Syncing Stripe data...');
-      stripeSync.syncBackfill()
-        .then(() => console.log('Stripe data synced'))
-        .catch((err: any) => console.error('Error syncing Stripe data:', err));
-    } catch (error) {
-      console.error('Failed to initialize Stripe:', error);
-    }
-  }
-
-  // Setup Replit Auth BEFORE registering other routes
+  // Setup auth BEFORE registering other routes
   await setupAuth(app);
   registerAuthRoutes(app);
   
