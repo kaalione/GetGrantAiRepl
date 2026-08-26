@@ -119,7 +119,9 @@ export default function Dashboard() {
     queryKey: ["/api/grants/top-matches"],
   });
 
-  const { data: projects } = useQuery<GrantProject[]>({
+  // completionPercentage is not returned by /api/projects today — typed
+  // optional so the progress bar stays hidden until the API provides it.
+  const { data: projects } = useQuery<(GrantProject & { completionPercentage?: number | null })[]>({
     queryKey: ["/api/projects"],
   });
 

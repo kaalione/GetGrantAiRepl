@@ -14,7 +14,7 @@ const ROLE_HIERARCHY: Record<CollaborationRole, number> = {
 
 export function requireApplicationAccess(requiredRole: CollaborationRole = 'viewer') {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const applicationId = req.params.id || req.params.applicationId;
+    const applicationId = (req.params.id || req.params.applicationId) as string;
     const userId = (req as any).user?.claims?.sub;
 
     if (!userId) {

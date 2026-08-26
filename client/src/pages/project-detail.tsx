@@ -130,7 +130,7 @@ function SortableMilestoneCard({ milestone: m, days, overdue, getMilestoneStatus
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {(m.status === "in_progress" || m.status === "pending") && m.status !== "completed" && (
+              {(m.status === "in_progress" || m.status === "pending") && (
                 <Button size="sm" variant="outline" onClick={() => completeMilestoneMutation.mutate(m.id)} disabled={completeMilestoneMutation.isPending} data-testid={`button-complete-milestone-${m.id}`}>
                   <CheckCircle2 className="mr-1 h-3 w-3" />{t("projects.milestone.complete") || "Slutför"}
                 </Button>

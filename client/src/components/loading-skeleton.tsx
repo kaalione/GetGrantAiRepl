@@ -50,7 +50,7 @@ export function StatsCardSkeleton() {
   );
 }
 
-export function TableRowSkeleton() {
+export function TableRowSkeleton(_props: { columns?: number }) {
   return (
     <div className="flex items-center gap-4 p-4 border-b">
       <Skeleton className="h-4 w-1/4" />

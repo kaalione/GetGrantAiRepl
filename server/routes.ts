@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import express from "express";
 import { storage } from "./storage";
-import { insertGrantSchema, insertCompanySchema, insertApplicationSchema, insertScraperSourceSchema, insertScraperLogSchema, users, grantAlerts, companies, type Grant, type GrantAlert, type Company } from "@shared/schema";
+import { insertGrantSchema, insertCompanySchema, insertApplicationSchema, insertScraperSourceSchema, insertScraperLogSchema, users, grantAlerts, companies, grants, type Grant, type GrantAlert, type Company } from "@shared/schema";
 import { z } from "zod";
 import { generateApplication } from "./lib/claude";
 import { generateStructuredApplication, regenerateSection, getTemplateForGrant, getTemplateBySource, getAllTemplates, type ProjectData } from "./services/applicationWriter";
@@ -16,7 +16,7 @@ import { semanticAnalysisLimiter, aiGenerationLimiter } from "./middleware/rate-
 import { createCheckoutSession, createCustomerPortalSession, getUserSubscription, updateUserSubscription, PRICE_IDS } from "./services/stripe";
 import { getStripePublishableKey } from "./lib/stripeClient";
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import { requirePlan } from "./middleware/plan-check";
 import { APP_URL } from "./lib/appUrl";
 import collaborationRoutes from "./routes/collaboration";
@@ -611,7 +611,7 @@ export async function registerRoutes(
               companyId: company.id,
               verdict: result.overallStatus,
               score: result.score,
-              result: { verdict: result.overallStatus as any, score: result.score, criteria: result.criteria || [], summary: result.summary || '', blockers: result.blockers || [], warnings: result.warnings || [], strengths: result.strengths || [] },
+              result: { verdict: result.overallStatus as any, score: result.score, criteria: (result as any).criteria || [], summary: (result as any).summary || '', blockers: (result as any).blockers || [], warnings: (result as any).warnings || [], strengths: (result as any).strengths || [] },
               source: 'structured',
               profileHash: currentHash,
             });

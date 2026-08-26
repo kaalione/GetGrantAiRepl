@@ -144,7 +144,9 @@ export default function CalendarPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: projects } = useQuery<GrantProject[]>({
+  // endDate is not returned by /api/projects today (rows expose
+  // projectEndDate) — typed optional so project events stay skipped.
+  const { data: projects } = useQuery<(GrantProject & { endDate?: string | null })[]>({
     queryKey: ["/api/projects"],
   });
 

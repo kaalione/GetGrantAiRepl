@@ -168,7 +168,7 @@ router.get(
   requireApplicationAccess('viewer'),
   async (req, res) => {
     try {
-      const applicationId = req.params.id;
+      const applicationId = req.params.id as string;
 
       const collaborators = await db
         .select()
@@ -232,7 +232,7 @@ router.put(
   requireApplicationAccess('owner'),
   async (req, res) => {
     try {
-      const { collaboratorId } = req.params;
+      const collaboratorId = req.params.collaboratorId as string;
       const { role } = req.body;
 
       if (!['editor', 'commenter', 'viewer'].includes(role)) {
@@ -405,7 +405,7 @@ router.get(
   requireApplicationAccess('viewer'),
   async (req, res) => {
     try {
-      const applicationId = req.params.id;
+      const applicationId = req.params.id as string;
       const sectionKey = req.query.sectionKey as string | undefined;
 
       let conditions = [eq(applicationComments.applicationId, applicationId)];
@@ -548,7 +548,8 @@ router.get(
   requireApplicationAccess('viewer'),
   async (req, res) => {
     try {
-      const { id: applicationId, sectionKey } = req.params;
+      const applicationId = req.params.id as string;
+      const sectionKey = req.params.sectionKey as string;
 
       const history = await db
         .select()
@@ -784,7 +785,7 @@ router.get(
   requireApplicationAccess('viewer'),
   async (req, res) => {
     try {
-      const applicationId = req.params.id;
+      const applicationId = req.params.id as string;
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 
       const activeUsers = await db
