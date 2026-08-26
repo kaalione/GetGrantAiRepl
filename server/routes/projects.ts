@@ -200,6 +200,9 @@ router.get("/api/projects", isAuthenticated, async (req: any, res) => {
 
       return {
         ...project,
+        // Flat aliases consumed by the calendar and dashboard pages
+        endDate: project.projectEndDate,
+        completionPercentage: percentComplete,
         progress: { milestonesTotal, milestonesCompleted, percentComplete },
         budget: { totalBudgetedSek, totalSpentSek, percentSpent, isOverBudget },
         nextMilestone: nextMs ? {
