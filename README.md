@@ -1,168 +1,72 @@
-# getgrant.ai - AI-Powered Swedish Grant Application Platform
+# getgrant.ai — AI-Powered Swedish Grant Application Platform
 
-getgrant.ai is an AI-powered platform designed to help Swedish businesses discover, match with, and apply for grants and funding opportunities.
+getgrant.ai helps Swedish businesses discover, match with, and apply for
+grants and funding opportunities.
 
 ## Features
 
-- **Grant Discovery**: Browse Swedish grants from Vinnova, Tillväxtverket, EU, and foundations
-- **Smart Matching**: AI-powered matching based on company profile
-- **AI Application Generation**: Claude AI generates application content in Swedish
-- **Automated Updates**: Scheduled scraping and email notifications
-- **Admin Dashboard**: Manage scraper sources and view logs
+- **Grant Discovery**: 35+ scraped sources — Vinnova, Tillväxtverket, EU,
+  Nordic agencies and foundations
+- **Smart Matching**: AI-powered matching against the company profile
+- **AI Application Generation**: Claude generates application content in
+  Swedish, section by section, with DOCX/PDF export
+- **Structured Eligibility**: AI-extracted eligibility criteria per grant
+- **Billing**: Stripe subscriptions (Free/Pro/Enterprise) + partner whitelabel
+- **Automated Updates**: scheduled scraping, digests and notifications
 
-## Tech Stack
+## Tech stack
 
-- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui
-- **Backend**: Express.js 5, TypeScript
-- **Database**: PostgreSQL with Drizzle ORM
-- **AI**: Anthropic Claude (via Replit AI Integrations)
-- **Email**: Resend (via Replit connection)
+- **Frontend**: React 18, TypeScript, Vite, Wouter, TanStack Query,
+  Tailwind + shadcn/ui, react-i18next (sv default; en/no/fi)
+- **Backend**: Express 5 + TypeScript, Zod, express-session (Postgres store)
+- **Database**: Supabase Postgres + Drizzle ORM
+- **Auth**: Supabase Auth (Google, GitHub, email/password)
+- **AI**: Anthropic Claude (`@anthropic-ai/sdk`)
+- **Scrapers**: Python (BeautifulSoup, Playwright, psycopg2) in `scrapers/`
+- **Email**: Resend · **Analytics**: PostHog (no-op without key)
 
-## Getting Started
+## Local setup
 
-### Prerequisites
+Prerequisites: Node 20+, Python 3.11+, a Supabase project (or any Postgres).
 
-- Node.js 18+
-- PostgreSQL database (provided by Replit)
+1. `npm install`
+2. `cp .env.example .env` and fill it in — minimum for a first boot:
+   `DATABASE_URL`, `DATABASE_URL_DIRECT`, `SESSION_SECRET`, `PORT=5001`
+   (macOS AirPlay squats port 5000). For login also set the four
+   `SUPABASE`/`VITE_SUPABASE` values; for AI features `ANTHROPIC_API_KEY`.
+3. `npm run db:push` — applies the schema (uses `DATABASE_URL_DIRECT`).
+4. `./scrapers/setup.sh` — Python venv + dependencies + Playwright Chromium.
+   On an exFAT/NTFS drive: `VENV_DIR=~/.venvs/getgrant ./scrapers/setup.sh`,
+   then set `PYTHON_BIN` in `.env` accordingly.
+5. `npm run dev` — serves API + client on `http://localhost:5001`.
+6. (Stripe, optional) `stripe listen --forward-to localhost:5001/api/stripe/webhook`
+   and copy the `whsec_...` into `STRIPE_WEBHOOK_SECRET`.
 
-### Installation
+Useful commands:
 
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Push database schema:
-   ```bash
-   npm run db:push
-   ```
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-## Environment Variables
-
-### Required
-
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string (auto-configured on Replit) |
-| `SESSION_SECRET` | Secret for session encryption |
-| `CRON_API_KEY` | API key for authenticating cron endpoints |
-
-### Replit Integrations (Auto-configured)
-
-| Variable | Description |
-|----------|-------------|
-| `AI_INTEGRATIONS_ANTHROPIC_API_KEY` | Anthropic API key |
-| `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` | Anthropic API base URL |
-
-## Project Structure
-
-```
-├── client/                 # React frontend
-│   ├── src/
-│   │   ├── components/     # Reusable UI components
-│   │   ├── pages/          # Page components
-│   │   └── lib/            # Utilities
-│   └── public/             # Static assets
-├── server/                 # Express backend
-│   ├── lib/                # Server utilities (claude, notifications)
-│   ├── middleware/         # Express middleware
-│   ├── routes.ts           # API routes
-│   └── storage.ts          # Database layer
-├── shared/                 # Shared types and schema
-│   └── schema.ts           # Drizzle database schema
-└── scrapers/               # Python scraper service
-    ├── sources/            # Scraper implementations
-    └── utils/              # Database and API utilities
+```bash
+npm run check                      # TypeScript
+npm run build && npm start        # production build + serve
+python scrapers/main.py --frequency daily          # run scrapers directly
+curl -X POST localhost:5001/api/cron/scrape \
+  -H "Authorization: Bearer $CRON_API_KEY"          # via the API
 ```
 
-## Adding New Scraper Sources
+## Deployment
 
-1. **Via Admin UI**:
-   - Navigate to `/admin/sources/new`
-   - Fill in source details (name, type, URL, selectors)
-   - Set scraping frequency (daily/weekly)
-   - Enable the source
+- **App**: Railway (or Fly.io) — one Node process with WebSockets, spawned
+  Python scrapers and disk uploads, so serverless hosts don't fit. Mount a
+  volume at `uploads/`. Build `npm run build`, start `npm start`.
+- **Database + Auth**: Supabase (eu-north-1). Pooled connection string for
+  `DATABASE_URL`, direct for `DATABASE_URL_DIRECT`.
+- **Scheduled jobs**: GitHub Actions (`.github/workflows/cron.yml`) — set repo
+  secret `CRON_API_KEY` and repo variable `APP_URL`.
+- **Stripe webhook**: dashboard endpoint → `https://<domain>/api/stripe/webhook`.
 
-2. **Via Python**:
-   - Create a new scraper in `scrapers/sources/`
-   - Extend `GenericScraper` class
-   - Register in `main.py`
+See [MIGRATION.md](MIGRATION.md) for the full Replit migration record,
+Supabase/Stripe setup details and the data migration runbook.
 
-### Scraper Configuration
+## Environment variables
 
-```python
-{
-    "name": "Source Name",
-    "source_type": "vinnova|tillvaxtverket|eu|stiftelser",
-    "base_url": "https://example.com/grants",
-    "scraper_type": "static|dynamic",  # static = BeautifulSoup, dynamic = Playwright
-    "selectors": {
-        "list_selector": ".grant-list .grant-item",
-        "title": ".grant-title",
-        "description": ".grant-description",
-        "deadline": ".grant-deadline",
-        "amount": ".grant-amount"
-    }
-}
-```
-
-## API Endpoints
-
-### Grants
-- `GET /api/grants` - List grants with filters
-- `GET /api/grants/:id` - Get grant details
-- `POST /api/grants` - Create grant
-- `PUT /api/grants/:id` - Update grant
-
-### Companies
-- `GET /api/companies` - List companies
-- `POST /api/companies` - Create company profile
-- `PUT /api/companies/:id` - Update company
-
-### Applications
-- `GET /api/applications` - List applications
-- `POST /api/applications/generate` - Generate AI application
-
-### Cron Endpoints
-- `POST /api/cron/scrape` - Run scrapers (requires CRON_API_KEY)
-- `POST /api/cron/notifications` - Send notifications (requires CRON_API_KEY)
-
-## Automation Setup
-
-To set up automated scraping and notifications:
-
-1. Set `CRON_API_KEY` in environment secrets
-2. Use an external cron service (e.g., cron-job.org):
-
-**Daily Scraper Run**:
-```json
-POST /api/cron/scrape
-{
-    "frequency": "daily",
-    "apiKey": "your-cron-api-key"
-}
-```
-
-**Email Notifications**:
-```json
-POST /api/cron/notifications
-{
-    "apiKey": "your-cron-api-key"
-}
-```
-
-## Security
-
-- Rate limiting on all API routes (200 requests/15 min)
-- Stricter rate limiting on AI generation (20/hour)
-- CORS configured for allowed origins
-- Cron endpoints require API key authentication
-- Input validation with Zod schemas
-
-## License
-
-MIT
+`.env.example` is the complete, documented list. Everything is read from
+`.env` (dotenv) or the process environment.
