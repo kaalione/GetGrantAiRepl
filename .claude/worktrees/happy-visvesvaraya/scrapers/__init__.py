@@ -1,1 +1,0 @@
-# getgrant.ai Scraper Service
