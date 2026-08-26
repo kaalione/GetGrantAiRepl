@@ -1,3 +1,4 @@
+import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "../db";
 import { grants } from "@shared/schema";
