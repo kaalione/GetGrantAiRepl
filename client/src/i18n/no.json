@@ -1429,6 +1429,6 @@
     "signingIn": "Logger inn...",
     "backToLogin": "Tilbake til innlogging",
     "callbackFailed": "Kunne ikke fullføre innloggingen. Prøv igjen.",
-    "notConfigured": "Innlogging er ikke konfigurert. Sett VITE_SUPABASE_URL og VITE_SUPABASE_ANON_KEY."
+    "notConfigured": "Innlogging er ikke konfigurert. Sett VITE_SUPABASE_URL og VITE_SUPABASE_PUBLISHABLE_KEY."
   }
 }

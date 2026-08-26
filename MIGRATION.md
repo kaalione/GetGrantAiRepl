@@ -48,8 +48,12 @@ template boilerplate, including an unauthenticated chat CRUD), and the unused
 3. Authentication → URL Configuration: set Site URL to your `APP_URL` and add
    `http://localhost:5001/auth/callback` and
    `https://<your-domain>/auth/callback` to the redirect allowlist.
-4. Copy Project URL and anon key into `.env` (`SUPABASE_URL`,
-   `SUPABASE_ANON_KEY`, and the `VITE_`-prefixed copies).
+4. Copy the Project URL and the **publishable key** (`sb_publishable_...`,
+   Project Settings → API Keys) into `.env` (`SUPABASE_URL`,
+   `SUPABASE_PUBLISHABLE_KEY`, and the `VITE_`-prefixed copies). Publishable +
+   secret keys replaced the legacy anon/service_role keys in 2025; the app
+   only needs the publishable one (legacy `SUPABASE_ANON_KEY` still works as
+   a fallback env name).
 
 ## Stripe
 
@@ -80,11 +84,13 @@ template boilerplate, including an unauthenticated chat CRUD), and the unused
 
 ## Database
 
-- **App + Python scrapers**: `DATABASE_URL` → Supabase **pooled** connection
-  (port 6543, transaction mode, `?sslmode=require`).
-- **Drizzle Kit** (`npm run db:push`): `DATABASE_URL_DIRECT` → **direct**
-  connection (port 5432); the transaction pooler doesn't support the prepared
-  statements drizzle-kit uses.
+- Both connection strings live behind the **Connect** button at the top of
+  the Supabase dashboard (they are no longer under Settings → Database).
+- **App + Python scrapers**: `DATABASE_URL` → the **Transaction pooler**
+  string (port 6543, `?sslmode=require`).
+- **Drizzle Kit** (`npm run db:push`): `DATABASE_URL_DIRECT` → the **Direct
+  connection** string (port 5432); the transaction pooler doesn't support the
+  prepared statements drizzle-kit uses.
 - There are no migration files; the schema is applied with `npm run db:push`
   (unchanged from Replit).
 

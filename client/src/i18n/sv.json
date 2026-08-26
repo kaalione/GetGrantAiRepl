@@ -1429,6 +1429,6 @@
     "signingIn": "Loggar in...",
     "backToLogin": "Tillbaka till inloggning",
     "callbackFailed": "Kunde inte slutföra inloggningen. Försök igen.",
-    "notConfigured": "Inloggning är inte konfigurerad. Sätt VITE_SUPABASE_URL och VITE_SUPABASE_ANON_KEY."
+    "notConfigured": "Inloggning är inte konfigurerad. Sätt VITE_SUPABASE_URL och VITE_SUPABASE_PUBLISHABLE_KEY."
   }
 }

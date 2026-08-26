@@ -34,7 +34,7 @@ export default function AuthPage() {
       <div className="min-h-screen flex items-center justify-center p-4">
         <Alert className="max-w-md">
           <AlertDescription>
-            {t("auth.notConfigured", "Inloggning är inte konfigurerad. Sätt VITE_SUPABASE_URL och VITE_SUPABASE_ANON_KEY.")}
+            {t("auth.notConfigured", "Inloggning är inte konfigurerad. Sätt VITE_SUPABASE_URL och VITE_SUPABASE_PUBLISHABLE_KEY.")}
           </AlertDescription>
         </Alert>
       </div>

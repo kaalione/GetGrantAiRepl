@@ -1429,6 +1429,6 @@
     "signingIn": "Kirjaudutaan...",
     "backToLogin": "Takaisin kirjautumiseen",
     "callbackFailed": "Kirjautumista ei voitu suorittaa loppuun. Yritä uudelleen.",
-    "notConfigured": "Kirjautumista ei ole määritetty. Aseta VITE_SUPABASE_URL ja VITE_SUPABASE_ANON_KEY."
+    "notConfigured": "Kirjautumista ei ole määritetty. Aseta VITE_SUPABASE_URL ja VITE_SUPABASE_PUBLISHABLE_KEY."
   }
 }

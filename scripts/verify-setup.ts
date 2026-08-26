@@ -53,10 +53,14 @@ async function checkDrizzleDirect() {
 }
 
 async function checkSupabase() {
-  if (missing("Supabase Auth", ["SUPABASE_URL", "SUPABASE_ANON_KEY"])) return;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (!process.env.SUPABASE_URL || !key) {
+    report("Supabase Auth", false, "missing env: SUPABASE_URL and/or SUPABASE_PUBLISHABLE_KEY");
+    return;
+  }
   try {
     const res = await fetch(`${process.env.SUPABASE_URL}/auth/v1/settings`, {
-      headers: { apikey: process.env.SUPABASE_ANON_KEY! },
+      headers: { apikey: key },
     });
     if (!res.ok) throw new Error(`auth settings returned ${res.status}`);
     const settings: any = await res.json();
@@ -65,8 +69,11 @@ async function checkSupabase() {
       .map(([k]) => k)
       .join(", ");
     report("Supabase Auth", true, `reachable — providers enabled: ${external || "none yet"}`);
-    for (const v of ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"] as const) {
-      if (!process.env[v]) report("Supabase (client)", false, `missing env: ${v}`);
+    if (!process.env.VITE_SUPABASE_URL) {
+      report("Supabase (client)", false, "missing env: VITE_SUPABASE_URL");
+    }
+    if (!process.env.VITE_SUPABASE_PUBLISHABLE_KEY && !process.env.VITE_SUPABASE_ANON_KEY) {
+      report("Supabase (client)", false, "missing env: VITE_SUPABASE_PUBLISHABLE_KEY");
     }
     if (process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_URL !== process.env.SUPABASE_URL) {
       report("Supabase (client)", false, "VITE_SUPABASE_URL differs from SUPABASE_URL");

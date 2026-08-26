@@ -1427,6 +1427,6 @@
     "signingIn": "Signing in...",
     "backToLogin": "Back to login",
     "callbackFailed": "Could not complete sign-in. Please try again.",
-    "notConfigured": "Login is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+    "notConfigured": "Login is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY."
   }
 }
