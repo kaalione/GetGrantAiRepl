@@ -34,7 +34,8 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
+      // Secure cookies require HTTPS; allow plain HTTP in local development.
+      secure: process.env.NODE_ENV === "production",
       maxAge: sessionTtl,
     },
   });
@@ -65,6 +66,23 @@ export async function setupAuth(app: Express) {
   app.use(getSession());
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // Transitional: Replit OIDC requires REPL_ID. Outside Replit the server
+  // still boots, but login is unavailable until Supabase Auth replaces this.
+  if (!process.env.REPL_ID) {
+    console.warn(
+      "[auth] REPL_ID not set — Replit Auth disabled. Login endpoints return 503 until Supabase Auth migration."
+    );
+    const unavailable = (_req: any, res: any) =>
+      res.status(503).json({ message: "Authentication is not configured" });
+    app.get("/api/login", unavailable);
+    app.get("/api/callback", unavailable);
+    app.get("/api/logout", (req: any, res: any) => {
+      req.logout?.(() => {});
+      res.redirect("/");
+    });
+    return;
+  }
 
   const config = await getOidcConfig();
 
