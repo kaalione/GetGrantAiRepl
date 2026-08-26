@@ -42,6 +42,13 @@ Prerequisites: Node 20+, Python 3.11+, a Supabase project (or any Postgres).
 6. (Stripe, optional) `stripe listen --forward-to localhost:5001/api/stripe/webhook`
    and copy the `whsec_...` into `STRIPE_WEBHOOK_SECRET`.
 
+Check your configuration at any point — validates every key in `.env` with
+read-only API calls and tells you exactly what's missing:
+
+```bash
+npx tsx scripts/verify-setup.ts
+```
+
 Useful commands:
 
 ```bash
