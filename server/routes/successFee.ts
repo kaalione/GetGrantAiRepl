@@ -3,7 +3,7 @@ import { db } from '../db';
 import { successFeeAgreements, successFeeSettings, successFeeEvents, successFeeUpgradePrompts, applications, grants, companies } from '@shared/schema';
 import { users } from '@shared/schema';
 import { eq, and, desc, sql, count, ilike, or } from 'drizzle-orm';
-import { isAuthenticated } from '../replit_integrations/auth';
+import { isAuthenticated } from '../auth';
 import { getUserPlan } from '../middleware/plan-check';
 import { calculateSuccessFee, createFeeInvoice, voidFeeInvoice, calculateUpgradeComparison, logFeeEvent, getOrCreateSettings } from '../services/successFee';
 import type { FeeCalculation } from '../services/successFee';

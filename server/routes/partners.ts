@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { isAuthenticated } from '../replit_integrations/auth';
+import { isAuthenticated } from '../auth';
 import { db } from '../db';
 import { partners, partnerActivityLog, partnerClients, users } from '@shared/schema';
 import { eq, and, desc, ilike, or, count, sql } from 'drizzle-orm';

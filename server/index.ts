@@ -5,7 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { apiLimiter, cronLimiter } from "./middleware/rate-limit";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes } from "./auth";
 import { verifyWebhookEvent } from "./lib/stripeClient";
 import { handleSubscriptionWebhook } from "./lib/webhookHandlers";
 import { handleSuccessFeeWebhook } from "./services/successFeeWebhook";

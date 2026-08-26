@@ -10,7 +10,7 @@ import {
   grants,
 } from "@shared/schema";
 import { eq, and, desc, isNull } from "drizzle-orm";
-import { isAuthenticated } from "../replit_integrations/auth";
+import { isAuthenticated } from "../auth";
 import { requireApplicationAccess } from "../middleware/collaboration-auth";
 import { sendEmail } from "../lib/resend";
 import { APP_URL } from "../lib/appUrl";

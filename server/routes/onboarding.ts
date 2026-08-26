@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db";
 import { onboardingSessions, companies } from "@shared/schema";
 import { eq, and, desc, sql, gte } from "drizzle-orm";
-import { isAuthenticated } from "../replit_integrations/auth";
+import { isAuthenticated } from "../auth";
 import {
   normalizeUrl,
   isPrivateOrLocalUrl,

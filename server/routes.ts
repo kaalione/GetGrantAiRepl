@@ -11,7 +11,7 @@ import { generateApplication } from "./lib/claude";
 import { generateStructuredApplication, regenerateSection, getTemplateForGrant, getTemplateBySource, getAllTemplates, type ProjectData } from "./services/applicationWriter";
 import { calculateSemanticMatch } from "./lib/semantic-matching";
 import { generateMatchExplanation } from "./services/matchExplanation";
-import { isAuthenticated } from "./replit_integrations/auth";
+import { isAuthenticated } from "./auth";
 import { semanticAnalysisLimiter, aiGenerationLimiter } from "./middleware/rate-limit";
 import { createCheckoutSession, createCustomerPortalSession, getUserSubscription, updateUserSubscription, PRICE_IDS } from "./services/stripe";
 import { getStripePublishableKey } from "./lib/stripeClient";
