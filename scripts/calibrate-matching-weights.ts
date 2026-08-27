@@ -3,7 +3,8 @@
 //   SEARCH_ITER=300 npx tsx scripts/calibrate-matching-weights.ts
 // (SEARCH_ITER=0 utvärderar bara nuvarande vikter.)
 // Hårda krav: alla B, D, E och profiltesterna P1/P2 måste passera.
-// Maximera: antal A-pass + C-pass (top>=65 och spread>=25).
+// Maximera: antal A-pass + C-pass (top>=65, spread rank1->rank100 >=10,
+// >=3 distinkta källor i topp 10; negativkontrollen undantas från C).
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
@@ -110,12 +111,19 @@ function evaluate(allGrants: Grant[]): EvalResult {
     for (const ex of tc.expectedNotInTop10) {
       if (top10.some(s => inText(ex, s))) bFail.push(`${tc.id}:${ex}`);
     }
-    // C
-    const spread = top10[0].score - top10[9].score;
-    const topOk = top10[0].score >= 65;
-    if (topOk) cTopPass.push(tc.id);
-    if (topOk && spread >= 25) cPass.push(tc.id);
-    margin += Math.min(top10[0].score, 65) / 65 * 0.5 + Math.min(spread, 25) / 25 * 0.5;
+    // C — speglar svitens omdesignade Check C: topp >=65, spread >=10 mellan
+    // rank 1 och rank 100, minst 3 distinkta källor i topp 10. C8 undantas.
+    if (!tc.isNegativeControl) {
+      const deep = scored[Math.min(99, scored.length - 1)].score;
+      const spread = top10[0].score - deep;
+      const distinctSources = new Set(top10.map(s => s.g.sourceName)).size;
+      const topOk = top10[0].score >= 65;
+      if (topOk) cTopPass.push(tc.id);
+      if (topOk && spread >= 10 && distinctSources >= 3) cPass.push(tc.id);
+      margin += Math.min(top10[0].score, 65) / 65 * 0.5
+        + Math.min(spread, 10) / 10 * 0.25
+        + Math.min(distinctSources, 3) / 3 * 0.25;
+    }
     // D
     if (tc.forbiddenMarkets) {
       for (const s of top20) {
