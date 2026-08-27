@@ -1430,5 +1430,20 @@
     "backToLogin": "Takaisin kirjautumiseen",
     "callbackFailed": "Kirjautumista ei voitu suorittaa loppuun. Yritä uudelleen.",
     "notConfigured": "Kirjautumista ei ole määritetty. Aseta VITE_SUPABASE_URL ja VITE_SUPABASE_PUBLISHABLE_KEY."
+  },
+  "profiles": {
+    "switchLabel": "Näytä osumat kohteelle",
+    "newProject": "Uusi projekti…",
+    "newTitle": "Uusi projektiprofiili",
+    "newDesc": "Kuvaile mihin haette rahoitusta, niin etsimme rahoituksia projektille ydinliiketoiminnan sijaan.",
+    "fieldName": "Projektin nimi",
+    "fieldNamePlaceholder": "esim. Vientihanke EU",
+    "fieldDescription": "Mistä projektissa on kyse?",
+    "fieldGoals": "Mitä haluatte saavuttaa?",
+    "fieldBudget": "Arvioitu budjetti (SEK, valinnainen)",
+    "createButton": "Luo profiili",
+    "created": "Hakuprofiili luotu",
+    "createFailed": "Profiilia ei voitu luoda",
+    "upgradeNeeded": "Päivitys vaaditaan"
   }
 }

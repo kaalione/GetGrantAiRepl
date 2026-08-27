@@ -1430,5 +1430,20 @@
     "backToLogin": "Tilbake til innlogging",
     "callbackFailed": "Kunne ikke fullføre innloggingen. Prøv igjen.",
     "notConfigured": "Innlogging er ikke konfigurert. Sett VITE_SUPABASE_URL og VITE_SUPABASE_PUBLISHABLE_KEY."
+  },
+  "profiles": {
+    "switchLabel": "Vis treff for",
+    "newProject": "Nytt prosjekt…",
+    "newTitle": "Ny prosjektprofil",
+    "newDesc": "Beskriv hva dere søker finansiering til, så matcher vi tilskudd mot prosjektet i stedet for kjernevirksomheten.",
+    "fieldName": "Navn på prosjektet",
+    "fieldNamePlaceholder": "f.eks. Eksportsatsing EU",
+    "fieldDescription": "Hva går prosjektet ut på?",
+    "fieldGoals": "Hva vil dere oppnå?",
+    "fieldBudget": "Omtrentlig budsjett (SEK, valgfritt)",
+    "createButton": "Opprett profil",
+    "created": "Søkeprofil opprettet",
+    "createFailed": "Kunne ikke opprette profilen",
+    "upgradeNeeded": "Oppgradering kreves"
   }
 }

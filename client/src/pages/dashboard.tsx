@@ -15,6 +15,7 @@ import { ProfileCompletionAlert } from "@/components/profile-completion-alert";
 import { EligibilityDashboard } from "@/components/eligibility-dashboard";
 import { UpgradePromptBanner } from "@/components/success-fee/upgrade-prompt";
 import { DashboardNewUser } from "@/components/dashboard-new-user";
+import { ProfileSwitcher } from "@/components/profile-switcher";
 import { useToast } from "@/hooks/use-toast";
 import type { Grant, Company, GrantProject } from "@shared/schema";
 import { calculateMatchScore } from "@/lib/matching";
@@ -190,6 +191,11 @@ export default function Dashboard() {
         noindex={true}
       />
       <div className="space-y-8 animate-fade-in">
+        {hasCompany && (
+          <div className="flex items-center gap-2" data-testid="row-profile-switcher">
+            <ProfileSwitcher companyId={company?.id} />
+          </div>
+        )}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 p-8 text-white">
           <div className="absolute inset-0 bg-grid-white/10" />
           <div className="relative z-10">

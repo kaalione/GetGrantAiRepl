@@ -1430,5 +1430,20 @@
     "backToLogin": "Tillbaka till inloggning",
     "callbackFailed": "Kunde inte slutföra inloggningen. Försök igen.",
     "notConfigured": "Inloggning är inte konfigurerad. Sätt VITE_SUPABASE_URL och VITE_SUPABASE_PUBLISHABLE_KEY."
+  },
+  "profiles": {
+    "switchLabel": "Visa matchningar för",
+    "newProject": "Nytt projekt…",
+    "newTitle": "Ny projektprofil",
+    "newDesc": "Beskriv vad ni söker finansiering till, så matchar vi bidrag mot projektet istället för kärnverksamheten.",
+    "fieldName": "Namn på projektet",
+    "fieldNamePlaceholder": "t.ex. Exportsatsning EU",
+    "fieldDescription": "Vad går projektet ut på?",
+    "fieldGoals": "Vad vill ni uppnå?",
+    "fieldBudget": "Ungefärlig budget (SEK, valfritt)",
+    "createButton": "Skapa profil",
+    "created": "Sökprofil skapad",
+    "createFailed": "Kunde inte skapa profilen",
+    "upgradeNeeded": "Uppgradering krävs"
   }
 }

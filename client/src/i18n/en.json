@@ -1428,5 +1428,20 @@
     "backToLogin": "Back to login",
     "callbackFailed": "Could not complete sign-in. Please try again.",
     "notConfigured": "Login is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY."
+  },
+  "profiles": {
+    "switchLabel": "Show matches for",
+    "newProject": "New project…",
+    "newTitle": "New project profile",
+    "newDesc": "Describe what you're seeking funding for, and we'll match grants against the project instead of your core business.",
+    "fieldName": "Project name",
+    "fieldNamePlaceholder": "e.g. EU export initiative",
+    "fieldDescription": "What is the project about?",
+    "fieldGoals": "What do you want to achieve?",
+    "fieldBudget": "Approximate budget (SEK, optional)",
+    "createButton": "Create profile",
+    "created": "Search profile created",
+    "createFailed": "Could not create the profile",
+    "upgradeNeeded": "Upgrade required"
   }
 }
