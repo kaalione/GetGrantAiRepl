@@ -1442,6 +1442,12 @@
     "createButton": "Create profile",
     "created": "Search profile created",
     "createFailed": "Could not create the profile",
-    "upgradeNeeded": "Upgrade required"
+    "upgradeNeeded": "Upgrade required",
+    "uploadCta": "Have a pitch deck or project plan? Upload a PDF and we'll fill this in for you",
+    "extracting": "Reading the document…",
+    "extractedBadge": "Filled in from document — review the fields below",
+    "extractDone": "Draft filled in from the document",
+    "extractReview": "Review and adjust the fields before saving.",
+    "extractFailed": "Could not read the document"
   }
 }

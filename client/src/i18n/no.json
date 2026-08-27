@@ -1444,6 +1444,12 @@
     "createButton": "Opprett profil",
     "created": "Søkeprofil opprettet",
     "createFailed": "Kunne ikke opprette profilen",
-    "upgradeNeeded": "Oppgradering kreves"
+    "upgradeNeeded": "Oppgradering kreves",
+    "uploadCta": "Har dere en pitch deck eller prosjektplan? Last opp en PDF så fyller vi ut for dere",
+    "extracting": "Leser dokumentet…",
+    "extractedBadge": "Utfylt fra dokument — se over feltene nedenfor",
+    "extractDone": "Utkast utfylt fra dokumentet",
+    "extractReview": "Se over og juster feltene før du lagrer.",
+    "extractFailed": "Kunne ikke lese dokumentet"
   }
 }

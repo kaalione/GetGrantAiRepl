@@ -16,6 +16,12 @@ export interface CreateProfileInput {
   description?: string;
   goals?: string;
   budgetSek?: number;
+  timeframe?: string;
+  focusAreas?: string[];
+  keywords?: string[];
+  createdFrom?: "wizard" | "document";
+  sourceDocumentPath?: string;
+  extraction?: Record<string, unknown>;
 }
 
 export function useSearchProfiles() {

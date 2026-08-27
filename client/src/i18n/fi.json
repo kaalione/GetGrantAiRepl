@@ -1444,6 +1444,12 @@
     "createButton": "Luo profiili",
     "created": "Hakuprofiili luotu",
     "createFailed": "Profiilia ei voitu luoda",
-    "upgradeNeeded": "Päivitys vaaditaan"
+    "upgradeNeeded": "Päivitys vaaditaan",
+    "uploadCta": "Onko teillä pitch deck tai projektisuunnitelma? Lataa PDF, niin täytämme kentät puolestanne",
+    "extracting": "Luetaan dokumenttia…",
+    "extractedBadge": "Täytetty dokumentista — tarkista kentät alla",
+    "extractDone": "Luonnos täytetty dokumentista",
+    "extractReview": "Tarkista ja muokkaa kenttiä ennen tallennusta.",
+    "extractFailed": "Dokumenttia ei voitu lukea"
   }
 }

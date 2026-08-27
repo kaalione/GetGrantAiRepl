@@ -21,3 +21,4 @@ uploads/
 # Claude Code local state
 .claude/worktrees/
 .agents/
+private-uploads/
