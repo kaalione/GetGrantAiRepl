@@ -90,7 +90,8 @@ function evaluate(allGrants: Grant[]): EvalResult {
   for (const tc of CASES) {
     const pool = allGrants.filter(g => {
       const gm = (g.market || 'se').toLowerCase();
-      return gm === tc.market.toLowerCase() || !g.market;
+      // 'eu' = EU-omfattande program, synligt i alla marknader (som i sviten)
+      return gm === tc.market.toLowerCase() || gm === 'eu' || !g.market;
     });
     const scored = pool.map(g => ({ g, score: calculateMatchScore(tc.company, g).score }));
     scored.sort((a, b) => b.score - a.score);
@@ -130,7 +131,7 @@ function evaluate(allGrants: Grant[]): EvalResult {
   }
 
   // Profile shift tests
-  const sePool = allGrants.filter(g => (g.market || 'se').toLowerCase() === 'se' || !g.market);
+  const sePool = allGrants.filter(g => ['se', 'eu'].includes((g.market || 'se').toLowerCase()) || !g.market);
   for (const pc of P_CASES) {
     const withP = sePool.map(g => ({ g, score: calculateMatchScore(pc.company, g, pc.profile).score }))
       .sort((a, b) => b.score - a.score).slice(0, 10);
@@ -154,23 +155,23 @@ function evaluate(allGrants: Grant[]): EvalResult {
 
 // Sökbara parametrar med intervall [min, max, steg]
 const PARAM_SPACE: Record<string, [number, number, number]> = {
-  industryMax: [26, 40, 2],
-  industryFloor: [0.5, 0.8, 0.05],
+  industryMax: [26, 44, 2],
+  industryFloor: [0.4, 0.8, 0.05],
   industryNeutral: [5, 9, 1],
-  sectorPenalty: [-20, -10, 5],
-  sizeTargetGroupMatch: [9, 15, 2],
-  sizeNeutral: [3, 6, 1],
+  sectorPenalty: [-25, -10, 5],
+  sizeTargetGroupMatch: [9, 17, 2],
+  sizeNeutral: [2, 8, 1],
   sizeMismatch: [2, 4, 1],
   revenueNeutral: [2, 4, 1],
-  regionNational: [9, 15, 2],
-  regionInternational: [4, 10, 2],
+  regionNational: [9, 18, 3],
+  regionInternational: [0, 10, 2],
   regionNeutral: [3, 6, 1],
-  keywordMax: [24, 36, 3],
-  keywordWeightLong: [8, 14, 2],
+  keywordMax: [24, 44, 4],
+  keywordWeightLong: [8, 18, 2],
   keywordWeightMid: [4, 9, 1],
   keywordWeightShort: [1, 4, 1],
-  keywordTitleCap: [2, 3, 1],
-  keywordNeutral: [4, 7, 1],
+  keywordTitleCap: [2, 4, 1],
+  keywordNeutral: [2, 8, 1],
   noDataScore: [20, 30, 5],
 };
 
@@ -218,6 +219,29 @@ async function main() {
       console.log(`[${i}] obj=${r.objective.toFixed(1)} A=[${r.aPass}] C=[${r.cPass}] Ctop=[${r.cTopPass}] hard=${r.hardOk}`);
     }
   }
+  // Girig koordinatpolering: prova varje stegvärde per parameter tills
+  // ingen enskild ändring förbättrar målet längre (max 3 svep).
+  for (let sweep = 0; sweep < 3; sweep++) {
+    let improved = false;
+    for (const k of Object.keys(PARAM_SPACE)) {
+      const [min, max, step] = PARAM_SPACE[k];
+      for (let v = min; v <= max + 1e-9; v += step) {
+        const val = Math.round(v * 100) / 100;
+        if (val === best[k]) continue;
+        const candidate = { ...best, [k]: val };
+        Object.assign(W, candidate);
+        const r = evaluate(allGrants);
+        if (r.objective > bestResult.objective) {
+          best = candidate;
+          bestResult = r;
+          improved = true;
+          console.log(`[polish ${k}=${val}] obj=${r.objective.toFixed(1)} A=[${r.aPass}] C=[${r.cPass}]`);
+        }
+      }
+    }
+    if (!improved) break;
+  }
+
   Object.assign(W, best);
   const final = evaluate(allGrants);
   console.log(`\n${ITER} iterationer på ${((Date.now() - t0) / 1000).toFixed(0)}s`);

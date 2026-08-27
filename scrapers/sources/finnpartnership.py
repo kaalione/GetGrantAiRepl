@@ -10,6 +10,8 @@ class FinnpartnershipScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.finnpartnership.fi/"
         self.source_name = "Finnpartnership"
+        self.market = 'fi'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Finnfund / Ulkoministeriö"
         self.default_category = "international_development"
         self.headers['Accept-Language'] = 'en-US,en;q=0.9,fi;q=0.5'

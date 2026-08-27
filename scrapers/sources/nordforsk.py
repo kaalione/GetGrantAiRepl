@@ -11,6 +11,7 @@ class NordForskScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.nordforsk.org/calls"
         self.source_name = "NordForsk"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "NordForsk (Nordic Council of Ministers)"
         self.default_category = "research"
         self.headers['Accept-Language'] = 'en,nb;q=0.8'
@@ -178,7 +179,8 @@ class NordForskScraper(BaseScraper):
 
     def transform_to_grant(self, raw_data):
         grant = super().transform_to_grant(raw_data)
-        grant['market'] = 'no'
+        # NordForsk finansierar hela Norden — inte bara Norge.
+        grant['market'] = 'eu'
         grant['language'] = 'nb'
         grant['source_type'] = 'nordic'
         return grant

@@ -25,6 +25,8 @@ class VerksamtScraper(BaseScraper):
     def __init__(self, source_id=None):
         super().__init__(source_id=source_id)
         self.source_name = "Verksamt.se"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.base_url = "https://verksamt.se/finansiering-radgivning/hitta-radgivning-och-finansiering"
         self.organization = "Verksamt.se"
         self.default_category = "general"

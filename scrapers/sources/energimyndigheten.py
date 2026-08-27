@@ -11,6 +11,8 @@ class EnergimyndighetenScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.energimyndigheten.se/stod-och-utlysningar/"
         self.source_name = "Energimyndigheten"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Energimyndigheten"
         self.default_category = "energy"
 

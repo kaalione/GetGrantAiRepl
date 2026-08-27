@@ -10,6 +10,8 @@ class StarttirahaScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.suomi.fi/palvelut/starttiraha-te-palvelut/71ce77e0-3286-4b20-948c-1c60ae6d3a84"
         self.source_name = "Starttiraha"
+        self.market = 'fi'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "TE-palvelut / Kunnat"
         self.default_category = "income_support"
         self.headers['Accept-Language'] = 'fi-FI,fi;q=0.9,en;q=0.5'

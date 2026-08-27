@@ -11,6 +11,8 @@ class AlmiScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.almi.se/lan-finansiering/"
         self.source_name = "Almi"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Almi"
         self.default_category = "financing"
 

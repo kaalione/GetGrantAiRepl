@@ -11,6 +11,7 @@ class CassiniScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.cassini.eu/accelerator/"
         self.source_name = "CASSINI / EUSPA"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "CASSINI / EUSPA"
         self.default_category = "space_tech"
         self.default_eligibility = "EU-baserade startups och SMF inom rymdteknik. Sverige fullt berättigat."

@@ -371,7 +371,9 @@ async function main() {
     const marketGrants = allGrants.filter(g => {
       const grantMarket = (g.market || 'se').toLowerCase();
       const companyMarket = tc.market.toLowerCase();
-      return grantMarket === companyMarket || !g.market;
+      // market='eu' betyder EU-omfattande/multinationellt program — synligt
+      // för alla marknader (speglar filtret i server/routes.ts).
+      return grantMarket === companyMarket || grantMarket === 'eu' || !g.market;
     });
 
     const scored = marketGrants.map(g => {
@@ -577,7 +579,10 @@ function runProfileShiftTests(allGrants: Grant[]): boolean {
 
   for (const tc of PROFILE_SHIFT_CASES) {
     const company = buildCompanyObject(tc.company);
-    const marketGrants = allGrants.filter(g => (g.market || 'se').toLowerCase() === tc.company.market.toLowerCase() || !g.market);
+    const marketGrants = allGrants.filter(g => {
+      const grantMarket = (g.market || 'se').toLowerCase();
+      return grantMarket === tc.company.market.toLowerCase() || grantMarket === 'eu' || !g.market;
+    });
 
     const withProfile = topSources(company, marketGrants, tc.profile);
     const withoutProfile = topSources(company, marketGrants);

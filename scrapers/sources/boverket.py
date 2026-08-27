@@ -11,6 +11,8 @@ class BoverketScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.boverket.se/sv/bidrag--garantier/"
         self.source_name = "Boverket"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Boverket"
         self.default_category = "housing"
 

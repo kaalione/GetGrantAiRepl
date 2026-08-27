@@ -12,6 +12,7 @@ class NatoSpsScraper(BaseScraper):
         self.base_url = "https://www.nato.int/cps/en/natohq/78209.htm"
         self.alt_url = "https://www.nato.int/en/about-us/organization/nato-structure/science-for-peace-and-security-hub/"
         self.source_name = "NATO SPS"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "NATO Science for Peace and Security Programme"
         self.default_category = "defence_security"
         self.sector_tags = ["cybersäkerhet", "försvar", "dual-use", "säkerhet"]

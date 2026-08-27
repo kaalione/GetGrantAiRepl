@@ -11,6 +11,7 @@ class InterregOKSScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://interreg-oks.eu/"
         self.source_name = "Interreg ÖKS"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "Interreg ÖKS"
         self.default_category = "eu"
         self.calls_url = "https://interreg-oks.eu/forersomvillansoka.488.html"

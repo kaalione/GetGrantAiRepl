@@ -11,6 +11,8 @@ class ForteScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://forte.se/sok-finansiering/utlysningar"
         self.source_name = "Forte"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Forte"
         self.default_category = "research"
         self.default_eligibility = "forskare med doktorsexamen, universitet, högskolor"

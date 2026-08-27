@@ -110,6 +110,27 @@ class EUFundingScraper:
 
         return all_results[:target]
 
+    # Utlysningsidentifieraren bär EU-programmet (HORIZON-CL5-..., CREA-CULT-...).
+    # Programkorrekta källnamn gör bidragen begripliga och sökbara per program
+    # i stället för att 900+ utlysningar klumpas som "EU Funding & Tenders".
+    PROGRAMME_SOURCE_NAMES = [
+        ('HORIZON-EIC', 'EU Horizon Europe — EIC'),
+        ('HORIZON', 'EU Horizon Europe'),
+        ('ERC', 'EU Horizon Europe — ERC'),
+        ('DIGITAL', 'EU Digital Europe Programme'),
+        ('CREA', 'EU Creative Europe (Kreativa Europa)'),
+        ('ERASMUS', 'EU Erasmus+'),
+        ('INNOVFUND', 'EU Innovation Fund'),
+        ('LIFE', 'EU LIFE-programmet'),
+    ]
+
+    @classmethod
+    def source_name_for_identifier(cls, identifier):
+        for prefix, name in cls.PROGRAMME_SOURCE_NAMES:
+            if identifier and identifier.startswith(prefix + '-'):
+                return name
+        return 'EU Funding & Tenders'
+
     def transform_to_grant(self, result: dict) -> Optional[Dict[str, Any]]:
         metadata = result.get('metadata', {})
 
@@ -207,7 +228,7 @@ class EUFundingScraper:
         grant = {
             'title': title[:500],
             'description': full_description[:5000],
-            'source_name': 'EU Funding & Tenders',
+            'source_name': self.source_name_for_identifier(identifier),
             'source_type': 'eu',
             'url': url,
             'deadline': deadline,
@@ -218,6 +239,7 @@ class EUFundingScraper:
             'keywords': keywords,
             'application_requirements': None,
             'status': status,
+            'market': 'eu',  # EU-omfattande program — synligt i alla marknader
             'raw_data': metadata,
         }
         return grant

@@ -11,6 +11,8 @@ class NaturvardsverketScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.naturvardsverket.se/bidrag/"
         self.source_name = "Naturvårdsverket"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Naturvårdsverket"
         self.default_category = "environment"
 

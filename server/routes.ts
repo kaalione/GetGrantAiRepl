@@ -498,7 +498,9 @@ export async function registerRoutes(
       }
 
       if (market && typeof market === 'string') {
-        allGrants = allGrants.filter(g => (g as any).market === market || !(g as any).market);
+        // market='eu' på ett bidrag betyder EU-omfattande/multinationellt
+        // program — det visas för alla marknader (se, no, fi).
+        allGrants = allGrants.filter(g => (g as any).market === market || (g as any).market === 'eu' || !(g as any).market);
       }
 
       const userId = (req as any).user?.claims?.sub;

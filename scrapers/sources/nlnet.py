@@ -90,6 +90,7 @@ class NlnetScraper(BaseScraper):
         self.ngi_url = "https://nlnet.nl/NGI0/"
         self.themes_url = "https://nlnet.nl/themes/"
         self.source_name = "NLnet Foundation / NGI Zero"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "NLnet Foundation"
         self.default_category = "open_source"
         self.sector_tags = ["open source", "privacy", "internet-infrastruktur", "FOSS"]

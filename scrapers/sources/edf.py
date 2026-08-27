@@ -15,7 +15,11 @@ class EdfScraper(EUFundingScraper):
         self.source_name = "European Defence Fund (EDF)"
 
     def _deduplicate_against_eu_ft(self, results):
-        existing_urls = get_grant_urls_by_source(self.EU_FT_SOURCE_NAME)
+        # EU F&T-bidragen är numera namnsatta per program (EU Horizon Europe,
+        # EU Digital Europe Programme ...) — dedupa mot samtliga.
+        existing_urls = set()
+        for _, name in [('', self.EU_FT_SOURCE_NAME)] + self.PROGRAMME_SOURCE_NAMES:
+            existing_urls |= get_grant_urls_by_source(name)
         if not existing_urls:
             print(f"  EDF dedup: No existing EU F&T grants found, keeping all {len(results)}")
             return results

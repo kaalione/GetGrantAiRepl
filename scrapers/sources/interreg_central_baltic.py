@@ -11,6 +11,7 @@ class InterregCentralBalticScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://centralbaltic.eu/"
         self.source_name = "Interreg Central Baltic"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "Interreg Central Baltic"
         self.default_category = "eu"
         self.applicants_url = "https://centralbaltic.eu/for-applicants/"

@@ -11,6 +11,8 @@ class FormasScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://formas.se/soka-finansiering/alla-utlysningar.html"
         self.source_name = "Formas"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Formas"
         self.default_category = "research"
 

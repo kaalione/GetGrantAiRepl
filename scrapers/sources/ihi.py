@@ -16,6 +16,7 @@ class IhiScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.ihi.europa.eu/apply-funding/open-calls"
         self.source_name = "IHI (Innovative Health Initiative)"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "IHI"
         self.default_category = "health_innovation"
         self.default_eligibility = "Organisationer i EU-länder inkl. Sverige. Public-private partnership under Horizon Europe. Projekt typiskt €5-30M."

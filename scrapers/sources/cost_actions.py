@@ -12,6 +12,7 @@ class CostActionsScraper(BaseScraper):
         self.base_url = "https://www.cost.eu/funding/open-call-a-simple-one-step-application-process/"
         self.actions_url = "https://www.cost.eu/cost-actions/"
         self.source_name = "COST Actions"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "COST Association"
         self.default_category = "research_network"
         self.sector_tags = ["forskning", "nätverk", "akademi", "tvärvetenskapligt"]

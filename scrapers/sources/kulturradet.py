@@ -11,6 +11,8 @@ class KulturradetScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.kulturradet.se/sok-bidrag/"
         self.source_name = "Kulturrådet"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Kulturrådet"
         self.default_category = "culture"
 

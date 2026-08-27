@@ -14,6 +14,8 @@ class EnovaScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.enova.no/nb/bedrift/"
         self.source_name = "Enova"
+        self.market = 'no'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Enova SF"
         self.default_category = "energy"
         self.headers['Accept-Language'] = 'nb-NO,nb;q=0.9,no;q=0.8'
