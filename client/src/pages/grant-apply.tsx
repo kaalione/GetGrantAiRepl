@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Grant, Company, Application, ApplicationSection, ComplianceReport as ComplianceReportType, ContentBlock } from "@shared/schema";
+import { useSearchProfiles } from "@/hooks/use-search-profiles";
 import { calculateMatchScore } from "@/lib/matching";
 import { MatchIndicator } from "@/components/grants/match-indicator";
 import { useTranslation } from "react-i18next";
@@ -193,7 +194,8 @@ export default function GrantApply() {
   });
 
   const company = companies?.[0] || null;
-  const matchResult = grant && company ? calculateMatchScore(company, grant) : null;
+  const { selectedProfile } = useSearchProfiles();
+  const matchResult = grant && company ? calculateMatchScore(company, grant, selectedProfile) : null;
 
   const { data: existingApplications } = useQuery<Application[]>({
     queryKey: ["/api/applications"],

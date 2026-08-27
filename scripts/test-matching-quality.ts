@@ -3,9 +3,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { eq } from "drizzle-orm";
 import { grants, type Grant, type Company } from "../shared/schema";
-import { calculateMatchScore } from "../client/src/lib/matching";
+import { calculateMatchScore, type RelevanceProfile } from "../client/src/lib/matching";
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 
 const { Pool } = pg;
 
@@ -356,7 +357,7 @@ async function main() {
   console.log('\n🔍 GetGrant.ai — Matching Quality Test Suite\n');
   console.log('='.repeat(60));
 
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL!.replace('sslmode=require', 'sslmode=no-verify') });
   const database = drizzle(pool);
 
   const allGrants = await database.select().from(grants);
@@ -487,12 +488,123 @@ async function main() {
     results,
   };
 
-  const outputPath = path.join(path.dirname(new URL(import.meta.url).pathname), 'matching-test-results.json');
+  // fileURLToPath handles spaces in the repo path (URL pathname is %-encoded)
+  const outputPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'matching-test-results.json');
   fs.writeFileSync(outputPath, JSON.stringify(report, null, 2));
   console.log(`📄 JSON report saved to: ${outputPath}`);
 
+  const profileOk = runProfileShiftTests(allGrants as Grant[]);
+
   await pool.end();
-  process.exit(0);
+  process.exit(profileOk ? 0 : 1);
+}
+
+// ---------------------------------------------------------------------------
+// Search-profile relevance tests (spec E2): the same company must get
+// different matches when a project profile carries the relevance data.
+// Eligibility still reads from the company, so exclusions stay excluded.
+// ---------------------------------------------------------------------------
+interface ProfileShiftCase {
+  id: string;
+  label: string;
+  company: TestCompany;
+  profile: RelevanceProfile;
+  // Sources that must appear in top 10 WITH the profile
+  expectedInTop10WithProfile: string[];
+  // Sources that must NOT be in top 10 in either mode
+  neverInTop10: string[];
+}
+
+const PROFILE_SHIFT_CASES: ProfileShiftCase[] = [
+  {
+    id: 'P1',
+    label: 'Konsultbolag + grönt energiprojekt → energibidrag',
+    company: {
+      id: 'P1', label: 'Rådgivarna Konsult AB', market: 'SE',
+      profile: {
+        companyName: 'Rådgivarna Konsult AB', industry: 'Professional Services',
+        employees: 18, revenue: 21000000, foundedYear: 2012,
+        location: 'Stockholm', focusAreas: ['Consulting', 'Management'],
+        orgType: 'Aktiebolag',
+      },
+      expectedInTop10: [], expectedNotInTop10: [], maxAcceptableScoreForExclusions: 100,
+    },
+    profile: {
+      kind: 'project',
+      description: 'Utveckla en plattform för energilagring och solceller i kommersiella fastigheter med AI-styrd energioptimering',
+      goals: 'Minska energianvändning och klimatutsläpp i fastighetsbeståndet',
+      focusAreas: ['Energi', 'Cleantech'],
+      keywords: ['energi', 'solceller', 'energilagring', 'klimat', 'hållbarhet'],
+    },
+    expectedInTop10WithProfile: ['energimyndigheten', 'klimatklivet', 'energi'],
+    neverInTop10: ['kulturradet', 'konstnarsnamnden'],
+  },
+  {
+    id: 'P2',
+    label: 'Tech-startup + livsmedelsprojekt → jordbruk/livsmedel',
+    company: {
+      id: 'P2', label: 'TechScale AB', market: 'SE',
+      profile: {
+        companyName: 'TechScale AB', industry: 'Tech/IT',
+        employees: 8, revenue: 2100000, foundedYear: 2024,
+        location: 'Stockholm', focusAreas: ['AI', 'SaaS'],
+        orgType: 'Aktiebolag',
+      },
+      expectedInTop10: [], expectedNotInTop10: [], maxAcceptableScoreForExclusions: 100,
+    },
+    profile: {
+      kind: 'project',
+      description: 'Spårbarhetsplattform för livsmedelskedjan från jordbruk till butik',
+      goals: 'Minska matsvinn och öka livsmedelssäkerheten',
+      focusAreas: ['Livsmedel', 'Jordbruk'],
+      keywords: ['livsmedel', 'jordbruk', 'matsvinn', 'foodtech'],
+    },
+    expectedInTop10WithProfile: ['jordbruksverket', 'livsmedel', 'formas'],
+    neverInTop10: ['kulturradet', 'konstnarsnamnden'],
+  },
+];
+
+function topSources(company: Company, grantsToScore: Grant[], profile?: RelevanceProfile): { source: string; title: string; score: number }[] {
+  return grantsToScore
+    .map(g => ({ source: g.sourceName, title: g.title, score: calculateMatchScore(company, g, profile).score }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10);
+}
+
+function runProfileShiftTests(allGrants: Grant[]): boolean {
+  console.log('\n🎯 Search-profile relevance tests\n' + '='.repeat(60));
+  let allPassed = true;
+
+  for (const tc of PROFILE_SHIFT_CASES) {
+    const company = buildCompanyObject(tc.company);
+    const marketGrants = allGrants.filter(g => (g.market || 'se').toLowerCase() === tc.company.market.toLowerCase() || !g.market);
+
+    const withProfile = topSources(company, marketGrants, tc.profile);
+    const withoutProfile = topSources(company, marketGrants);
+
+    const hitText = (t: { source: string; title: string }) => `${t.source} ${t.title}`.toLowerCase();
+    const inTop = (keyword: string, top: typeof withProfile) =>
+      top.some(t => hitText(t).includes(keyword.replace(/_/g, ' ').toLowerCase()) || hitText(t).replace(/[^a-zåäö]/g, '').includes(keyword.replace(/_/g, '')));
+
+    const expectedHits = tc.expectedInTop10WithProfile.filter(k => inTop(k, withProfile));
+    const forbidden = tc.neverInTop10.filter(k => inTop(k, withProfile) || inTop(k, withoutProfile));
+    const shifted = JSON.stringify(withProfile.map(t => t.title)) !== JSON.stringify(withoutProfile.map(t => t.title));
+
+    const passed = expectedHits.length >= 2 && forbidden.length === 0 && shifted;
+    allPassed = allPassed && passed;
+
+    console.log(`\n${passed ? '✅' : '❌'} ${tc.id} — ${tc.label}`);
+    console.log(`   Träffade förväntade källor med profil: ${expectedHits.length}/${tc.expectedInTop10WithProfile.length} (kräver ≥2)`);
+    console.log(`   Topplistan ändrades av profilen: ${shifted ? 'ja' : 'NEJ'}`);
+    if (forbidden.length > 0) console.log(`   ⚠️ Otillåtna källor i topp 10: ${forbidden.join(', ')}`);
+    console.log('   Topp 5 med profil:');
+    withProfile.slice(0, 5).forEach((t, i) => console.log(`     ${i + 1}. ${t.source} — ${t.title.slice(0, 50)} (${t.score})`));
+    console.log('   Topp 5 utan profil (kärnverksamhet):');
+    withoutProfile.slice(0, 5).forEach((t, i) => console.log(`     ${i + 1}. ${t.source} — ${t.title.slice(0, 50)} (${t.score})`));
+  }
+
+  console.log(`\n${allPassed ? '✅ Alla profiltester godkända' : '❌ Profiltester underkända'}`);
+  return allPassed;
 }
 
 function wrapText(text: string, maxWidth: number): string[] {

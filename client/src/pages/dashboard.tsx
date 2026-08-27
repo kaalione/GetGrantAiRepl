@@ -16,6 +16,7 @@ import { EligibilityDashboard } from "@/components/eligibility-dashboard";
 import { UpgradePromptBanner } from "@/components/success-fee/upgrade-prompt";
 import { DashboardNewUser } from "@/components/dashboard-new-user";
 import { ProfileSwitcher } from "@/components/profile-switcher";
+import { useSearchProfiles } from "@/hooks/use-search-profiles";
 import { useToast } from "@/hooks/use-toast";
 import type { Grant, Company, GrantProject } from "@shared/schema";
 import { calculateMatchScore } from "@/lib/matching";
@@ -116,8 +117,13 @@ export default function Dashboard() {
     retry: false,
   });
 
+  const { selectedProfile } = useSearchProfiles();
   const { data: topMatches, isLoading: matchesLoading } = useQuery<TopMatch[]>({
-    queryKey: ["/api/grants/top-matches"],
+    queryKey: [
+      selectedProfile && !selectedProfile.isDefault
+        ? `/api/grants/top-matches?profileId=${selectedProfile.id}`
+        : "/api/grants/top-matches",
+    ],
   });
 
   // /api/projects returns completionPercentage computed from milestone progress.
@@ -155,7 +161,7 @@ export default function Dashboard() {
       })
       .map((g) => {
         const scoreResult = company
-          ? calculateMatchScore(company, g)
+          ? calculateMatchScore(company, g, selectedProfile)
           : null;
         return { ...g, matchScore: scoreResult?.score ?? 0 };
       })
@@ -164,7 +170,7 @@ export default function Dashboard() {
         new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime()
       )
       .slice(0, 5);
-  }, [grants, company]);
+  }, [grants, company, selectedProfile]);
 
   const profilePct = profileCompletion?.percentage ?? 0;
   const totalInteractions = progress?.completedCount ?? 0;

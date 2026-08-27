@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import express from "express";
 import { storage } from "./storage";
-import { insertGrantSchema, insertCompanySchema, insertApplicationSchema, insertScraperSourceSchema, insertScraperLogSchema, users, grantAlerts, companies, grants, type Grant, type GrantAlert, type Company } from "@shared/schema";
+import { insertGrantSchema, insertCompanySchema, insertApplicationSchema, insertScraperSourceSchema, insertScraperLogSchema, users, grantAlerts, companies, grants, searchProfiles, type Grant, type GrantAlert, type Company } from "@shared/schema";
 import { z } from "zod";
 import { generateApplication } from "./lib/claude";
 import { generateStructuredApplication, regenerateSection, getTemplateForGrant, getTemplateBySource, getAllTemplates, type ProjectData } from "./services/applicationWriter";
@@ -380,7 +380,7 @@ export async function registerRoutes(
       }
       
       const grants = await storage.getGrantsFiltered({ status: 'open' });
-      
+
       if (!company) {
         const topGrants = grants.slice(0, 5).map(g => ({
           ...g,
@@ -388,16 +388,37 @@ export async function registerRoutes(
         }));
         return res.json(topGrants);
       }
-      
+
+      // Relevance text: the selected search profile when one is provided
+      // (project-based matching), otherwise the company's industry.
+      let relevanceText = company.industry?.toLowerCase() || "";
+      const profileId = req.query.profileId as string | undefined;
+      if (profileId && userId) {
+        const [profile] = await db
+          .select()
+          .from(searchProfiles)
+          .where(and(
+            eq(searchProfiles.id, profileId),
+            eq(searchProfiles.userId, userId),
+            eq(searchProfiles.active, true),
+          ));
+        if (profile) {
+          const parts = [
+            ...(profile.focusAreas ?? []),
+            ...(profile.keywords ?? []),
+            profile.description ?? "",
+          ].filter(Boolean);
+          if (parts.length > 0) relevanceText = parts.join(" ").toLowerCase();
+        }
+      }
+
       const scoredGrants = grants.map(grant => {
         let score = 50;
-        
-        if (grant.keywords && company.industry) {
+
+        if (grant.keywords && relevanceText) {
           const grantKeywords = grant.keywords as string[];
-          const companyIndustry = company.industry.toLowerCase();
-          const matches = grantKeywords.filter(k => 
-            companyIndustry.includes(k.toLowerCase()) || 
-            k.toLowerCase().includes(companyIndustry)
+          const matches = grantKeywords.filter(k =>
+            relevanceText.includes(k.toLowerCase())
           );
           score += matches.length * 10;
         }

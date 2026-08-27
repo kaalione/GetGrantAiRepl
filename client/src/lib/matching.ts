@@ -6,6 +6,18 @@ export interface MatchResult {
   explanation: string;
 }
 
+// Relevance side of a search profile ("what are we seeking funding for?").
+// Eligibility factors (size, revenue, location) always read from the
+// company; when a profile carries relevance data, industry/keyword factors
+// read from it instead of the company's own industry/description.
+export interface RelevanceProfile {
+  kind?: string | null;
+  description?: string | null;
+  goals?: string | null;
+  focusAreas?: string[] | null;
+  keywords?: string[] | null;
+}
+
 export interface MatchFactor {
   name: string;
   points: number;
@@ -85,9 +97,9 @@ function convertStructuredToLegacy(structured: StructuredEligibilityCriteria): L
   return legacy;
 }
 
-export function calculateMatchScore(company: Company | null, grant: Grant): MatchResult {
+export function calculateMatchScore(company: Company | null, grant: Grant, profile?: RelevanceProfile | null): MatchResult {
   const factors: MatchFactor[] = [];
-  
+
   if (!company) {
     return {
       score: 0,
@@ -153,8 +165,20 @@ export function calculateMatchScore(company: Company | null, grant: Grant): Matc
     eligibility = rawCriteria as EligibilityCriteria | null;
   }
 
-  // Industry match (30 points)
-  const industryMatch = checkIndustryMatch(company, targetGroup, eligibility);
+  // Relevance factors read from the selected search profile when it carries
+  // data (project-based matching); otherwise from the company as before.
+  const profileFocus = profile?.focusAreas?.filter(Boolean) ?? [];
+  const profileText = [profile?.description, profile?.goals, ...(profile?.keywords ?? [])]
+    .filter(Boolean)
+    .join(" ");
+  const relevanceSource: Company = {
+    ...company,
+    industry: profileFocus.length > 0 ? profileFocus.join(", ") : company.industry,
+    description: profileText.length > 0 ? profileText : company.description,
+  };
+
+  // Industry match (30 points) — relevance
+  const industryMatch = checkIndustryMatch(relevanceSource, targetGroup, eligibility);
   factors.push(industryMatch);
 
   // Employee size match (20 points)
@@ -169,8 +193,8 @@ export function calculateMatchScore(company: Company | null, grant: Grant): Matc
   const locationMatch = checkLocationMatch(company, eligibility);
   factors.push(locationMatch);
 
-  // Keywords overlap (15 points)
-  const keywordsMatch = checkKeywordsMatch(company, grantKeywords);
+  // Keywords overlap (15 points) — relevance
+  const keywordsMatch = checkKeywordsMatch(relevanceSource, grantKeywords);
   factors.push(keywordsMatch);
 
   const totalScore = factors.reduce((sum, f) => sum + f.points, 0);

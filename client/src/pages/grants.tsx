@@ -129,15 +129,15 @@ export default function Grants() {
     if (!grants) return [];
     if (!showOnlyMatching || !company) return grants;
     return [...grants].sort((a, b) => {
-      const scoreA = calculateMatchScore(company, a).score;
-      const scoreB = calculateMatchScore(company, b).score;
+      const scoreA = calculateMatchScore(company, a, selectedProfile).score;
+      const scoreB = calculateMatchScore(company, b, selectedProfile).score;
       if (scoreB !== scoreA) return scoreB - scoreA;
       if (!a.deadline && !b.deadline) return 0;
       if (!a.deadline) return 1;
       if (!b.deadline) return -1;
       return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
     });
-  }, [grants, showOnlyMatching, company]);
+  }, [grants, showOnlyMatching, company, selectedProfile]);
 
   const handleFilterChange = useCallback((key: keyof FilterState, value: unknown) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -259,7 +259,8 @@ export default function Grants() {
                       <GrantCard 
                         key={grant.id} 
                         grant={grant} 
-                        company={company} 
+                        company={company}
+                        profile={selectedProfile} 
                         showMatchScore={!!company}
                         applicationInfo={applicationsByGrantId[grant.id] || null}
                         eligibilityStatus={eligibilityByGrantId[grant.id]?.status || null}
@@ -304,6 +305,7 @@ export default function Grants() {
                     key={b.id}
                     grant={b.grant}
                     company={company}
+                        profile={selectedProfile}
                     showMatchScore={!!company}
                     applicationInfo={applicationsByGrantId[b.grant.id] || null}
                     eligibilityStatus={eligibilityByGrantId[b.grant.id]?.status || null}
