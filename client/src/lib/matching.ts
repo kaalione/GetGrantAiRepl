@@ -103,27 +103,27 @@ function convertStructuredToLegacy(structured: StructuredEligibilityCriteria): L
 // att faktorpoängen kan läsas som procentbidrag. Kalibrerad mot
 // scripts/test-matching-quality.ts.
 export const MATCHING_WEIGHTS = {
-  industryMax: 32,
-  industryFloor: 0.75, // andel av max vid en sektormatch (sektorer tolkas som ELLER)
-  industryNeutral: 7,
-  sectorPenalty: -10,
+  industryMax: 28,
+  industryFloor: 0.7, // andel av max vid en sektormatch (sektorer tolkas som ELLER)
+  industryNeutral: 9,
+  sectorPenalty: -15,
   sizeMax: 15,
-  sizeTargetGroupMatch: 15,
-  sizeNeutral: 3,
-  sizeMismatch: 3,
+  sizeTargetGroupMatch: 9,
+  sizeNeutral: 2,
+  sizeMismatch: 2,
   revenueMax: 10,
-  revenueNeutral: 3,
+  revenueNeutral: 2,
   regionMax: 15,
-  regionNational: 11,
-  regionInternational: 8,
-  regionNeutral: 6,
+  regionNational: 9,
+  regionInternational: 0, // EU-omfattande program konkurrerar i alla marknader — nationell närhet väger tyngre
+  regionNeutral: 4,
   keywordMax: 24,
   keywordWeightLong: 14, // normaliserad längd ≥ 8 tecken ("digitalisering")
-  keywordWeightMid: 9,   // 5–7 tecken ("energi")
-  keywordWeightShort: 4, // ≤ 4 tecken ("it", "ai")
-  keywordTitleCap: 2,    // max antal extra träffar från titeln
-  keywordNeutral: 7,
-  noDataScore: 30,
+  keywordWeightMid: 4,   // 5–7 tecken ("energi")
+  keywordWeightShort: 2, // ≤ 4 tecken ("it", "ai")
+  keywordTitleCap: 4,    // max antal extra träffar från titeln
+  keywordNeutral: 2,
+  noDataScore: 25,
 };
 
 export function calculateMatchScore(company: Company | null, grant: Grant, profile?: RelevanceProfile | null): MatchResult {

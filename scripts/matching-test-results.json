@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-08-27T12:44:55.442Z",
+  "runAt": "2026-08-27T15:13:58.760Z",
   "totalCompanies": 10,
   "passed": 0,
   "failed": 10,
@@ -27,185 +27,185 @@
         },
         {
           "rank": 2,
-          "title": "Towards networked Local Digital Twins in the EU",
-          "sourceName": "EU Funding & Tenders",
-          "score": 82,
-          "market": "se",
+          "title": "Supporting competitiveness and innovation potential of SMEs",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 79,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 3,
-          "title": "Improved monitoring of threats, intrusion detection and response in complex and heterogeneous digital systems and infrastructures",
-          "sourceName": "EU Funding & Tenders",
+          "title": "ongoing projects",
+          "sourceName": "NLnet Foundation / NGI Zero",
           "score": 78,
-          "market": "se",
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 4,
-          "title": "Stärk Stockholmsregionens små och medelstora företags globala konkurrenskraft",
-          "sourceName": "Tillväxtverket",
-          "score": 77,
+          "title": "Samarbeten med USA inom AI, digital infrastruktur och cybersäkerhet",
+          "sourceName": "Vinnova",
+          "score": 78,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 5,
-          "title": "Samarbeten med USA inom AI, digital infrastruktur och cybersäkerhet",
+          "title": "Digital resiliens, AI och cybersäkerhet för konkurrenskraftig industri",
           "sourceName": "Vinnova",
-          "score": 76,
+          "score": 78,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 6,
-          "title": "Digital resiliens, AI och cybersäkerhet för konkurrenskraftig industri",
+          "title": "Digital infrastruktur och kommunikation genom avancerad digitalisering 2026",
           "sourceName": "Vinnova",
-          "score": 76,
+          "score": 78,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 7,
-          "title": "UNITE",
-          "sourceName": "EIT Digital (28digital)",
+          "title": "EUREKA CELTIC-NEXT - Informations- och kommunikationsteknik - våren 2026",
+          "sourceName": "Vinnova",
           "score": 76,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 8,
-          "title": "Finex",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
-          "market": "se",
+          "title": "Uptake of innovative cybersecurity solutions for SMEs",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 75,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 9,
-          "title": "DigitalTech EDIH",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
+          "title": "Kompetenscentrum inom Hållbar industri och Digital omställning 2024",
+          "sourceName": "Vinnova",
+          "score": 74,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 10,
-          "title": "Design of the Master Programme in Business Excellence",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
+          "title": "Stärk Stockholmsregionens små och medelstora företags globala konkurrenskraft",
+          "sourceName": "Tillväxtverket",
+          "score": 74,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 11,
-          "title": "Professional School",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
+          "title": "Utveckla befintlig affärJag villMaximera mitt företags potential - Almi",
+          "sourceName": "Almi",
+          "score": 74,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 12,
-          "title": "Open Innovation Factory",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
-          "market": "se",
+          "title": "Towards networked Local Digital Twins in the EU",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 73,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 13,
-          "title": "Digital infrastruktur och kommunikation genom avancerad digitalisering 2026",
+          "title": "DigitalTech EDIH",
+          "sourceName": "EIT Digital (28digital)",
+          "score": 71,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 14,
+          "title": "Medfinansiering DIGITAL utlysning DIGITAL-2023-CLOUD-AI-04",
           "sourceName": "Vinnova",
-          "score": 76,
+          "score": 71,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
-          "rank": 14,
-          "title": "(d)Academy",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
           "rank": 15,
-          "title": "Erbjudande om medfinansiering för DIGITAL utlysning 1 - 22 februari stängning",
+          "title": "Enskilda ansökningar 2025. Område Digital Transformation. Inklusive ESS bestrålning av elektronik,",
           "sourceName": "Vinnova",
-          "score": 75,
+          "score": 71,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 16,
-          "title": "Uptake of innovative cybersecurity solutions for SMEs",
-          "sourceName": "EU Funding & Tenders",
-          "score": 75,
+          "title": "Erbjudande om medfinansiering för DIGITAL utlys-ningar under 2024",
+          "sourceName": "Vinnova",
+          "score": 71,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 17,
-          "title": "Business Accelerators",
-          "sourceName": "CASSINI / EUSPA",
-          "score": 74,
-          "market": "se",
+          "title": "Support to the implementation of Multi-Country Projects (MCPs)",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 71,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 18,
-          "title": "EU Horizon Europe - Digital Innovation",
-          "sourceName": "EU Horizon Europe",
-          "score": 74,
+          "title": "Erbjudande om medfinansiering för DIGITAL utlysning 1 - 22 februari stängning",
+          "sourceName": "Vinnova",
+          "score": 71,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 19,
-          "title": "Request For Quotations - US Landing Program - EDIH DIPS",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 73,
+          "title": "Intresseanmälan för pågående och kommande EU-ansökningar till EU-programmet DIGITAL",
+          "sourceName": "Vinnova",
+          "score": 71,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 20,
-          "title": "Design of the Master Programme in Data Science with Specialization in Sustainability",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 73,
+          "title": "Intresseanmälan för svensk medfinansiering för inskickade EU-ansökningar under pågående bedömning inom EU-programmet DIGITAL",
+          "sourceName": "Vinnova",
+          "score": 71,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         }
       ],
       "issues": [
-        "Check C: spread 7pts < 25"
+        "Check C: spread 9pts < 25"
       ]
     },
     {
       "companyId": "C2",
       "label": "GreenBuild — Construction energy renovation Gothenburg",
       "checks": {
-        "A": true,
+        "A": false,
         "B": true,
         "C": false,
         "D": null,
@@ -214,70 +214,169 @@
       "top20Grants": [
         {
           "rank": 1,
-          "title": "Klimatklivet - Lokala Klimatinvesteringar",
-          "sourceName": "Naturvårdsverket",
-          "score": 89,
+          "title": "Stadsplanering och urban hållbarhet",
+          "sourceName": "Formas",
+          "score": 78,
           "market": "se",
-          "isExpectedMatch": true,
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 2,
-          "title": "Främja förnybar energi",
-          "sourceName": "Tillväxtverket",
-          "score": 88,
+          "title": "Innovationsprojekt inom Grön Teknik",
+          "sourceName": "Vinnova",
+          "score": 78,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 3,
-          "title": "Regionalfonden",
-          "sourceName": "Eufonder.se",
-          "score": 84,
+          "title": "Forskning om förnybar energi",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 4,
-          "title": "Innovationsprojekt inom Grön Teknik",
-          "sourceName": "Vinnova",
-          "score": 83,
+          "title": "Stöd till energilagring och batterier",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 5,
-          "title": "Interreg North Sea - Grön omställning",
-          "sourceName": "Interreg North Sea",
-          "score": 80,
+          "title": "Solelstöd - stöd för solcellsinstallation",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 6,
-          "title": "Främja cirkulär ekonomi - skapa en hållbar framtid tillsammans",
-          "sourceName": "Tillväxtverket",
-          "score": 76,
+          "title": "Energipilot - stöd för pilotprojekt",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 7,
-          "title": "Jordbruksfonden för landsbygdsutveckling",
-          "sourceName": "Eufonder.se",
-          "score": 76,
+          "title": "Stöd för vindkraft",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 8,
+          "title": "Stöd för energieffektivisering i flerbostadshus",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 9,
+          "title": "Smart och förnybar energi i bebyggelsen",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 10,
+          "title": "Forskning om energisystem och elnät",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 11,
+          "title": "Bioenergi - forskning och utveckling",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 12,
+          "title": "Stöd för geotermisk energi",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 13,
+          "title": "Stöd för hållbara drivmedel",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 14,
+          "title": "Klimatklivet - investeringsstöd för lokala klimatinvesteringar",
+          "sourceName": "Naturvårdsverket",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 15,
+          "title": "Interreg North Sea - Grön omställning",
+          "sourceName": "Interreg North Sea",
+          "score": 77,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 16,
+          "title": "Havsbaserad vindkraft",
+          "sourceName": "Länsstyrelserna",
+          "score": 77,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
-          "rank": 8,
-          "title": "Smart och förnybar energi i bebyggelsen",
+          "rank": 17,
+          "title": "Solceller på mark",
+          "sourceName": "Länsstyrelserna",
+          "score": 77,
+          "market": "se",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 18,
+          "title": "'Innovate to transform' support for SME's sustainability transition (CSA)",
+          "sourceName": "EU Horizon Europe",
+          "score": 76,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 19,
+          "title": "Forskning om energieffektivisering",
           "sourceName": "Energimyndigheten",
           "score": 76,
           "market": "se",
@@ -285,116 +384,18 @@
           "isExpectedExclusion": false
         },
         {
-          "rank": 9,
-          "title": "Skills Institute",
-          "sourceName": "EIT InnoEnergy",
-          "score": 76,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 10,
-          "title": "Samarbete med Brasilien inom hållbar gruvdrift, bioekonomi eller hållbara städer - Eureka nätverksprojekt",
-          "sourceName": "Vinnova",
-          "score": 75,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 11,
-          "title": "Klimatklivet - investeringsstöd för lokala klimatinvesteringar",
-          "sourceName": "Naturvårdsverket",
-          "score": 75,
-          "market": "se",
-          "isExpectedMatch": true,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 12,
-          "title": "Interreg ÖKS - Grön Omställning",
-          "sourceName": "Interreg ÖKS",
-          "score": 74,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 13,
-          "title": "Nollutsläpp - FFI - våren 2026",
-          "sourceName": "Vinnova",
-          "score": 74,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 14,
-          "title": "Mainstreaming and scaling-up evidence-based Nature-Based Solutions towards a nature positive and climate-resilient economy",
-          "sourceName": "EU Funding & Tenders",
-          "score": 73,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 15,
-          "title": "EIT Climate-KIC Accelerator",
-          "sourceName": "EIT Climate-KIC",
-          "score": 73,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 16,
-          "title": "Enhancing ecodesign and circularity of construction products",
-          "sourceName": "EU Funding & Tenders",
-          "score": 73,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 17,
-          "title": "Läs mer om vår GreenTech-fondVår GreenTech-fond på 1,2 miljarder kronor har särskilt fokus på att göra klimatsmarta investeringar som är CO2-reducerande. Läs mer här >> - Almi",
-          "sourceName": "Almi",
-          "score": 73,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 18,
-          "title": "Europe 2030 missions",
-          "sourceName": "EIT Climate-KIC",
-          "score": 73,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 19,
-          "title": "Innovative microgrids for improved energy system integration and efficiency in urban contexts",
-          "sourceName": "EU Funding & Tenders",
-          "score": 73,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
           "rank": 20,
-          "title": "Deploying innovative wastewater management, treatment and valorisation solutions in European cities and regions in the context of climate change",
-          "sourceName": "EU Funding & Tenders",
-          "score": 73,
+          "title": "Ökad resurseffektivitet för en cirkulär industri",
+          "sourceName": "Vinnova",
+          "score": 76,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         }
       ],
       "issues": [
-        "Check C: spread 14pts < 25"
+        "Check A: Only 1/3 expected sources in top 10 (need 2). Missing: boverket, klimatklivet",
+        "Check C: spread 0pts < 25"
       ]
     },
     {
@@ -410,34 +411,7 @@
       "top20Grants": [
         {
           "rank": 1,
-          "title": "KväveklivetInvesteringsstöd som syftar till att minska utsläppen av ammoniak och att bidra till ett mer effektivt utnyttjande av kväve.",
-          "sourceName": "Jordbruksverket",
-          "score": 96,
-          "market": "se",
-          "isExpectedMatch": true,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 2,
           "title": "Förädling av jordbruksprodukter till livsmedel",
-          "sourceName": "Jordbruksverket",
-          "score": 96,
-          "market": "se",
-          "isExpectedMatch": true,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 3,
-          "title": "Skriv ut",
-          "sourceName": "Jordbruksverket",
-          "score": 94,
-          "market": "se",
-          "isExpectedMatch": true,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 4,
-          "title": "Investeringsstöd för robust primärproduktion",
           "sourceName": "Jordbruksverket",
           "score": 93,
           "market": "se",
@@ -445,153 +419,180 @@
           "isExpectedExclusion": false
         },
         {
-          "rank": 5,
-          "title": "Djurs hälsa och välfärdDu kan få stöd för att utrota eller kontrollera vissa sjukdomar inom vattenbruket, eller utveckla bästa praxis för djurens hälsa.",
+          "rank": 2,
+          "title": "Skriv ut",
           "sourceName": "Jordbruksverket",
-          "score": 89,
+          "score": 91,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 3,
+          "title": "Learn more about our missions",
+          "sourceName": "EIT Food",
+          "score": 85,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 4,
+          "title": "Impact Stories",
+          "sourceName": "EIT Food",
+          "score": 85,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 5,
+          "title": "Foodtech och alternativa proteiner - utlysning mellan Sverige, Israel, Schweiz och Singapore inom Eureka",
+          "sourceName": "Vinnova",
+          "score": 83,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 6,
-          "title": "Klimatklivet - Lokala Klimatinvesteringar",
-          "sourceName": "Naturvårdsverket",
-          "score": 89,
+          "title": "KväveklivetInvesteringsstöd som syftar till att minska utsläppen av ammoniak och att bidra till ett mer effektivt utnyttjande av kväve.",
+          "sourceName": "Jordbruksverket",
+          "score": 83,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 7,
-          "title": "Learn more about our missions",
-          "sourceName": "EIT Food",
-          "score": 89,
+          "title": "Framtidens vardagsmat - testa visionära idéer för hållbarhet och konkurrenskraft",
+          "sourceName": "Vinnova",
+          "score": 82,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 8,
           "title": "EIT Food Accelerator Network (FAN) – Call for Startups 2026",
           "sourceName": "EIT Food",
-          "score": 89,
-          "market": "se",
+          "score": 80,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 9,
-          "title": "Innovationsprojekt inom vattenbrukDu kan få stöd för att till exempel utveckla innovationer eller ta fram ny kunskap inom vattenbruk till nytta för fler än det egna företaget.",
-          "sourceName": "Jordbruksverket",
-          "score": 89,
+          "title": "EUREKA CELTIC-NEXT - Informations- och kommunikationsteknik - våren 2026",
+          "sourceName": "Vinnova",
+          "score": 80,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 10,
-          "title": "Call for Expression of Interest EIT Food Evaluators in Agriculture",
-          "sourceName": "EIT Food",
-          "score": 89,
+          "title": "Investeringsstöd för jordbruk, trädgård och rennäring",
+          "sourceName": "Jordbruksverket",
+          "score": 80,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 11,
-          "title": "Call for Delivery of the Entrepreneurship and Innovation Module in MFS",
+          "title": "Test Farms Startups Call",
           "sourceName": "EIT Food",
-          "score": 89,
-          "market": "se",
+          "score": 79,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 12,
-          "title": "Livsmedelsforskning - hållbar livsmedelskedja",
-          "sourceName": "Formas",
-          "score": 89,
-          "market": "se",
-          "isExpectedMatch": true,
+          "title": "Reimagining Pet Nutrition: Sustainable & Engineered Fat Solutions",
+          "sourceName": "EIT Food",
+          "score": 79,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 13,
-          "title": "Upcoming events",
-          "sourceName": "EIT Food",
-          "score": 89,
-          "market": "se",
+          "title": "Excellence Hubs",
+          "sourceName": "EU Horizon Europe",
+          "score": 79,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 14,
-          "title": "Impact Stories",
-          "sourceName": "EIT Food",
-          "score": 89,
-          "market": "se",
+          "title": "Supporting competitiveness and innovation potential of SMEs",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 79,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 15,
-          "title": "Investeringar i hamnar och landningsplatserStöd för att utveckla befintliga hamnar och landningsplatser utifrån fiskenäringens behov, landningsskyldigheten och förmågan att hantera akvatiskt skräp och förlorade fiskeredskap.",
-          "sourceName": "Jordbruksverket",
-          "score": 86,
-          "market": "se",
-          "isExpectedMatch": true,
+          "title": "Call for Expression of Interest EIT Food Evaluators in Agriculture",
+          "sourceName": "EIT Food",
+          "score": 78,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 16,
-          "title": "Jordbruksfonden för landsbygdsutveckling",
-          "sourceName": "Eufonder.se",
-          "score": 86,
+          "title": "Digitalisering - Almi rådgivning",
+          "sourceName": "Almi",
+          "score": 78,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 17,
-          "title": "Investeringar ombordDu kan få stöd för att investera i bland annat rovdjurssäkrade eller selektiva redskap och utrustning som minskar fiskets negativa miljöpåverkan.",
+          "title": "Upcoming events",
+          "sourceName": "EIT Food",
+          "score": 78,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 18,
+          "title": "Leader-stöd",
           "sourceName": "Jordbruksverket",
-          "score": 86,
+          "score": 78,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
-          "rank": 18,
-          "title": "Regionalfonden",
-          "sourceName": "Eufonder.se",
-          "score": 85,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
           "rank": 19,
-          "title": "EIT Climate-KIC Accelerator",
-          "sourceName": "EIT Climate-KIC",
-          "score": 85,
+          "title": "Resilient 6G - innovationssamarbete med Finland ",
+          "sourceName": "Vinnova",
+          "score": 78,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 20,
-          "title": "Enhancing working conditions and strengthening the work force through digital and data technologies – the potential of robotics and augmented reality in agriculture",
-          "sourceName": "EU Funding & Tenders",
-          "score": 84,
+          "title": "Europeiska samarbeten för hållbara matsystem - utlysning inom partnerskapet FutureFoodS 2024 ",
+          "sourceName": "Vinnova",
+          "score": 78,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         }
       ],
       "issues": [
-        "Check A: Only 1/4 expected sources in top 10 (need 3). Missing: vinnova, norrbotten, formas",
-        "Check C: spread 7pts < 25"
+        "Check A: Only 2/4 expected sources in top 10 (need 3). Missing: norrbotten, formas",
+        "Check C: spread 13pts < 25"
       ]
     },
     {
@@ -607,195 +608,195 @@
       "top20Grants": [
         {
           "rank": 1,
-          "title": "Fördjupade samarbeten med USA, Storbritannien och Singapore inom hälsa och Life Science     ",
+          "title": "Medtech4Health: Kompetensförstärkning i småföretag 2024",
           "sourceName": "Vinnova",
-          "score": 88,
+          "score": 91,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 2,
-          "title": "Internationellt aktörsdrivet innovationssamarbete inom hälsa, IHI Call 12",
-          "sourceName": "Vinnova",
-          "score": 88,
+          "title": "Digitalisering - Almi rådgivning",
+          "sourceName": "Almi",
+          "score": 78,
           "market": "se",
-          "isExpectedMatch": true,
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 3,
-          "title": "Medtech4Health: Kompetensförstärkning i småföretag 2024",
+          "title": "Innovation för mer individanpassad prevention inom vård och omsorg (THCS JTC2024)  ",
           "sourceName": "Vinnova",
-          "score": 84,
+          "score": 78,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 4,
-          "title": "Medtech4Health: Kompetensförstärkning i småföretag 2025",
+          "title": "Fördjupade samarbeten med USA, Storbritannien och Singapore inom hälsa och Life Science     ",
           "sourceName": "Vinnova",
-          "score": 84,
+          "score": 78,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 5,
-          "title": "Medtech4Health: Kompetensförstärkning i småföretag  höst 2026",
+          "title": "Internationellt samarbete för hälsoinnovation, IHI Call 11 ",
           "sourceName": "Vinnova",
-          "score": 84,
+          "score": 78,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 6,
-          "title": "Medtech4Health: Kompetensförstärkning i småföretag, våren 2026",
+          "title": "Internationellt samarbete: Informationsdriven precisionsmedicin för kroniska sjukdomar   ",
           "sourceName": "Vinnova",
-          "score": 84,
+          "score": 78,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 7,
-          "title": "Internationellt samarbete för hälsoinnovation, IHI Call 11 ",
+          "title": "Internationella samarbeten för att utveckla nya terapier för sällsynta sjukdomar",
           "sourceName": "Vinnova",
-          "score": 82,
+          "score": 78,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 8,
-          "title": "European Partnership for Brain Health",
-          "sourceName": "EU Funding & Tenders",
-          "score": 82,
-          "market": "se",
+          "title": "Supporting competitiveness and innovation potential of SMEs",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 77,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 9,
-          "title": "European partnership fostering a European Research Area (ERA) for health research",
-          "sourceName": "EU Funding & Tenders",
-          "score": 82,
+          "title": "Medtech4Health: Kompetensförstärkning i småföretag  höst 2026",
+          "sourceName": "Vinnova",
+          "score": 76,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 10,
-          "title": "European partnership on animal health and welfare",
-          "sourceName": "EU Funding & Tenders",
-          "score": 79,
+          "title": "Medtech4Health: Kompetensförstärkning i småföretag 2025",
+          "sourceName": "Vinnova",
+          "score": 76,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 11,
-          "title": "UNITE",
-          "sourceName": "EIT Digital (28digital)",
+          "title": "EUREKA CELTIC-NEXT - Informations- och kommunikationsteknik - våren 2026",
+          "sourceName": "Vinnova",
           "score": 76,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 12,
-          "title": "Finex",
-          "sourceName": "EIT Digital (28digital)",
+          "title": "Medtech4Health: Kompetensförstärkning i småföretag, våren 2026",
+          "sourceName": "Vinnova",
           "score": 76,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 13,
-          "title": "DigitalTech EDIH",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
+          "title": "Nyttja infrastrukturer för att utveckla precisionsmedicin",
+          "sourceName": "Vinnova",
+          "score": 74,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 14,
-          "title": "Design of the Master Programme in Business Excellence",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
-          "market": "se",
+          "title": "European Partnership for Brain Health",
+          "sourceName": "EU Horizon Europe",
+          "score": 73,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 15,
-          "title": "Professional School",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
-          "market": "se",
+          "title": "European partnership fostering a European Research Area (ERA) for health research",
+          "sourceName": "EU Horizon Europe",
+          "score": 73,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 16,
-          "title": "Open Innovation Factory",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
-          "market": "se",
+          "title": "Specialised education programmes in key capacity areas",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 73,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 17,
-          "title": "(d)Academy",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 76,
-          "market": "se",
-          "isExpectedMatch": false,
+          "title": "Projects and results",
+          "sourceName": "IHI (Innovative Health Initiative)",
+          "score": 73,
+          "market": "eu",
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 18,
-          "title": "Uptake of innovative cybersecurity solutions for SMEs",
-          "sourceName": "EU Funding & Tenders",
-          "score": 75,
-          "market": "se",
-          "isExpectedMatch": false,
+          "title": "How call topics are generated",
+          "sourceName": "IHI (Innovative Health Initiative)",
+          "score": 73,
+          "market": "eu",
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 19,
-          "title": "EU Horizon Europe - Digital Innovation",
-          "sourceName": "EU Horizon Europe",
-          "score": 74,
+          "title": "Nya och förbättrade biologiska läkemedel i sjukvården",
+          "sourceName": "Vinnova",
+          "score": 72,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 20,
-          "title": "Request For Quotations - US Landing Program - EDIH DIPS",
-          "sourceName": "EIT Digital (28digital)",
-          "score": 73,
+          "title": "Internationellt aktörsdrivet innovationssamarbete inom hälsa, IHI Call 12",
+          "sourceName": "Vinnova",
+          "score": 72,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         }
       ],
       "issues": [
         "Check A: Only 2/4 expected sources in top 10 (need 3). Missing: forte, skane",
-        "Check C: spread 9pts < 25"
+        "Check C: spread 15pts < 25"
       ]
     },
     {
       "companyId": "C5",
       "label": "Kulturkompaniet — Creative film Östersund HB",
       "checks": {
-        "A": false,
+        "A": true,
         "B": true,
         "C": false,
         "D": null,
@@ -804,124 +805,43 @@
       "top20Grants": [
         {
           "rank": 1,
-          "title": "EIT Culture & creativity",
-          "sourceName": "EIT Culture & Creativity",
-          "score": 73,
+          "title": "Kreativa EuropaÖppen för ansökanMedie- och informationskunnighetKreativa Europa är EU:s program för de kulturella och kreativa sektorerna. Detta stöd kan sökas för projekt inom medie- och informationskunnighet (MIK). Utlysningen ska bidra till att stärka EU-invånarnas kritiska förståelse för medier och medieanvändning.29dagar kvarSista ansökningsdag 11 mar 2026",
+          "sourceName": "Kulturrådet",
+          "score": 71,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 2,
-          "title": "Boosting creative startups for disruptive innovation",
-          "sourceName": "EU Funding & Tenders",
-          "score": 72,
+          "title": "Nationellt musikresidens i Djurås by",
+          "sourceName": "Konstnärsnämnden",
+          "score": 71,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 3,
-          "title": "European mini-slate development",
-          "sourceName": "EU Funding & Tenders",
+          "title": "Residens på Fårö – Bergmangårdarna",
+          "sourceName": "Konstnärsnämnden",
           "score": 71,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 4,
-          "title": "Programmes for entrepreneurs",
-          "sourceName": "EIT Culture & Creativity",
-          "score": 71,
+          "title": "InternationelltÖppen för ansökanCulture Moves Europe – residensKreativa Europa är EU:s program för de kulturella och kreativa sektorerna. Det här stödet syftar till att underlätta resor och utbyte för enskilda kulturskapare och kulturprofessionella.34dagar kvarSista ansökningsdag 16 mar 2026",
+          "sourceName": "Kulturrådet",
+          "score": 68,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 5,
-          "title": "Your opportunities",
-          "sourceName": "EIT Culture & Creativity",
-          "score": 71,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 6,
-          "title": "Programmes for education",
-          "sourceName": "EIT Culture & Creativity",
-          "score": 71,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 7,
-          "title": "Programmes for innovators",
-          "sourceName": "EIT Culture & Creativity",
-          "score": 71,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 8,
-          "title": "Archived calls",
-          "sourceName": "EIT Culture & Creativity",
-          "score": 71,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 9,
-          "title": "European co-development",
-          "sourceName": "EU Funding & Tenders",
-          "score": 71,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 10,
-          "title": "Make your impact go further",
-          "sourceName": "EIT Culture & Creativity",
-          "score": 70,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 11,
-          "title": "TV and online content Documentary projects",
-          "sourceName": "EU Funding & Tenders",
-          "score": 70,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 12,
-          "title": "TV and online content Fiction projects",
-          "sourceName": "EU Funding & Tenders",
-          "score": 70,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 13,
-          "title": "TV and online content Animation projects",
-          "sourceName": "EU Funding & Tenders",
-          "score": 68,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 14,
-          "title": "Kreativa EuropaÖppen för ansökanCulture Moves Europe – individerKreativa Europa är EU:s program för de kulturella och kreativa sektorerna. Det här stödet syftar till att underlätta resor och utbyte för enskilda kulturskapare och kulturprofessionella.79dagar kvarSista ansökningsdag 30 apr 2026",
+          "title": "Kreativa EuropaÖppen för ansökanCreative Innovation LabKreativa Europa är EU:s program för de kulturella och kreativa sektorerna. Detta stöd kan sökas för samverkansprojekt mellan kultursektorn och den audiovisuella sektorn med syfte att utveckla innovativa och digitala lösningar.72dagar kvarSista ansökningsdag 23 apr 2026",
           "sourceName": "Kulturrådet",
           "score": 67,
           "market": "se",
@@ -929,70 +849,150 @@
           "isExpectedExclusion": false
         },
         {
-          "rank": 15,
-          "title": "Barn och ungaAnsök i dagSkapande skolaGenom möten med professionella kulturaktörer och kulturverksamheter ger det här statsbidraget elever i grundskolan möjlighet att fördjupa sig inom en variation av olika konst- och kulturuttryck, utveckla sitt eget skapande samt uppleva och utveckla förståelse för professionella konst- och kulturuttryck. Det är skolans huvudmän som kan söka bidraget.0dagar kvarSista ansökningsdag 10 feb 2026",
-          "sourceName": "Kulturrådet",
-          "score": 66,
+          "rank": 6,
+          "title": "Support to Ukrainian displaced people and the Ukrainian Cultural and Creative Sectors",
+          "sourceName": "EU Creative Europe (Kreativa Europa)",
+          "score": 65,
+          "market": "eu",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 7,
+          "title": "European mini-slate development",
+          "sourceName": "EU Creative Europe (Kreativa Europa)",
+          "score": 65,
+          "market": "eu",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 8,
+          "title": "European Networks of Cultural and Creative Organisations",
+          "sourceName": "EU Creative Europe (Kreativa Europa)",
+          "score": 65,
+          "market": "eu",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 9,
+          "title": "European Film Distribution",
+          "sourceName": "EU Creative Europe (Kreativa Europa)",
+          "score": 65,
+          "market": "eu",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 10,
+          "title": "Fostering Ukrainians’ access to culture and cultural heritage",
+          "sourceName": "EU Creative Europe (Kreativa Europa)",
+          "score": 65,
+          "market": "eu",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 11,
+          "title": "NEWS - Media Literacy",
+          "sourceName": "EU Creative Europe (Kreativa Europa)",
+          "score": 65,
+          "market": "eu",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 12,
+          "title": "Residens i Östersund",
+          "sourceName": "Konstnärsnämnden",
+          "score": 64,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
+          "rank": 13,
+          "title": "Programmes for entrepreneurs",
+          "sourceName": "EIT Culture & Creativity",
+          "score": 63,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 14,
+          "title": "Your opportunities",
+          "sourceName": "EIT Culture & Creativity",
+          "score": 63,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 15,
+          "title": "Programmes for innovators",
+          "sourceName": "EIT Culture & Creativity",
+          "score": 63,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
           "rank": 16,
-          "title": "Culture, heritage and creative industries for health and well-being",
-          "sourceName": "EU Funding & Tenders",
-          "score": 66,
-          "market": "se",
+          "title": "Archived calls",
+          "sourceName": "EIT Culture & Creativity",
+          "score": 63,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 17,
-          "title": "Kreativa EuropaÖppen för ansökanMedie- och informationskunnighetKreativa Europa är EU:s program för de kulturella och kreativa sektorerna. Detta stöd kan sökas för projekt inom medie- och informationskunnighet (MIK). Utlysningen ska bidra till att stärka EU-invånarnas kritiska förståelse för medier och medieanvändning.29dagar kvarSista ansökningsdag 11 mar 2026",
-          "sourceName": "Kulturrådet",
-          "score": 65,
-          "market": "se",
-          "isExpectedMatch": true,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 18,
-          "title": "Bidrag inom konst- och kulturverksamheter",
-          "sourceName": "Verksamt.se",
-          "score": 65,
-          "market": "se",
+          "title": "EIT Cross-KIC Strategic Synergies",
+          "sourceName": "EU Horizon Europe",
+          "score": 63,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
-          "rank": 19,
-          "title": "InternationelltÖppen för ansökanCulture Moves Europe – residensKreativa Europa är EU:s program för de kulturella och kreativa sektorerna. Det här stödet syftar till att underlätta resor och utbyte för enskilda kulturskapare och kulturprofessionella.34dagar kvarSista ansökningsdag 16 mar 2026",
-          "sourceName": "Kulturrådet",
-          "score": 65,
-          "market": "se",
+          "rank": 18,
+          "title": "Supporting Ukrainian artists and cultural organisations to co-create/showcase",
+          "sourceName": "EU Creative Europe (Kreativa Europa)",
+          "score": 63,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
+          "rank": 19,
+          "title": "Creative alliances: Fostering global partnerships in cultural policies and CCI innovation",
+          "sourceName": "EU Horizon Europe",
+          "score": 62,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
           "rank": 20,
-          "title": "MusikÖppen för ansökanProjekt inom musikområdetBidrag till konstnärlig produktion, kulturarrangemang i Sverige och internationellt utbyte som är ett tidsbegränsat projekt.9dagar kvarSista ansökningsdag 19 feb 2026",
-          "sourceName": "Kulturrådet",
-          "score": 65,
+          "title": "Projektmedel inom Nya finansieringsmodeller",
+          "sourceName": "Konstnärsnämnden",
+          "score": 61,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         }
       ],
       "issues": [
-        "Check A: Only 0/3 expected sources in top 10 (need 2). Missing: kulturradet, creative_europe, konstnarsnamnden",
-        "Check C: spread 3pts < 25"
+        "Check C: spread 6pts < 25"
       ]
     },
     {
       "companyId": "C6",
       "label": "ExportTech — Manufacturing export Västerås large SME",
       "checks": {
-        "A": false,
+        "A": true,
         "B": true,
         "C": false,
         "D": null,
@@ -1001,24 +1001,33 @@
       "top20Grants": [
         {
           "rank": 1,
-          "title": "Factory processes and automation for de- and re-manufacturing (RIA) (Made in Europe partnership)",
-          "sourceName": "EU Funding & Tenders",
-          "score": 85,
+          "title": "Råvarugaranti",
+          "sourceName": "EKN (Exportkreditnämnden)",
+          "score": 78,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 2,
-          "title": "AI improved advanced manufacturing and production processes in factories (RIA) (Made in Europe and AI, Data and Robotics partnerships)",
-          "sourceName": "EU Funding & Tenders",
-          "score": 79,
+          "title": "Eureka SMART - Internationella samverkansprojekt inom Avancerad Tillverkning 2026 ",
+          "sourceName": "Vinnova",
+          "score": 78,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 3,
+          "title": "Innovair - SMF flyg våren 2024",
+          "sourceName": "Vinnova",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 4,
           "title": "Impact Innovation: rådgivning till små- och medelstora tillverkningsföretag för omställning till nettonoll",
           "sourceName": "Vinnova",
           "score": 78,
@@ -1027,7 +1036,7 @@
           "isExpectedExclusion": false
         },
         {
-          "rank": 4,
+          "rank": 5,
           "title": "SIP Produktion2030, utlysning 14",
           "sourceName": "Vinnova",
           "score": 78,
@@ -1036,61 +1045,25 @@
           "isExpectedExclusion": false
         },
         {
-          "rank": 5,
-          "title": "Impact Innovation - Systemdemonstratorer för framtidens hållbara tillverkningsindustrier - steg 2 ",
-          "sourceName": "Vinnova",
-          "score": 76,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
           "rank": 6,
-          "title": "Testimonials",
-          "sourceName": "EIT Manufacturing",
-          "score": 76,
+          "title": "Flygteknisk forskning i små och medelstora företag hösten 2023",
+          "sourceName": "Vinnova",
+          "score": 78,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 7,
-          "title": "Impact Innovation - Systemdemonstratorer för framtidens hållbara tillverkningsindustrier - steg 1",
+          "title": "Resurseffektiv och hållbar produktion inom gruv- och metallutvinnigsindustrin",
           "sourceName": "Vinnova",
-          "score": 76,
+          "score": 74,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 8,
-          "title": "Advanced manufacturing for key products (IA) (Made in Europe partnership)",
-          "sourceName": "EU Funding & Tenders",
-          "score": 75,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 9,
-          "title": "Advanced manufacturing for key products (IA) (Made in Europe partnership)",
-          "sourceName": "EU Funding & Tenders",
-          "score": 75,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 10,
-          "title": "Textile circularity through advanced processing and manufacturing technologies and system approaches (IA) (Textiles for the Future partnership)",
-          "sourceName": "EU Funding & Tenders",
-          "score": 75,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 11,
           "title": "Hållbar metallindustri - Effektiva materialflöden",
           "sourceName": "Vinnova",
           "score": 74,
@@ -1099,90 +1072,116 @@
           "isExpectedExclusion": false
         },
         {
-          "rank": 12,
-          "title": "New Industry 5.0 Award – apply by April 1.",
-          "sourceName": "EIT Manufacturing",
+          "rank": 9,
+          "title": "Utveckla forskning- och innovationskapaciteten i Östra Mellansverige",
+          "sourceName": "Tillväxtverket",
           "score": 73,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 10,
+          "title": "Digitalisering för hållbar tillväxt och innovation i Östra Mellansverige​",
+          "sourceName": "Tillväxtverket",
+          "score": 73,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 11,
+          "title": "Garanti för investeringskrediter",
+          "sourceName": "EKN (Exportkreditnämnden)",
+          "score": 72,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 12,
+          "title": "Impact Innovation: Digitalisering, cirkularitet och klimatneutralitet inom metall- och mineralindustrin",
+          "sourceName": "Vinnova",
+          "score": 72,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 13,
-          "title": "News & Events",
-          "sourceName": "EIT Manufacturing",
-          "score": 73,
+          "title": "Impact Innovation: Samspelet människa och teknik - Swedish Metals and Minerals",
+          "sourceName": "Vinnova",
+          "score": 72,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 14,
-          "title": "Venture Building",
+          "title": "Testimonials",
           "sourceName": "EIT Manufacturing",
-          "score": 73,
-          "market": "se",
+          "score": 71,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 15,
-          "title": "Getting innovations on the market",
-          "sourceName": "EIT Manufacturing",
-          "score": 73,
+          "title": "AO för Transfereringar Net  Zero Industri",
+          "sourceName": "Vinnova",
+          "score": 71,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 16,
-          "title": "Thematic Working Groups",
-          "sourceName": "EIT Manufacturing",
-          "score": 73,
+          "title": "Impact Innovation - Systemdemonstratorer för framtidens hållbara tillverkningsindustrier - steg 2 ",
+          "sourceName": "Vinnova",
+          "score": 71,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 17,
-          "title": "Evaluators of Proposals",
-          "sourceName": "EIT Manufacturing",
-          "score": 73,
+          "title": "ITEA - Internationella innovationsprojekt inom programvaruintensiva system och tjänster (EUREKA ITEA Call 2025)",
+          "sourceName": "Vinnova",
+          "score": 71,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 18,
-          "title": "2nd Open Call Gazelle Accelerator",
-          "sourceName": "EIT Manufacturing",
-          "score": 73,
+          "title": "Impact Innovation - Systemdemonstratorer för framtidens hållbara tillverkningsindustrier - steg 1",
+          "sourceName": "Vinnova",
+          "score": 71,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 19,
-          "title": "Skills for Future",
-          "sourceName": "EIT Manufacturing",
-          "score": 73,
+          "title": "Industri",
+          "sourceName": "Energimyndigheten",
+          "score": 71,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 20,
-          "title": "Women and Girls in STEM Forum",
-          "sourceName": "EIT Manufacturing",
-          "score": 73,
-          "market": "se",
+          "title": "Advanced manufacturing for key products (IA) (Made in Europe partnership)",
+          "sourceName": "EU Horizon Europe",
+          "score": 68,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         }
       ],
       "issues": [
-        "Check A: Only 0/3 expected sources in top 10 (need 2). Missing: ekn, vinnova_industri, tillvaxtverket",
-        "Check C: spread 10pts < 25"
+        "Check C: spread 5pts < 25"
       ]
     },
     {
@@ -1198,187 +1197,187 @@
       "top20Grants": [
         {
           "rank": 1,
-          "title": "Klimatklivet - Lokala Klimatinvesteringar",
-          "sourceName": "Naturvårdsverket",
-          "score": 89,
+          "title": "Stadsplanering och urban hållbarhet",
+          "sourceName": "Formas",
+          "score": 78,
           "market": "se",
-          "isExpectedMatch": true,
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 2,
-          "title": "Främja förnybar energi",
-          "sourceName": "Tillväxtverket",
-          "score": 88,
+          "title": "Innovationsprojekt inom Grön Teknik",
+          "sourceName": "Vinnova",
+          "score": 78,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 3,
-          "title": "EIT Climate-KIC Accelerator",
-          "sourceName": "EIT Climate-KIC",
-          "score": 85,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 4,
-          "title": "Regionalfonden",
-          "sourceName": "Eufonder.se",
-          "score": 84,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 5,
-          "title": "Utveckla forskning- och innovationskapaciteten i Östra Mellansverige",
-          "sourceName": "Tillväxtverket",
-          "score": 84,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 6,
-          "title": "Innovationsprojekt inom Grön Teknik",
-          "sourceName": "Vinnova",
-          "score": 83,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 7,
-          "title": "Jordbruksfonden för landsbygdsutveckling",
-          "sourceName": "Eufonder.se",
-          "score": 76,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 8,
-          "title": "Havs-, fiskeri- och vattenbruksfonden",
-          "sourceName": "Eufonder.se",
-          "score": 76,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 9,
-          "title": "Skills Institute",
-          "sourceName": "EIT InnoEnergy",
-          "score": 76,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 10,
-          "title": "Samarbete med Brasilien inom hållbar gruvdrift, bioekonomi eller hållbara städer - Eureka nätverksprojekt",
-          "sourceName": "Vinnova",
-          "score": 75,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 11,
-          "title": "Klimatklivet - investeringsstöd för lokala klimatinvesteringar",
-          "sourceName": "Naturvårdsverket",
-          "score": 75,
+          "title": "Forskning om förnybar energi",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
           "market": "se",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
-          "rank": 12,
-          "title": "Främja cirkulär ekonomi - skapa en hållbar framtid tillsammans",
+          "rank": 4,
+          "title": "Stöd till energilagring och batterier",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 5,
+          "title": "Solelstöd - stöd för solcellsinstallation",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 6,
+          "title": "Energipilot - stöd för pilotprojekt",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 7,
+          "title": "Forskning om energisystem och elnät",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 8,
+          "title": "Bioenergi - forskning och utveckling",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 9,
+          "title": "Stöd för hållbara drivmedel",
+          "sourceName": "Energimyndigheten",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 10,
+          "title": "Klimatklivet - investeringsstöd för lokala klimatinvesteringar",
+          "sourceName": "Naturvårdsverket",
+          "score": 78,
+          "market": "se",
+          "isExpectedMatch": true,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 11,
+          "title": "Utveckla forskning- och innovationskapaciteten i Östra Mellansverige",
           "sourceName": "Tillväxtverket",
-          "score": 74,
+          "score": 77,
+          "market": "se",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 12,
+          "title": "Nyhetsbrev Energiintelligent Dalarna",
+          "sourceName": "Länsstyrelserna",
+          "score": 77,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 13,
-          "title": "Nollutsläpp - FFI - våren 2026",
-          "sourceName": "Vinnova",
-          "score": 74,
-          "market": "se",
+          "title": "'Innovate to transform' support for SME's sustainability transition (CSA)",
+          "sourceName": "EU Horizon Europe",
+          "score": 76,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 14,
-          "title": "Nyhetsbrev Energiintelligent Dalarna",
-          "sourceName": "Länsstyrelserna",
-          "score": 74,
+          "title": "Ökad resurseffektivitet för en cirkulär industri",
+          "sourceName": "Vinnova",
+          "score": 76,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 15,
-          "title": "Läs mer om vår GreenTech-fondVår GreenTech-fond på 1,2 miljarder kronor har särskilt fokus på att göra klimatsmarta investeringar som är CO2-reducerande. Läs mer här >> - Almi",
-          "sourceName": "Almi",
-          "score": 73,
+          "title": "Stöd för vindkraft",
+          "sourceName": "Energimyndigheten",
+          "score": 76,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 16,
-          "title": "Europe 2030 missions",
-          "sourceName": "EIT Climate-KIC",
-          "score": 73,
+          "title": "Nollutsläpp - FFI - våren 2026",
+          "sourceName": "Vinnova",
+          "score": 76,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 17,
-          "title": "Deploying innovative wastewater management, treatment and valorisation solutions in European cities and regions in the context of climate change",
-          "sourceName": "EU Funding & Tenders",
-          "score": 73,
+          "title": "Vätgas och bränsleceller",
+          "sourceName": "Energimyndigheten",
+          "score": 76,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 18,
-          "title": "R&I in Support of the Clean Industrial Deal: Clean Technologies for Climate Action",
-          "sourceName": "EU Funding & Tenders",
-          "score": 72,
+          "title": "Stöd för geotermisk energi",
+          "sourceName": "Energimyndigheten",
+          "score": 76,
           "market": "se",
-          "isExpectedMatch": false,
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 19,
-          "title": "R&I in Support of the Clean Industrial Deal: Clean Technologies for Climate Action",
-          "sourceName": "EU Funding & Tenders",
-          "score": 72,
+          "title": "Regionalfonden",
+          "sourceName": "Eufonder.se",
+          "score": 74,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 20,
-          "title": "For Students",
-          "sourceName": "EIT InnoEnergy",
-          "score": 71,
+          "title": "Hållbar samhällsutveckling - tematisk utlysning",
+          "sourceName": "Formas",
+          "score": 74,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         }
       ],
       "issues": [
-        "Check C: spread 14pts < 25"
+        "Check C: spread 0pts < 25"
       ]
     },
     {
@@ -1394,114 +1393,51 @@
       "top20Grants": [
         {
           "rank": 1,
-          "title": "Mapping and service finder for Technology Infrastructures (CSA)",
-          "sourceName": "EU Funding & Tenders",
-          "score": 49,
+          "title": "Education for Working Professionals - KK-stiftelsen",
+          "sourceName": "KK-stiftelsen",
+          "score": 47,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 2,
-          "title": "European Partnership: One Health Anti-Microbial Resistance",
-          "sourceName": "EU Funding & Tenders",
-          "score": 47,
+          "title": "Klimatarena Stockholm",
+          "sourceName": "Länsstyrelserna",
+          "score": 46,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 3,
-          "title": "European partnership for pandemic preparedness",
-          "sourceName": "EU Funding & Tenders",
-          "score": 47,
+          "title": "Stärk konkurrenskraften hos små och medelstora företag i Östra Mellansverige",
+          "sourceName": "Tillväxtverket",
+          "score": 45,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 4,
-          "title": "Utveckla ny affärJag villGå från idé till verklighet - Almi",
-          "sourceName": "Almi",
-          "score": 45,
-          "market": "se",
+          "title": "European Partnership: One Health Anti-Microbial Resistance",
+          "sourceName": "EU Horizon Europe",
+          "score": 41,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 5,
-          "title": "Vi är Almi InvestBakom varje investering finns ett engagerat team. Klicka in och se vilka vi är, vad vi brinner för och hur du får kontakt med oss. - Almi",
-          "sourceName": "Almi",
-          "score": 45,
-          "market": "se",
+          "title": "European partnership for pandemic preparedness",
+          "sourceName": "EU Horizon Europe",
+          "score": 41,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 6,
-          "title": "Läs om KK-stiftelsens program",
-          "sourceName": "KK-stiftelsen",
-          "score": 45,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 7,
-          "title": "Se lanseringen i efterhand",
-          "sourceName": "KK-stiftelsen",
-          "score": 45,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 8,
-          "title": "Affärsrådgivning och mentorskap - Almi",
-          "sourceName": "Almi",
-          "score": 45,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 9,
-          "title": "Klimatarena Stockholm",
-          "sourceName": "Länsstyrelserna",
-          "score": 44,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 10,
-          "title": "Stärk konkurrenskraften hos små och medelstora företag i Östra Mellansverige",
-          "sourceName": "Tillväxtverket",
-          "score": 42,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 11,
-          "title": "Mikrolån - Almi",
-          "sourceName": "Almi",
-          "score": 40,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 12,
-          "title": "Testing and implementation of research results fostering democracy and governance",
-          "sourceName": "EU Funding & Tenders",
-          "score": 40,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 13,
           "title": "Våra portföljbolagLäs mer om våra portföljbolag och varför vi har valt att investera i dem. - Almi",
           "sourceName": "Almi",
           "score": 40,
@@ -1510,78 +1446,141 @@
           "isExpectedExclusion": false
         },
         {
-          "rank": 14,
-          "title": "Klimatinvesteringsstöd",
-          "sourceName": "Länsstyrelserna",
+          "rank": 7,
+          "title": "Utveckla ny affärJag villGå från idé till verklighet - Almi",
+          "sourceName": "Almi",
           "score": 40,
+          "market": "se",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 8,
+          "title": "Vi är Almi InvestBakom varje investering finns ett engagerat team. Klicka in och se vilka vi är, vad vi brinner för och hur du får kontakt med oss. - Almi",
+          "sourceName": "Almi",
+          "score": 40,
+          "market": "se",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 9,
+          "title": "Ekonomi och lönsamhetJag villFå bättre koll på mitt företags ekonomi och lönsamhet - Almi",
+          "sourceName": "Almi",
+          "score": 40,
+          "market": "se",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 10,
+          "title": "Central Baltic Navigating Towards Impact – Bringing project partners together in Sweden",
+          "sourceName": "Interreg Central Baltic",
+          "score": 39,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 11,
+          "title": "Mikrolån - Almi",
+          "sourceName": "Almi",
+          "score": 38,
+          "market": "se",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 12,
+          "title": "Planeringsbidrag inför internationell ansökan 2025",
+          "sourceName": "Vinnova",
+          "score": 38,
+          "market": "se",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": true
+        },
+        {
+          "rank": 13,
+          "title": "Styrelseutveckling - Almi rådgivning",
+          "sourceName": "Almi",
+          "score": 38,
+          "market": "se",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 14,
+          "title": "IFS Rådgivning - nyanlända företagare",
+          "sourceName": "Almi",
+          "score": 38,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 15,
-          "title": "Education for Working Professionals - KK-stiftelsen",
-          "sourceName": "KK-stiftelsen",
-          "score": 40,
+          "title": "Tillväxtlån för Expansion",
+          "sourceName": "Tillväxtverket",
+          "score": 38,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 16,
-          "title": "Central Baltic Navigating Towards Impact – Bringing project partners together in Sweden",
-          "sourceName": "Interreg Central Baltic",
-          "score": 40,
+          "title": "Samarbetsprojekt för små och medelstora företag Sverige-Tyskland år 2025",
+          "sourceName": "Vinnova",
+          "score": 38,
           "market": "se",
           "isExpectedMatch": false,
-          "isExpectedExclusion": false
+          "isExpectedExclusion": true
         },
         {
           "rank": 17,
-          "title": "'Innovate to transform' support for SME's sustainability transition (CSA)",
-          "sourceName": "EU Funding & Tenders",
-          "score": 40,
+          "title": "Projektmedel för hållbar regional utveckling",
+          "sourceName": "Region Stockholm",
+          "score": 38,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 18,
-          "title": "Support to test EIC innovations for public and private procurers",
-          "sourceName": "EU Funding & Tenders",
-          "score": 40,
+          "title": "Stöd till små och medelstora företag",
+          "sourceName": "Region Stockholm",
+          "score": 38,
+          "market": "se",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
+          "rank": 19,
+          "title": "Samarbetsprojekt för små och medelstora företag Sverige-Tyskland våren 2026",
+          "sourceName": "Vinnova",
+          "score": 38,
           "market": "se",
           "isExpectedMatch": false,
           "isExpectedExclusion": true
         },
         {
-          "rank": 19,
-          "title": "Deploying The Network of National Coordination Centres with Member States",
-          "sourceName": "EU Funding & Tenders",
-          "score": 40,
-          "market": "se",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
           "rank": 20,
-          "title": "Deploying The Network Of National Coordination Centres With Member States",
-          "sourceName": "EU Funding & Tenders",
-          "score": 40,
+          "title": "Samarbetsprojekt för små och medelstora företag Sverige-Tyskland höst 2022",
+          "sourceName": "Vinnova",
+          "score": 38,
           "market": "se",
           "isExpectedMatch": false,
-          "isExpectedExclusion": false
+          "isExpectedExclusion": true
         }
       ],
       "issues": [
-        "Check C: top score 49 < 65, spread 7pts < 25"
+        "Check C: top score 47 < 65, spread 8pts < 25"
       ]
     },
     {
       "companyId": "C9",
       "label": "BioNord Pharma AS — Norwegian biotech Oslo",
       "checks": {
-        "A": false,
+        "A": true,
         "B": true,
         "C": false,
         "D": true,
@@ -1590,384 +1589,383 @@
       "top20Grants": [
         {
           "rank": 1,
-          "title": "Transnasjonale forsker-initierte kliniske studier innenfor kardiovaskulære, autoimmune og metabolske sykdommer (Trials4Health 2026)",
-          "sourceName": "Forskningsrådet",
-          "score": 65,
-          "market": "no",
+          "title": "European Partnership for Brain Health",
+          "sourceName": "EU Horizon Europe",
+          "score": 73,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 2,
-          "title": "Forskerprosjekt for samarbeid om mental helse i Ukraina i og etter krigstid",
-          "sourceName": "Forskningsrådet",
-          "score": 55,
-          "market": "no",
+          "title": "European partnership fostering a European Research Area (ERA) for health research",
+          "sourceName": "EU Horizon Europe",
+          "score": 73,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 3,
-          "title": "Kunnskap om og forebygging av overvekt og fedme (PREVENT-OO)",
-          "sourceName": "Forskningsrådet",
-          "score": 55,
-          "market": "no",
-          "isExpectedMatch": true,
+          "title": "Projects and results",
+          "sourceName": "IHI (Innovative Health Initiative)",
+          "score": 73,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 4,
-          "title": "Persontilpasset medisin for kardiovaskulær, metabolsk og nyresykdom (CARMEN2026)",
-          "sourceName": "Forskningsrådet",
-          "score": 55,
-          "market": "no",
-          "isExpectedMatch": true,
+          "title": "How call topics are generated",
+          "sourceName": "IHI (Innovative Health Initiative)",
+          "score": 73,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 5,
-          "title": "Forming av fremtidens dyrehelse og dyrevelferd",
+          "title": "Transnasjonale forsker-initierte kliniske studier innenfor kardiovaskulære, autoimmune og metabolske sykdommer (Trials4Health 2026)",
           "sourceName": "Forskningsrådet",
-          "score": 55,
+          "score": 71,
           "market": "no",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 6,
-          "title": "Folkehelse og levekår - Etablering og forsterking av forskningssamarbeid i Agder",
-          "sourceName": "Regionalforvaltning.no",
-          "score": 55,
-          "market": "no",
+          "title": "Project dissemination",
+          "sourceName": "IHI (Innovative Health Initiative)",
+          "score": 68,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 7,
-          "title": "Forsknings- og innovasjonsprosjekter innenfor antimikrobiell resistens i et én-helse perspektiv",
-          "sourceName": "Forskningsrådet",
-          "score": 55,
-          "market": "no",
-          "isExpectedMatch": true,
+          "title": "Health spotlights",
+          "sourceName": "IHI (Innovative Health Initiative)",
+          "score": 68,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 8,
-          "title": "BE READY: Styrket forståelse av vert–patogen-dynamikker for bedre å bekjempe fremvoksende sykdommer",
-          "sourceName": "Forskningsrådet",
-          "score": 53,
-          "market": "no",
-          "isExpectedMatch": true,
+          "title": "Call documents",
+          "sourceName": "IHI (Innovative Health Initiative)",
+          "score": 68,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 9,
-          "title": "Water4All: Vann og helse",
-          "sourceName": "Forskningsrådet",
-          "score": 51,
-          "market": "no",
-          "isExpectedMatch": true,
+          "title": "Project documents",
+          "sourceName": "IHI (Innovative Health Initiative)",
+          "score": 68,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 10,
-          "title": "Forskerprosjekt for tidlig karriere innenfor global helse og utviklingsforskning",
-          "sourceName": "Forskningsrådet",
-          "score": 51,
-          "market": "no",
-          "isExpectedMatch": true,
+          "title": "Specialised education programmes in key capacity areas",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 66,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 11,
-          "title": "Ensomhet, utenforskap og sosial ulikhet i helse",
-          "sourceName": "Forskningsrådet",
-          "score": 51,
-          "market": "no",
-          "isExpectedMatch": true,
+          "title": "Open science",
+          "sourceName": "IHI (Innovative Health Initiative)",
+          "score": 66,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 12,
-          "title": "Forskning for økt samfunnssikkerhet og beredskap",
-          "sourceName": "Forskningsrådet",
-          "score": 50,
-          "market": "no",
+          "title": "Boosting innovation for a better understanding of the determinants of health",
+          "sourceName": "EU Horizon Europe",
+          "score": 65,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 13,
-          "title": "Eksportfremstøt - tilskudd til å delta på messer",
-          "sourceName": "Innovasjon Norge",
-          "score": 40,
-          "market": "no",
+          "title": "Boosting mental health of young cancer survivors through the European Cancer Patient Digital Centre (ECPDC)",
+          "sourceName": "EU Horizon Europe",
+          "score": 65,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 14,
-          "title": "Næringsrettet tilskudd - Arktis 2030",
-          "sourceName": "Innovasjon Norge",
-          "score": 40,
-          "market": "no",
+          "title": "Prevention and management of chronic non-communicable diseases in children and young people (GACD)",
+          "sourceName": "EU Horizon Europe",
+          "score": 65,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 15,
-          "title": "Radikale forskningsidéer i tidlig karriere",
-          "sourceName": "Forskningsrådet",
-          "score": 32,
-          "market": "no",
+          "title": "Innovative healthcare interventions for non-communicable diseases",
+          "sourceName": "EU Horizon Europe",
+          "score": 65,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 16,
-          "title": "Toppforskere - Forskerprosjekt for å utvikle verdensledende forskningsmiljøer",
-          "sourceName": "Forskningsrådet",
-          "score": 32,
-          "market": "no",
+          "title": "Multisectoral approach to tackle chronic non-communicable diseases: implementation research maximising collaboration and coordination with sectors and in settings beyond the healthcare system (GACD)",
+          "sourceName": "EU Horizon Europe",
+          "score": 65,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 17,
-          "title": "Forskerprosjekt for erfarne forskere (FRIPRO)",
-          "sourceName": "Forskningsrådet",
-          "score": 32,
-          "market": "no",
+          "title": "Development of novel vaccines for viral pathogens with epidemic potential",
+          "sourceName": "EU Horizon Europe",
+          "score": 65,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 18,
-          "title": "Utenlandsopphold for doktorgrads- og postdoktorstipendiater",
-          "sourceName": "Forskningsrådet",
-          "score": 32,
-          "market": "no",
+          "title": "Support to European Research Area (ERA) action on accelerating New Approach Methodologies (NAMs) to advance biomedical research and testing of medicinal products and medical devices",
+          "sourceName": "EU Horizon Europe",
+          "score": 65,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 19,
-          "title": "Kompetansebyggende prosjekt for næringslivet",
-          "sourceName": "Forskningsrådet",
-          "score": 32,
-          "market": "no",
+          "title": "Integrating New Approach Methodologies (NAMs) to advance biomedical research and regulatory testing",
+          "sourceName": "EU Horizon Europe",
+          "score": 65,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 20,
-          "title": "Tilskudd til innovasjons­kontrakter",
-          "sourceName": "Innovasjon Norge",
-          "score": 32,
-          "market": "no",
+          "title": "European Partnership on Rare Diseases (ERDERA) (Phase 2)",
+          "sourceName": "EU Horizon Europe",
+          "score": 65,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         }
       ],
       "issues": [
-        "Check A: Only 1/3 expected sources in top 10 (need 2). Missing: innovasjon_norge, horizon",
-        "Check C: spread 14pts < 25"
+        "Check C: spread 7pts < 25"
       ]
     },
     {
       "companyId": "C10",
       "label": "HelsinginTech Oy — Finnish quantum deeptech Helsinki",
       "checks": {
-        "A": false,
+        "A": true,
         "B": true,
-        "C": true,
+        "C": false,
         "D": true,
         "E": null
       },
       "top20Grants": [
         {
           "rank": 1,
-          "title": "Deep Tech Accelerator",
-          "sourceName": "Business Finland",
-          "score": 83,
-          "market": "fi",
-          "isExpectedMatch": true,
+          "title": "Supporting competitiveness and innovation potential of SMEs",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 79,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 2,
-          "title": "ESA BIC Incubation",
-          "sourceName": "Business Finland",
-          "score": 68,
-          "market": "fi",
-          "isExpectedMatch": true,
+          "title": "ongoing projects",
+          "sourceName": "NLnet Foundation / NGI Zero",
+          "score": 78,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 3,
-          "title": "Business development aid (Economic Development Centre)",
-          "sourceName": "Suomi.fi",
-          "score": 50,
-          "market": "fi",
+          "title": "Uptake of innovative cybersecurity solutions for SMEs",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 75,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 4,
-          "title": "Sprint Funding",
+          "title": "Deep Tech Accelerator",
           "sourceName": "Business Finland",
-          "score": 46,
+          "score": 74,
           "market": "fi",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
           "rank": 5,
-          "title": "Starttiraha — Tuki uudelle yrittäjälle",
-          "sourceName": "Starttiraha",
-          "score": 42,
-          "market": "fi",
+          "title": "Towards networked Local Digital Twins in the EU",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 73,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 6,
-          "title": "Yrityksen kehittämisavustus — Investoinnit",
-          "sourceName": "ELY-keskus",
-          "score": 41,
-          "market": "fi",
+          "title": "DigitalTech EDIH",
+          "sourceName": "EIT Digital (28digital)",
+          "score": 71,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 7,
-          "title": "Grants and subsidies",
-          "sourceName": "Suomi.fi",
-          "score": 41,
-          "market": "fi",
+          "title": "Support to the implementation of Multi-Country Projects (MCPs)",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 71,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 8,
-          "title": "Business Finland's funding services (Business Finland)",
-          "sourceName": "Suomi.fi",
-          "score": 41,
-          "market": "fi",
-          "isExpectedMatch": true,
+          "title": "Specialised education programmes in key capacity areas",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 70,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 9,
-          "title": "Yrityksen kehittämisavustus — Kehittämistoimenpiteet",
-          "sourceName": "ELY-keskus",
-          "score": 41,
-          "market": "fi",
+          "title": "(d)Academy",
+          "sourceName": "EIT Digital (28digital)",
+          "score": 68,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 10,
-          "title": "Alueellinen kuljetustuki",
-          "sourceName": "ELY-keskus",
-          "score": 41,
-          "market": "fi",
-          "isExpectedMatch": false,
-          "isExpectedExclusion": false
-        },
-        {
-          "rank": 11,
-          "title": "R&D Funding — Research and Development",
-          "sourceName": "Business Finland",
-          "score": 38,
-          "market": "fi",
+          "title": "Carbon farming in living labs",
+          "sourceName": "EU Horizon Europe",
+          "score": 68,
+          "market": "eu",
           "isExpectedMatch": true,
           "isExpectedExclusion": false
         },
         {
+          "rank": 11,
+          "title": "Testing and Certification Capabilities",
+          "sourceName": "EU Digital Europe Programme",
+          "score": 68,
+          "market": "eu",
+          "isExpectedMatch": false,
+          "isExpectedExclusion": false
+        },
+        {
           "rank": 12,
-          "title": "Start-up grant: support for the livelihood of a new entrepreneur (KEHA Centre)Opens in a new window.",
-          "sourceName": "Suomi.fi",
-          "score": 33,
-          "market": "fi",
+          "title": "Diversity and Inclusion Guide",
+          "sourceName": "NLnet Foundation / NGI Zero",
+          "score": 67,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 13,
-          "title": "EU Proposal Preparation Funding",
-          "sourceName": "Business Finland",
-          "score": 33,
-          "market": "fi",
-          "isExpectedMatch": true,
+          "title": "Apply for funding before April 1st 2026",
+          "sourceName": "NLnet Foundation / NGI Zero",
+          "score": 67,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 14,
-          "title": "Co-Innovation Funding",
-          "sourceName": "Business Finland",
-          "score": 33,
-          "market": "fi",
-          "isExpectedMatch": true,
+          "title": "NGI0 Review",
+          "sourceName": "NLnet Foundation / NGI Zero",
+          "score": 67,
+          "market": "eu",
+          "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 15,
-          "title": "Finnpartnership — Matchmaking Service",
-          "sourceName": "Finnpartnership",
-          "score": 32,
-          "market": "fi",
+          "title": "Acknowledgements",
+          "sourceName": "NLnet Foundation / NGI Zero",
+          "score": 67,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 16,
-          "title": "Finnpartnership — Business Partnership Support",
-          "sourceName": "Finnpartnership",
-          "score": 32,
-          "market": "fi",
+          "title": "UNITE",
+          "sourceName": "EIT Digital (28digital)",
+          "score": 66,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 17,
-          "title": "Maaseudun yritystuki — Perustamisavustus",
-          "sourceName": "Ruokavirasto",
-          "score": 28,
-          "market": "fi",
+          "title": "Finex",
+          "sourceName": "EIT Digital (28digital)",
+          "score": 66,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 18,
-          "title": "Loans and guarantees",
-          "sourceName": "Suomi.fi",
-          "score": 28,
-          "market": "fi",
+          "title": "Open Innovation Factory",
+          "sourceName": "EIT Digital (28digital)",
+          "score": 66,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 19,
-          "title": "Maaseudun yritystuki — Kehittämisavustus",
-          "sourceName": "Ruokavirasto",
-          "score": 24,
-          "market": "fi",
+          "title": "28DIGITAL Champions",
+          "sourceName": "EIT Digital (28digital)",
+          "score": 65,
+          "market": "eu",
           "isExpectedMatch": false,
           "isExpectedExclusion": false
         },
         {
           "rank": 20,
-          "title": "Toimintaympäristön kehittämisavustus",
-          "sourceName": "ELY-keskus",
-          "score": 24,
-          "market": "fi",
-          "isExpectedMatch": false,
+          "title": "Open Internet Stack Sovereign Solutions (RIA)",
+          "sourceName": "EU Horizon Europe",
+          "score": 65,
+          "market": "eu",
+          "isExpectedMatch": true,
           "isExpectedExclusion": false
         }
       ],
       "issues": [
-        "Check A: Only 1/3 expected sources in top 10 (need 2). Missing: eic, horizon"
+        "Check C: spread 11pts < 25"
       ]
     }
   ]
