@@ -75,6 +75,14 @@ def get_scraper_for_source(source):
         from sources.kulturradet import KulturradetScraper
         scraper = KulturradetScraper(source_id=source['id'])
         return scraper
+    elif 'konstnärsnämnden' in name_lower or 'konstnarsnamnden' in name_lower:
+        from sources.konstnarsnamnden import KonstnarsnamndenScraper
+        scraper = KonstnarsnamndenScraper(source_id=source['id'])
+        return scraper
+    elif name_lower.startswith('ekn') or 'exportkreditnämnden' in name_lower or 'exportkreditnamnden' in name_lower:
+        from sources.ekn import EknScraper
+        scraper = EknScraper(source_id=source['id'])
+        return scraper
     elif 'region stockholm' in name_lower:
         from sources.region_stockholm import RegionStockholmScraper
         scraper = RegionStockholmScraper(source_id=source['id'])
