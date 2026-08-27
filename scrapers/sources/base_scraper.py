@@ -268,6 +268,16 @@ class BaseScraper:
             groups.append('large_enterprise')
         if any(w in text_lower for w in ['enskild firma', 'egenföretagare', 'frilans', 'enkeltpersonforetak', 'toiminimi', 'yrittäjä']):
             groups.append('sole_proprietor')
+        # Om texten uttryckligen nämner företag men bara icke-företagsgrupper
+        # (kommun/ideell/forskning) fångades, är målgruppen fellabelad — t.ex.
+        # Klimatklivet ("kommuner, regioner, företag och organisationer").
+        # Lägg då till företag av alla storlekar. Tom grupplista lämnas som
+        # 'all' (neutralt) — det är ingen fellabel.
+        size_groups = {'startup', 'sme', 'large_enterprise', 'sole_proprietor'}
+        if groups and not size_groups & set(groups) and any(
+            w in text_lower for w in ['företag', 'bolag', 'bedrift', 'yritys', 'yrityk', 'companies']
+        ):
+            groups.extend(['sme', 'large_enterprise'])
         return groups or ['all']
 
     def transform_to_grant(self, raw_data):
