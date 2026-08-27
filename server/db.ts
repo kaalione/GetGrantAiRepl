@@ -20,4 +20,10 @@ export const pool = new Pool({
   ),
 });
 
+// Idle pooled connections can be terminated by Supabase's pooler; without a
+// handler that error event crashes the whole process.
+pool.on("error", (err) => {
+  console.error("[db] Idle client error (recovered):", err.message);
+});
+
 export const db = drizzle(pool, { schema });
