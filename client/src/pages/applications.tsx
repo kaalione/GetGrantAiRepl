@@ -27,6 +27,7 @@ import type { Application, Grant } from "@shared/schema";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { SEO } from '@/components/seo';
+import { useTranslation } from "react-i18next";
 
 function getStatusBadge(status: string) {
   switch (status) {
@@ -82,6 +83,7 @@ function MatchScoreBadge({ score }: { score: string | null }) {
 }
 
 export default function Applications() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [approvalApp, setApprovalApp] = useState<Application | null>(null);

@@ -1,10 +1,5 @@
 import { sendEmail } from './resend';
-
-const BASE_URL = process.env.REPLIT_DEV_DOMAIN
-  ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-  : process.env.REPL_SLUG
-    ? `https://${process.env.REPL_SLUG}.replit.app`
-    : 'https://getgrant.ai';
+import { APP_URL as BASE_URL } from './appUrl';
 
 interface BrandingContext {
   platformName: string;

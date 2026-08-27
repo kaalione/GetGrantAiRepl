@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useSearchProfiles } from "@/hooks/use-search-profiles";
 import {
   Target, Brain, CheckCircle, AlertTriangle, ThumbsUp,
   Loader2, Shield, RefreshCw, HelpCircle, XCircle,
@@ -108,10 +109,11 @@ function CriterionRow({ criterion }: { criterion: EligibilityCriterion }) {
 }
 
 export function MatchReport({ grant, company, hasCompany }: MatchReportProps) {
+  const { selectedProfile } = useSearchProfiles();
   const { t } = useTranslation();
   const [semanticMatch, setSemanticMatch] = useState<SemanticMatchResult | null>(null);
 
-  const matchResult = calculateMatchScore(company, grant);
+  const matchResult = calculateMatchScore(company, grant, selectedProfile);
   const displayScore = semanticMatch ? semanticMatch.score : matchResult.score;
 
   const semanticMutation = useMutation({

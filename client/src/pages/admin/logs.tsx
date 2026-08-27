@@ -79,7 +79,7 @@ export default function AdminLogs() {
     }
   };
 
-  const getSourceName = (sourceId: string) => {
+  const getSourceName = (sourceId: string | null) => {
     const source = sources?.find((s) => s.id === sourceId);
     return source?.name || "Okänd källa";
   };

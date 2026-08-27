@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "../lib/anthropic";
 import { db } from "../db";
 import {
   grantProjects,
@@ -10,11 +10,6 @@ import {
   projectActivityLog,
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
 
 const FUNDER_REPORT_STYLES: Record<string, string> = {
   vinnova: `

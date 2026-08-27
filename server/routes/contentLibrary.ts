@@ -10,7 +10,7 @@ import {
   getLibraryBlocks,
   recordBlockUsage,
 } from "../services/contentLibrary";
-import { isAuthenticated } from "../replit_integrations/auth";
+import { isAuthenticated } from "../auth";
 
 const router = Router();
 

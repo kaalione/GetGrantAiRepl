@@ -1,13 +1,13 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { apiLimiter, cronLimiter } from "./middleware/rate-limit";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
-import { runMigrations } from 'stripe-replit-sync';
-import { getStripeSync } from "./lib/stripeClient";
-import { WebhookHandlers } from "./lib/webhookHandlers";
+import { setupAuth, registerAuthRoutes } from "./auth";
+import { verifyWebhookEvent } from "./lib/stripeClient";
+import { handleSubscriptionWebhook } from "./lib/webhookHandlers";
 import { handleSuccessFeeWebhook } from "./services/successFeeWebhook";
 import { handlePartnerStripeWebhook } from "./services/partnerStripeWebhook";
 import { setupCollaborationWS } from "./websocket/collaboration";
@@ -23,10 +23,11 @@ declare module "http" {
   }
 }
 
+const port = parseInt(process.env.PORT || "5000", 10);
 const allowedOrigins = [
-  process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null,
-  "http://localhost:5000",
-  "http://0.0.0.0:5000",
+  process.env.APP_URL || null,
+  `http://localhost:${port}`,
+  `http://127.0.0.1:${port}`,
 ].filter(Boolean) as string[];
 
 app.use((req, res, next) => {
@@ -44,8 +45,26 @@ app.use((req, res, next) => {
   next();
 });
 
+// Liveness probe for the hosting platform — registered before the rate
+// limiters so healthchecks never consume API quota.
+app.get("/healthz", (_req, res) => res.json({ ok: true }));
+
 app.use("/api", apiLimiter);
 app.use("/api/cron", cronLimiter);
+
+// Cron endpoints historically take the key as body.apiKey or x-api-key.
+// External schedulers (GitHub Actions, Vercel Cron) conventionally send
+// "Authorization: Bearer <CRON_API_KEY>" — normalize that to x-api-key so
+// every existing check keeps working.
+app.use((req, _res, next) => {
+  if (!req.headers["x-api-key"]) {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) {
+      req.headers["x-api-key"] = auth.slice("Bearer ".length);
+    }
+  }
+  next();
+});
 
 // Stripe webhook route MUST be registered BEFORE express.json()
 // This is critical - webhook needs raw Buffer, not parsed JSON
@@ -67,16 +86,19 @@ app.post(
         return res.status(500).json({ error: 'Webhook processing error' });
       }
 
-      await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+      // Signature verification — rejects the request before any handler runs.
+      const event = verifyWebhookEvent(req.body as Buffer, sig);
+
+      await handleSubscriptionWebhook(event);
 
       try {
-        await handleSuccessFeeWebhook(JSON.parse(req.body.toString()));
+        await handleSuccessFeeWebhook(event);
       } catch (sfError) {
         // Non-critical: success fee webhook handling is best-effort
       }
 
       try {
-        await handlePartnerStripeWebhook(JSON.parse(req.body.toString()));
+        await handlePartnerStripeWebhook(event);
       } catch (partnerError) {
         // Non-critical: partner webhook handling is best-effort
       }
@@ -140,49 +162,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Initialize Stripe schema and sync
-  const databaseUrl = process.env.DATABASE_URL;
-  if (databaseUrl) {
-    try {
-      console.log('Initializing Stripe schema...');
-      await runMigrations({ 
-        databaseUrl
-      });
-      console.log('Stripe schema ready');
-
-      const stripeSync = await getStripeSync();
-
-      const replitDomains = process.env.REPLIT_DOMAINS;
-      if (replitDomains && replitDomains.length > 0) {
-        const webhookBaseUrl = `https://${replitDomains.split(',')[0]}`;
-        console.log('Setting up managed webhook...');
-        try {
-          const result = await stripeSync.findOrCreateManagedWebhook(
-            `${webhookBaseUrl}/api/stripe/webhook`
-          );
-          if (result?.webhook?.url) {
-            console.log(`Webhook configured: ${result.webhook.url}`);
-          } else {
-            console.log('Webhook setup completed (URL not returned)');
-          }
-        } catch (webhookError) {
-          console.warn('Could not set up managed webhook:', webhookError);
-          console.log('Manual webhook setup may be required for production');
-        }
-      } else {
-        console.log('REPLIT_DOMAINS not set - skipping managed webhook setup');
-      }
-
-      console.log('Syncing Stripe data...');
-      stripeSync.syncBackfill()
-        .then(() => console.log('Stripe data synced'))
-        .catch((err: any) => console.error('Error syncing Stripe data:', err));
-    } catch (error) {
-      console.error('Failed to initialize Stripe:', error);
-    }
-  }
-
-  // Setup Replit Auth BEFORE registering other routes
+  // Setup auth BEFORE registering other routes
   await setupAuth(app);
   registerAuthRoutes(app);
   
@@ -217,6 +197,14 @@ app.use((req, res, next) => {
     console.error("Failed to close expired grants:", error);
   }
 
+  // Backfill core search profiles for companies that lack one
+  try {
+    const { ensureCoreProfiles } = await import('./scripts/ensure-core-profiles');
+    await ensureCoreProfiles();
+  } catch (error) {
+    console.error("Failed to ensure core search profiles:", error);
+  }
+
   // Initialize partner scheduled jobs
   try {
     const { initPartnerJobs } = await import('./jobs/partnerJobs');
@@ -248,16 +236,12 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
+  // Serve API and client on PORT (default 5000). HOST defaults to 0.0.0.0 so
+  // the same setup works locally and in containers.
   httpServer.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host: process.env.HOST || "0.0.0.0",
     },
     () => {
       log(`serving on port ${port}`);

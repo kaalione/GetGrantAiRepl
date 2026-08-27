@@ -5,20 +5,22 @@ import path from "path";
 import fs from "fs";
 import express from "express";
 import { storage } from "./storage";
-import { insertGrantSchema, insertCompanySchema, insertApplicationSchema, insertScraperSourceSchema, insertScraperLogSchema, users, grantAlerts, companies, type Grant, type GrantAlert, type Company } from "@shared/schema";
+import { insertGrantSchema, insertCompanySchema, insertApplicationSchema, insertScraperSourceSchema, insertScraperLogSchema, users, grantAlerts, companies, grants, searchProfiles, type Grant, type GrantAlert, type Company } from "@shared/schema";
 import { z } from "zod";
 import { generateApplication } from "./lib/claude";
 import { generateStructuredApplication, regenerateSection, getTemplateForGrant, getTemplateBySource, getAllTemplates, type ProjectData } from "./services/applicationWriter";
 import { calculateSemanticMatch } from "./lib/semantic-matching";
 import { generateMatchExplanation } from "./services/matchExplanation";
-import { isAuthenticated } from "./replit_integrations/auth";
+import { isAuthenticated } from "./auth";
 import { semanticAnalysisLimiter, aiGenerationLimiter } from "./middleware/rate-limit";
 import { createCheckoutSession, createCustomerPortalSession, getUserSubscription, updateUserSubscription, PRICE_IDS } from "./services/stripe";
 import { getStripePublishableKey } from "./lib/stripeClient";
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import { requirePlan } from "./middleware/plan-check";
+import { APP_URL } from "./lib/appUrl";
 import collaborationRoutes from "./routes/collaboration";
+import profileRoutes from "./routes/profiles";
 import contentLibraryRoutes from "./routes/contentLibrary";
 import projectRoutes from "./routes/projects";
 import successFeeRoutes from "./routes/successFee";
@@ -46,6 +48,7 @@ export async function registerRoutes(
   app.use("/api", whitelabelConfigRouter);
   app.use("/api", partnerAdminRoutes);
   app.use("/api", onboardingRoutes);
+  app.use("/api", profileRoutes);
   
   // Dashboard stats
   app.get("/api/dashboard/stats", async (req, res) => {
@@ -377,7 +380,7 @@ export async function registerRoutes(
       }
       
       const grants = await storage.getGrantsFiltered({ status: 'open' });
-      
+
       if (!company) {
         const topGrants = grants.slice(0, 5).map(g => ({
           ...g,
@@ -385,16 +388,37 @@ export async function registerRoutes(
         }));
         return res.json(topGrants);
       }
-      
+
+      // Relevance text: the selected search profile when one is provided
+      // (project-based matching), otherwise the company's industry.
+      let relevanceText = company.industry?.toLowerCase() || "";
+      const profileId = req.query.profileId as string | undefined;
+      if (profileId && userId) {
+        const [profile] = await db
+          .select()
+          .from(searchProfiles)
+          .where(and(
+            eq(searchProfiles.id, profileId),
+            eq(searchProfiles.userId, userId),
+            eq(searchProfiles.active, true),
+          ));
+        if (profile) {
+          const parts = [
+            ...(profile.focusAreas ?? []),
+            ...(profile.keywords ?? []),
+            profile.description ?? "",
+          ].filter(Boolean);
+          if (parts.length > 0) relevanceText = parts.join(" ").toLowerCase();
+        }
+      }
+
       const scoredGrants = grants.map(grant => {
         let score = 50;
-        
-        if (grant.keywords && company.industry) {
+
+        if (grant.keywords && relevanceText) {
           const grantKeywords = grant.keywords as string[];
-          const companyIndustry = company.industry.toLowerCase();
-          const matches = grantKeywords.filter(k => 
-            companyIndustry.includes(k.toLowerCase()) || 
-            k.toLowerCase().includes(companyIndustry)
+          const matches = grantKeywords.filter(k =>
+            relevanceText.includes(k.toLowerCase())
           );
           score += matches.length * 10;
         }
@@ -610,7 +634,7 @@ export async function registerRoutes(
               companyId: company.id,
               verdict: result.overallStatus,
               score: result.score,
-              result: { verdict: result.overallStatus as any, score: result.score, criteria: result.criteria || [], summary: result.summary || '', blockers: result.blockers || [], warnings: result.warnings || [], strengths: result.strengths || [] },
+              result: { verdict: result.overallStatus as any, score: result.score, criteria: (result as any).criteria || [], summary: (result as any).summary || '', blockers: (result as any).blockers || [], warnings: (result as any).warnings || [], strengths: (result as any).strengths || [] },
               source: 'structured',
               profileHash: currentHash,
             });
@@ -1604,7 +1628,7 @@ export async function registerRoutes(
 
       // Trigger the Python scraper asynchronously using spawn (no shell)
       const scraperPath = path.join(process.cwd(), 'scrapers', 'main.py');
-      const pythonProcess = spawn('python3', [scraperPath, '--source-id', source.id], {
+      const pythonProcess = spawn(process.env.PYTHON_BIN || 'python3', [scraperPath, '--source-id', source.id], {
         env: { ...process.env },
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: false,
@@ -1733,7 +1757,7 @@ export async function registerRoutes(
         
         // Trigger Python scraper asynchronously
         const scraperPath = path.join(process.cwd(), 'scrapers', 'main.py');
-        const pythonProcess = spawn('python3', [scraperPath, '--source-id', source.id], {
+        const pythonProcess = spawn(process.env.PYTHON_BIN || 'python3', [scraperPath, '--source-id', source.id], {
           env: { ...process.env },
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: false,
@@ -1829,7 +1853,7 @@ export async function registerRoutes(
         });
         
         const scraperPath = path.join(process.cwd(), 'scrapers', 'main.py');
-        const pythonProcess = spawn('python3', [scraperPath, '--source-id', source.id], {
+        const pythonProcess = spawn(process.env.PYTHON_BIN || 'python3', [scraperPath, '--source-id', source.id], {
           env: { ...process.env },
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: false,
@@ -2445,7 +2469,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid plan. Must be 'pro' or 'enterprise'" });
       }
 
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const baseUrl = APP_URL;
       
       const session = await createCheckoutSession(
         userId,
@@ -2476,7 +2500,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No active subscription found" });
       }
 
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const baseUrl = APP_URL;
       
       const session = await createCustomerPortalSession(
         user.stripeCustomerId,

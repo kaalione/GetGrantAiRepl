@@ -15,6 +15,8 @@ import { ProfileCompletionAlert } from "@/components/profile-completion-alert";
 import { EligibilityDashboard } from "@/components/eligibility-dashboard";
 import { UpgradePromptBanner } from "@/components/success-fee/upgrade-prompt";
 import { DashboardNewUser } from "@/components/dashboard-new-user";
+import { ProfileSwitcher } from "@/components/profile-switcher";
+import { useSearchProfiles } from "@/hooks/use-search-profiles";
 import { useToast } from "@/hooks/use-toast";
 import type { Grant, Company, GrantProject } from "@shared/schema";
 import { calculateMatchScore } from "@/lib/matching";
@@ -115,11 +117,17 @@ export default function Dashboard() {
     retry: false,
   });
 
+  const { selectedProfile } = useSearchProfiles();
   const { data: topMatches, isLoading: matchesLoading } = useQuery<TopMatch[]>({
-    queryKey: ["/api/grants/top-matches"],
+    queryKey: [
+      selectedProfile && !selectedProfile.isDefault
+        ? `/api/grants/top-matches?profileId=${selectedProfile.id}`
+        : "/api/grants/top-matches",
+    ],
   });
 
-  const { data: projects } = useQuery<GrantProject[]>({
+  // /api/projects returns completionPercentage computed from milestone progress.
+  const { data: projects } = useQuery<(GrantProject & { completionPercentage?: number | null })[]>({
     queryKey: ["/api/projects"],
   });
 
@@ -153,7 +161,7 @@ export default function Dashboard() {
       })
       .map((g) => {
         const scoreResult = company
-          ? calculateMatchScore(company, g)
+          ? calculateMatchScore(company, g, selectedProfile)
           : null;
         return { ...g, matchScore: scoreResult?.score ?? 0 };
       })
@@ -162,7 +170,7 @@ export default function Dashboard() {
         new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime()
       )
       .slice(0, 5);
-  }, [grants, company]);
+  }, [grants, company, selectedProfile]);
 
   const profilePct = profileCompletion?.percentage ?? 0;
   const totalInteractions = progress?.completedCount ?? 0;
@@ -189,6 +197,11 @@ export default function Dashboard() {
         noindex={true}
       />
       <div className="space-y-8 animate-fade-in">
+        {hasCompany && (
+          <div className="flex items-center gap-2" data-testid="row-profile-switcher">
+            <ProfileSwitcher companyId={company?.id} />
+          </div>
+        )}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 p-8 text-white">
           <div className="absolute inset-0 bg-grid-white/10" />
           <div className="relative z-10">

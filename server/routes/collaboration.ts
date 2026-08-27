@@ -10,9 +10,10 @@ import {
   grants,
 } from "@shared/schema";
 import { eq, and, desc, isNull } from "drizzle-orm";
-import { isAuthenticated } from "../replit_integrations/auth";
+import { isAuthenticated } from "../auth";
 import { requireApplicationAccess } from "../middleware/collaboration-auth";
 import { sendEmail } from "../lib/resend";
+import { APP_URL } from "../lib/appUrl";
 import crypto from "crypto";
 
 const router = Router();
@@ -27,14 +28,7 @@ function getPresenceColor(index: number): string {
 }
 
 function getAppUrl(): string {
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  }
-  if (process.env.REPLIT_DOMAINS) {
-    const domains = process.env.REPLIT_DOMAINS.split(',');
-    if (domains.length > 0) return `https://${domains[0]}`;
-  }
-  return 'http://localhost:5000';
+  return APP_URL;
 }
 
 function getRoleDescription(role: string): string {
@@ -174,7 +168,7 @@ router.get(
   requireApplicationAccess('viewer'),
   async (req, res) => {
     try {
-      const applicationId = req.params.id;
+      const applicationId = req.params.id as string;
 
       const collaborators = await db
         .select()
@@ -238,7 +232,7 @@ router.put(
   requireApplicationAccess('owner'),
   async (req, res) => {
     try {
-      const { collaboratorId } = req.params;
+      const collaboratorId = req.params.collaboratorId as string;
       const { role } = req.body;
 
       if (!['editor', 'commenter', 'viewer'].includes(role)) {
@@ -411,7 +405,7 @@ router.get(
   requireApplicationAccess('viewer'),
   async (req, res) => {
     try {
-      const applicationId = req.params.id;
+      const applicationId = req.params.id as string;
       const sectionKey = req.query.sectionKey as string | undefined;
 
       let conditions = [eq(applicationComments.applicationId, applicationId)];
@@ -554,7 +548,8 @@ router.get(
   requireApplicationAccess('viewer'),
   async (req, res) => {
     try {
-      const { id: applicationId, sectionKey } = req.params;
+      const applicationId = req.params.id as string;
+      const sectionKey = req.params.sectionKey as string;
 
       const history = await db
         .select()
@@ -790,7 +785,7 @@ router.get(
   requireApplicationAccess('viewer'),
   async (req, res) => {
     try {
-      const applicationId = req.params.id;
+      const applicationId = req.params.id as string;
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 
       const activeUsers = await db

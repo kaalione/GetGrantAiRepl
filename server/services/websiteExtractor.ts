@@ -1,13 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "../lib/anthropic";
 import * as cheerio from "cheerio";
 import { db } from "../db";
 import { websiteScrapeCache } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
 
 export interface ExtractedCompanyData {
   companyName: string | null;

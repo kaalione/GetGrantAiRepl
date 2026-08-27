@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Grant, Company } from "@shared/schema";
 import { format, differenceInDays } from "date-fns";
 import { sv } from "date-fns/locale";
+import { useSearchProfiles } from "@/hooks/use-search-profiles";
 import { calculateMatchScore } from "@/lib/matching";
 import { MatchReport } from "@/components/grants/MatchReport";
 import { useTranslation } from 'react-i18next';
@@ -289,7 +290,8 @@ export default function GrantDetail() {
 
   const hasCompany = (companies?.length || 0) > 0;
   const company = companies?.[0] || null;
-  const matchResult = grant ? calculateMatchScore(company, grant) : null;
+  const { selectedProfile } = useSearchProfiles();
+  const matchResult = grant ? calculateMatchScore(company, grant, selectedProfile) : null;
 
   useEffect(() => {
     if (grant) {

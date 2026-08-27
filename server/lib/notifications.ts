@@ -1,5 +1,6 @@
 // Notification functions for grant matching and deadline reminders
 import { sendEmail } from './resend';
+import { APP_URL } from './appUrl';
 import { storage } from '../storage';
 import { calculateMatchScore } from '../../client/src/lib/matching';
 import { grantMatchesAlert, computeMatchScore, getAlertNotificationEmail } from './alert-matching';
@@ -616,7 +617,7 @@ export async function processAlertMatches(): Promise<NotificationResult> {
 
         if (alert.notifyImmediately) {
           try {
-            const appUrl = process.env.APP_URL || 'https://getgrant.ai';
+            const appUrl = APP_URL;
             const deadlineStr = grant.deadline
               ? new Date(grant.deadline).toLocaleDateString('sv-SE')
               : 'Ingen deadline';

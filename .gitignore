@@ -12,5 +12,12 @@ uploads/
 *.bin
 .env
 .env.local
-.replit
-replit.md
+
+# macOS metadata (AppleDouble files on external volumes)
+._*
+**/._*
+.DS_Store
+
+# Claude Code local state
+.claude/worktrees/
+.agents/

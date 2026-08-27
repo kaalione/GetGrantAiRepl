@@ -1198,7 +1198,24 @@
     "daysOverdue": "dager forsinket",
     "overdue": "Forsinket",
     "milestones": "Milepæler",
-    "budget": "Budsjett",
+    "budget": {
+      "totalApproved": "Totalt innvilget",
+      "spent": "Forbrukt",
+      "spentCol": "Forbrukt",
+      "remaining": "Gjenstående",
+      "remainingCol": "Igjen",
+      "burnRate": "Burn rate/mnd",
+      "category": "Kategori",
+      "budgeted": "Budsjettert",
+      "addExpense": "Legg til kostnad",
+      "initialize": "Initier budsjettkategorier",
+      "noCategories": "Ingen budsjettkategorier. Initier standardkategorier nedenfor.",
+      "expenseLog": "Kostnadslogg",
+      "date": "Dato",
+      "description": "Beskrivelse",
+      "amount": "Beløp",
+      "type": "Type"
+    },
     "dialog": {
       "step1Title": "Gratulerer med innvilget tilskudd!",
       "step2Title": "Hurtigkonfigurasjon",
@@ -1319,24 +1336,6 @@
       "emptyTitle": "Ingen rapporter",
       "emptyDesc": "Legg til rapporter for å holde oversikt over frister."
     },
-    "budget": {
-      "totalApproved": "Totalt innvilget",
-      "spent": "Forbrukt",
-      "spentCol": "Forbrukt",
-      "remaining": "Gjenstående",
-      "remainingCol": "Igjen",
-      "burnRate": "Burn rate/mnd",
-      "category": "Kategori",
-      "budgeted": "Budsjettert",
-      "addExpense": "Legg til kostnad",
-      "initialize": "Initier budsjettkategorier",
-      "noCategories": "Ingen budsjettkategorier. Initier standardkategorier nedenfor.",
-      "expenseLog": "Kostnadslogg",
-      "date": "Dato",
-      "description": "Beskrivelse",
-      "amount": "Beløp",
-      "type": "Type"
-    },
     "team": {
       "add": "Legg til medlem",
       "edit": "Rediger",
@@ -1415,5 +1414,36 @@
       "documentDeleted": "Dokument slettet",
       "documentError": "Kunne ikke håndtere dokument"
     }
+  },
+  "auth": {
+    "title": "Logg inn",
+    "subtitle": "Logg inn eller opprett en konto for å finne tilskudd som passer din bedrift",
+    "logIn": "Logg inn",
+    "signUp": "Opprett konto",
+    "email": "E-post",
+    "password": "Passord",
+    "continueWithGoogle": "Fortsett med Google",
+    "continueWithGithub": "Fortsett med GitHub",
+    "orWithEmail": "eller med e-post",
+    "confirmEmailSent": "Sjekk innboksen din — vi har sendt en bekreftelseslenke.",
+    "signingIn": "Logger inn...",
+    "backToLogin": "Tilbake til innlogging",
+    "callbackFailed": "Kunne ikke fullføre innloggingen. Prøv igjen.",
+    "notConfigured": "Innlogging er ikke konfigurert. Sett VITE_SUPABASE_URL og VITE_SUPABASE_PUBLISHABLE_KEY."
+  },
+  "profiles": {
+    "switchLabel": "Vis treff for",
+    "newProject": "Nytt prosjekt…",
+    "newTitle": "Ny prosjektprofil",
+    "newDesc": "Beskriv hva dere søker finansiering til, så matcher vi tilskudd mot prosjektet i stedet for kjernevirksomheten.",
+    "fieldName": "Navn på prosjektet",
+    "fieldNamePlaceholder": "f.eks. Eksportsatsing EU",
+    "fieldDescription": "Hva går prosjektet ut på?",
+    "fieldGoals": "Hva vil dere oppnå?",
+    "fieldBudget": "Omtrentlig budsjett (SEK, valgfritt)",
+    "createButton": "Opprett profil",
+    "created": "Søkeprofil opprettet",
+    "createFailed": "Kunne ikke opprette profilen",
+    "upgradeNeeded": "Oppgradering kreves"
   }
 }

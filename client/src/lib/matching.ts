@@ -6,6 +6,18 @@ export interface MatchResult {
   explanation: string;
 }
 
+// Relevance side of a search profile ("what are we seeking funding for?").
+// Eligibility factors (size, revenue, location) always read from the
+// company; when a profile carries relevance data, industry/keyword factors
+// read from it instead of the company's own industry/description.
+export interface RelevanceProfile {
+  kind?: string | null;
+  description?: string | null;
+  goals?: string | null;
+  focusAreas?: string[] | null;
+  keywords?: string[] | null;
+}
+
 export interface MatchFactor {
   name: string;
   points: number;
@@ -80,14 +92,43 @@ function convertStructuredToLegacy(structured: StructuredEligibilityCriteria): L
   if (structured.company_sizes?.max_employees != null) legacy.max_employees = structured.company_sizes.max_employees;
   if (structured.revenue?.max_turnover_msek != null) legacy.max_revenue = structured.revenue.max_turnover_msek * 1000000;
   if (structured.geography?.regions?.length) legacy.regions = structured.geography.regions;
-  if (structured.sectors?.length && !structured.sectors.includes('all')) legacy.industries = structured.sectors;
+  // "all" är ingen sektor — filtrera bort den men behåll resten av listan
+  const sectors = (structured.sectors ?? []).filter(s => s.toLowerCase() !== 'all');
+  if (sectors.length) legacy.industries = sectors;
   if (structured.company_age?.max_years != null) legacy.company_age = structured.company_age.max_years;
   return legacy;
 }
 
-export function calculateMatchScore(company: Company | null, grant: Grant): MatchResult {
+// Kalibrerbara vikter för poängmodellen. Summan av alla max-vikter är 100 så
+// att faktorpoängen kan läsas som procentbidrag. Kalibrerad mot
+// scripts/test-matching-quality.ts.
+export const MATCHING_WEIGHTS = {
+  industryMax: 32,
+  industryFloor: 0.75, // andel av max vid en sektormatch (sektorer tolkas som ELLER)
+  industryNeutral: 7,
+  sectorPenalty: -10,
+  sizeMax: 15,
+  sizeTargetGroupMatch: 15,
+  sizeNeutral: 3,
+  sizeMismatch: 3,
+  revenueMax: 10,
+  revenueNeutral: 3,
+  regionMax: 15,
+  regionNational: 11,
+  regionInternational: 8,
+  regionNeutral: 6,
+  keywordMax: 24,
+  keywordWeightLong: 14, // normaliserad längd ≥ 8 tecken ("digitalisering")
+  keywordWeightMid: 9,   // 5–7 tecken ("energi")
+  keywordWeightShort: 4, // ≤ 4 tecken ("it", "ai")
+  keywordTitleCap: 2,    // max antal extra träffar från titeln
+  keywordNeutral: 7,
+  noDataScore: 30,
+};
+
+export function calculateMatchScore(company: Company | null, grant: Grant, profile?: RelevanceProfile | null): MatchResult {
   const factors: MatchFactor[] = [];
-  
+
   if (!company) {
     return {
       score: 0,
@@ -118,10 +159,10 @@ export function calculateMatchScore(company: Company | null, grant: Grant): Matc
 
   if (!hasStructuredData && !hasRawCriteria && targetGroup.length === 0 && grantKeywords.length === 0) {
     return {
-      score: 35,
+      score: MATCHING_WEIGHTS.noDataScore,
       factors: [{
         name: "Data saknas",
-        points: 35,
+        points: MATCHING_WEIGHTS.noDataScore,
         maxPoints: 100,
         met: false,
         description: "Inga behörighetskriterier extraherade — uppskattad poäng"
@@ -132,10 +173,10 @@ export function calculateMatchScore(company: Company | null, grant: Grant): Matc
 
   if (lowConfidence && targetGroup.length === 0 && grantKeywords.length === 0) {
     return {
-      score: 35,
+      score: MATCHING_WEIGHTS.noDataScore,
       factors: [{
         name: "Låg konfidens",
-        points: 35,
+        points: MATCHING_WEIGHTS.noDataScore,
         maxPoints: 100,
         met: false,
         description: "Behörighetskriterier har låg konfidens — uppskattad poäng"
@@ -153,24 +194,40 @@ export function calculateMatchScore(company: Company | null, grant: Grant): Matc
     eligibility = rawCriteria as EligibilityCriteria | null;
   }
 
-  // Industry match (30 points)
-  const industryMatch = checkIndustryMatch(company, targetGroup, eligibility);
+  // Relevance factors read from the selected search profile when it carries
+  // data (project-based matching); otherwise from the company. In company
+  // mode, focusAreas count as part of the relevance signal alongside industry.
+  const profileFocus = profile?.focusAreas?.filter(Boolean) ?? [];
+  const profileText = [profile?.description, profile?.goals, ...(profile?.keywords ?? [])]
+    .filter(Boolean)
+    .join(" ");
+  const companyFocus = (company.focusAreas ?? []).filter(Boolean);
+  const relevanceSource: Company = {
+    ...company,
+    industry: profileFocus.length > 0
+      ? profileFocus.join(", ")
+      : [company.industry, ...companyFocus].filter(Boolean).join(", "),
+    description: profileText.length > 0 ? profileText : company.description,
+  };
+
+  // Industry match (30 points) — relevance
+  const industryMatch = checkIndustryMatch(relevanceSource, targetGroup, eligibility);
   factors.push(industryMatch);
 
-  // Employee size match (20 points)
-  const sizeMatch = checkEmployeeMatch(company, eligibility);
+  // Employee size match (15 points) — eligibility
+  const sizeMatch = checkEmployeeMatch(company, eligibility, targetGroup);
   factors.push(sizeMatch);
 
-  // Revenue match (20 points)
+  // Revenue match (10 points) — eligibility
   const revenueMatch = checkRevenueMatch(company, eligibility);
   factors.push(revenueMatch);
 
-  // Location match (15 points)
-  const locationMatch = checkLocationMatch(company, eligibility);
+  // Location match (15 points) — eligibility
+  const locationMatch = checkLocationMatch(company, eligibility, targetGroup);
   factors.push(locationMatch);
 
-  // Keywords overlap (15 points)
-  const keywordsMatch = checkKeywordsMatch(company, grantKeywords);
+  // Keywords overlap (30 points) — relevance
+  const keywordsMatch = checkKeywordsMatch(relevanceSource, grantKeywords, grant.title || "");
   factors.push(keywordsMatch);
 
   const totalScore = factors.reduce((sum, f) => sum + f.points, 0);
@@ -194,70 +251,210 @@ export function calculateMatchScore(company: Company | null, grant: Grant): Matc
   return { score, factors, explanation };
 }
 
+// Synonymtabellen är flerspråkig: bidragens sektorstermer är engelska
+// (energy, environment, cleantech ...) medan deras nyckelord oftast är
+// svenska/norska/finska (energi, klimat, hälsa ...). Värdelistorna innehåller
+// därför båda vokabulären — sektormatchningen träffar de engelska termerna
+// och nyckelordsmatchningen de nordiska.
 const INDUSTRY_SYNONYMS: Record<string, string[]> = {
-  "teknik": ["tech", "it", "digital", "software", "saas", "ai", "data", "ict"],
-  "it": ["tech", "it", "digital", "software", "saas", "ai", "data", "ict"],
-  "hälsa": ["health", "life_science", "medtech", "biotech", "pharma"],
-  "energi": ["energy", "cleantech", "climate"],
-  "jordbruk": ["agriculture", "food", "agtech"],
-  "livsmedel": ["agriculture", "food", "agtech"],
-  "miljö": ["environment", "cleantech", "climate", "sustainability"],
-  "bygg": ["construction", "infrastructure"],
-  "transport": ["transport", "logistics", "mobility"],
-  "kultur": ["culture", "creative"],
-  "utbildning": ["education"],
-  "tillverkning": ["manufacturing", "production"],
-  "skog": ["forestry", "bioeconomy"],
-  "marin": ["maritime", "marine", "ocean"],
-  "turism": ["tourism", "hospitality"],
-  "handel": ["retail", "commerce", "trade"],
-  "försvar": ["defense", "security"],
-  "rymd": ["space", "aerospace"],
-  "social": ["social", "welfare"],
+  "teknik": ["tech", "it", "digital", "software", "saas", "ai", "data", "ict", "digitalisering"],
+  "tech": ["tech", "it", "digital", "software", "saas", "ai", "data", "ict", "digitalisering"],
+  "it": ["tech", "it", "digital", "software", "saas", "ai", "data", "ict", "digitalisering"],
+  "digitalisering": ["digital", "tech", "it", "digitalisering"],
+  "digitalization": ["digital", "tech", "it", "digitalisering"],
+  "digital": ["digital", "tech", "it", "digitalisering"],
+  "hälsa": ["health", "life_science", "medtech", "biotech", "pharma", "hälsa", "sjukvård", "medisin", "helse"],
+  "health": ["health", "life_science", "medtech", "biotech", "pharma", "hälsa", "sjukvård", "medisin", "helse"],
+  "healthtech": ["health", "life_science", "medtech", "healthtech", "hälsa", "sjukvård", "klinisk"],
+  "lifescience": ["life_science", "health", "biotech", "pharma", "medtech", "hälsa", "klinisk"],
+  "energi": ["energy", "cleantech", "climate", "energi", "klimat", "solceller", "fornybar", "förnybar"],
+  "energy": ["energy", "cleantech", "climate", "environment", "energi", "klimat", "fornybar", "förnybar"],
+  "jordbruk": ["agriculture", "food", "agtech", "agritech", "rural", "jordbruk", "livsmedel", "landsbygd", "landbruk"],
+  "agriculture": ["agriculture", "food", "agtech", "agritech", "rural", "jordbruk", "livsmedel", "landsbygd", "landbruk"],
+  "agtech": ["agtech", "agritech", "agriculture", "food", "rural", "jordbruk", "livsmedel", "landsbygd"],
+  "foodtech": ["food", "agriculture", "agtech", "livsmedel", "matsvinn"],
+  "livsmedel": ["agriculture", "food", "agtech", "livsmedel", "jordbruk", "matsvinn"],
+  "miljö": ["environment", "cleantech", "climate", "sustainability", "miljö", "klimat", "hållbarhet"],
+  "environment": ["environment", "cleantech", "climate", "sustainability", "miljö", "klimat", "hållbarhet"],
+  "sustainability": ["environment", "cleantech", "climate", "sustainability", "miljö", "klimat", "hållbarhet", "bærekraft"],
+  "hållbarhet": ["environment", "cleantech", "climate", "sustainability", "miljö", "klimat", "hållbarhet"],
+  "bygg": ["construction", "infrastructure", "bygg", "bostad", "fastighet"],
+  "construction": ["construction", "infrastructure", "bygg", "bostad", "fastighet"],
+  "transport": ["transport", "logistics", "mobility", "mobilitet"],
+  "kultur": ["culture", "creative", "kultur", "konst", "kreativ"],
+  "culture": ["culture", "creative", "kultur", "konst", "kreativ"],
+  "creative": ["creative", "culture", "kultur", "kreativ", "media", "film"],
+  "media": ["media", "creative", "culture", "film", "audiovisual"],
+  "utbildning": ["education", "utbildning"],
+  "education": ["education", "utbildning"],
+  "tillverkning": ["manufacturing", "production", "industri", "tillverkning", "automation"],
+  "manufacturing": ["manufacturing", "production", "industri", "tillverkning", "automation"],
+  "automation": ["automation", "manufacturing", "industri", "robotik"],
+  "export": ["export", "trade", "internationalization", "internationalisering"],
+  "skog": ["forestry", "bioeconomy", "skog"],
+  "marin": ["maritime", "marine", "ocean", "maritim"],
+  "turism": ["tourism", "hospitality", "turism"],
+  "handel": ["retail", "commerce", "trade", "handel"],
+  "försvar": ["defense", "security", "försvar"],
+  "rymd": ["space", "aerospace", "rymd"],
+  "social": ["social", "welfare", "välfärd"],
   "fintech": ["fintech", "finance", "banking"],
-  "medtech": ["medtech", "health", "life_science"],
-  "biotech": ["biotech", "life_science", "health", "pharma"],
-  "cleantech": ["cleantech", "energy", "environment", "climate"],
+  "medtech": ["medtech", "health", "life_science", "healthtech", "hälsa", "sjukvård", "klinisk"],
+  "biotech": ["biotech", "life_science", "health", "pharma", "biotech", "klinisk", "medisin"],
+  "pharma": ["pharma", "biotech", "life_science", "health", "legemiddel"],
+  "cleantech": ["cleantech", "energy", "environment", "climate", "miljö", "klimat", "hållbarhet", "energi"],
   "saas": ["saas", "tech", "software", "digital", "it"],
   "software": ["software", "tech", "digital", "saas", "it"],
   "ai": ["ai", "tech", "digital", "data"],
+  "quantum": ["quantum", "deeptech", "tech"],
+  "deeptech": ["deeptech", "tech", "digital"],
 };
 
+// Mål-grupper som beskriver organisationstyp/storlek snarare än sektor —
+// de ska inte ge branschstraff.
+const NON_SECTOR_TARGETS = new Set([
+  "startup", "sme", "nonprofit", "all", "micro", "small", "medium", "large",
+  "large_enterprise", "enterprise", "sole_proprietor",
+  "research", "public_sector", "government", "public", "higher_education",
+]);
+
+const SIZE_TARGETS = new Set([
+  "startup", "sme", "micro", "small", "medium", "large", "large_enterprise",
+  "enterprise", "sole_proprietor",
+]);
+
+const ORG_TYPE_TARGETS = new Set([
+  "nonprofit", "research", "public_sector", "government", "public", "higher_education",
+]);
+
+// Kända läns-/regionnamn som ibland dyker upp i targetGroup ("skåne") —
+// hanteras som regionssignal, inte sektor.
+const NORDIC_REGIONS = new Set([
+  "stockholm", "uppsala", "sodermanland", "ostergotland", "jonkoping",
+  "kronoberg", "kalmar", "gotland", "blekinge", "skane", "halland",
+  "vastra gotaland", "varmland", "orebro", "vastmanland", "dalarna",
+  "gavleborg", "vasternorrland", "jamtland", "vasterbotten", "norrbotten",
+  "oslo", "vestland", "trondelag", "uusimaa", "pirkanmaa",
+]);
+
+const CITY_TO_REGION: Record<string, string> = {
+  "stockholm": "stockholm", "solna": "stockholm", "sodertalje": "stockholm",
+  "goteborg": "vastra gotaland", "boras": "vastra gotaland", "trollhattan": "vastra gotaland",
+  "malmo": "skane", "lund": "skane", "helsingborg": "skane", "kristianstad": "skane",
+  "lulea": "norrbotten", "kiruna": "norrbotten", "boden": "norrbotten", "pitea": "norrbotten",
+  "falun": "dalarna", "borlange": "dalarna",
+  "ostersund": "jamtland",
+  "vasteras": "vastmanland",
+  "uppsala": "uppsala",
+  "orebro": "orebro",
+  "umea": "vasterbotten", "skelleftea": "vasterbotten",
+  "sundsvall": "vasternorrland",
+  "linkoping": "ostergotland", "norrkoping": "ostergotland",
+  "jonkoping": "jonkoping",
+  "vaxjo": "kronoberg",
+  "kalmar": "kalmar",
+  "karlstad": "varmland",
+  "gavle": "gavleborg",
+  "halmstad": "halland",
+  "karlskrona": "blekinge",
+  "visby": "gotland",
+  "nykoping": "sodermanland", "eskilstuna": "sodermanland",
+  "oslo": "oslo", "bergen": "vestland", "trondheim": "trondelag",
+  "helsinki": "uusimaa", "helsingfors": "uusimaa", "espoo": "uusimaa",
+  "tampere": "pirkanmaa",
+};
+
+// Regionvärden som betyder "öppet för hela landet" respektive "öppet för
+// EU/internationellt" — nationella program är i regel mer träffsäkra för ett
+// enskilt bolag än breda EU-utlysningar, så de får något högre poäng.
+const NATIONAL_REGIONS = [
+  "hela_sverige", "hela sverige", "hela landet", "hele landet", "hele norge",
+  "sverige", "norge", "finland", "suomi", "national", "nationell", "nasjonal",
+];
+const INTERNATIONAL_REGIONS = [
+  "eu", "europa", "europe", "ees", "eea", "norden", "nordic", "international", "internationell",
+];
+
+// Mallord och allmänord som inte får ge nyckelordsträffar från beskrivningen.
+const DESCRIPTION_STOPWORDS = new Set([
+  "company", "companies", "based", "focused", "founded", "with", "employees",
+  "employee", "revenue", "million", "from", "this", "that", "their", "have",
+  "which", "also", "about", "than", "more", "most", "other", "over", "such",
+  "företag", "företaget", "grundat", "grundades", "anställda", "omsättning",
+  "fokus", "inom", "samt", "eller", "genom", "efter", "under", "mellan",
+]);
+
+function stripDiacritics(str: string): string {
+  return str.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+}
+
+function normalizeTerm(str: string): string {
+  return stripDiacritics(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function tokenizeWords(text: string): string[] {
+  return stripDiacritics(text)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+// Termexpansion och företagstermer beräknas för varje bidrag som poängsätts —
+// små cachar gör listrendrering av hundratals bidrag billig.
+const sectorCache = new Map<string, Set<string>>();
+const termCache = new Map<string, Set<string>>();
+const CACHE_LIMIT = 50;
+
 function expandIndustryToSectors(industry: string): Set<string> {
+  const cached = sectorCache.get(industry);
+  if (cached) return cached;
   const sectors = new Set<string>();
   const words = industry.toLowerCase().split(/[\/\s,&]+/).filter(Boolean);
   for (const word of words) {
     sectors.add(word);
-    const synonyms = INDUSTRY_SYNONYMS[word];
+    sectors.add(normalizeTerm(word));
+    const synonyms = INDUSTRY_SYNONYMS[word] ?? INDUSTRY_SYNONYMS[stripDiacritics(word)];
     if (synonyms) {
-      for (const s of synonyms) sectors.add(s);
+      for (const s of synonyms) {
+        sectors.add(s);
+        sectors.add(normalizeTerm(s));
+      }
     }
   }
+  if (sectorCache.size >= CACHE_LIMIT) sectorCache.clear();
+  sectorCache.set(industry, sectors);
   return sectors;
 }
 
 function checkIndustryMatch(
-  company: Company, 
-  targetGroup: string[], 
+  company: Company,
+  targetGroup: string[],
   eligibility: EligibilityCriteria | null
 ): MatchFactor {
-  const maxPoints = 30;
-  const SECTOR_PENALTY = -15;
+  const maxPoints = MATCHING_WEIGHTS.industryMax;
+  const SECTOR_PENALTY = MATCHING_WEIGHTS.sectorPenalty;
+  const NEUTRAL = MATCHING_WEIGHTS.industryNeutral;
   const industries = eligibility?.industries || [];
-  const hasSectorData = industries.length > 0 && !industries.every(i => i.toLowerCase() === 'all');
-  const allTargets = [...targetGroup, ...industries].map(t => t.toLowerCase()).filter(t => t !== 'all');
-  
-  if (allTargets.length === 0) {
+  const allTargets = Array.from(new Set(
+    [...targetGroup, ...industries].map(t => t.toLowerCase()).filter(t => t !== 'all')
+  ));
+
+  const companyIndustry = company.industry?.toLowerCase() || "";
+
+  const sectorTargets = allTargets.filter(t =>
+    !NON_SECTOR_TARGETS.has(t) && !NORDIC_REGIONS.has(normalizeTerm(t))
+  );
+
+  if (sectorTargets.length === 0) {
     return {
       name: "Bransch",
-      points: Math.round(maxPoints * 0.3),
+      points: NEUTRAL,
       maxPoints,
       met: false,
       description: "Inga specifika branschkrav"
     };
   }
 
-  const companyIndustry = company.industry?.toLowerCase() || "";
   if (!companyIndustry) {
     return {
       name: "Bransch",
@@ -269,53 +466,23 @@ function checkIndustryMatch(
   }
 
   const companySectors = expandIndustryToSectors(companyIndustry);
-
-  const sectorTargets = allTargets.filter(t =>
-    !["startup", "sme", "nonprofit", "all", "micro", "small", "medium", "large"].includes(t)
-  );
-
-  if (sectorTargets.length === 0) {
-    return {
-      name: "Bransch",
-      points: Math.round(maxPoints * 0.3),
-      maxPoints,
-      met: false,
-      description: "Inga specifika branschkrav"
-    };
-  }
-
-  const matchingCount = sectorTargets.filter(sector => companySectors.has(sector)).length;
+  const matchingCount = sectorTargets.filter(sector =>
+    companySectors.has(sector) || companySectors.has(normalizeTerm(sector))
+  ).length;
   const totalSectors = sectorTargets.length;
-  const matchRatio = matchingCount / totalSectors;
 
-  if (matchRatio >= 0.5) {
-    const points = Math.round(maxPoints * matchRatio);
+  if (matchingCount > 0) {
+    // Sektorlistan tolkas som "riktar sig till någon av dessa" (OR): en
+    // träff räcker för relevans, fler träffar / smalare bidrag ger mer.
+    const matchRatio = matchingCount / totalSectors;
+    const floor = MATCHING_WEIGHTS.industryFloor;
+    const points = Math.round(maxPoints * (floor + (1 - floor) * matchRatio));
     return {
       name: "Bransch",
       points,
       maxPoints,
       met: true,
-      description: `Din bransch (${company.industry}) matchar ${matchingCount}/${totalSectors} sektorer`
-    };
-  }
-
-  if (matchingCount === 1 && totalSectors >= 3) {
-    return {
-      name: "Bransch",
-      points: 2,
-      maxPoints,
-      met: false,
-      description: `Svag branschmatch: 1/${totalSectors} sektorer matchar`
-    };
-  }
-
-  if (matchingCount > 0) {
-    return {
-      name: "Bransch",
-      points: 8,
-      maxPoints,
-      met: false,
-      description: `Delvis branschmatch: ${matchingCount}/${totalSectors} sektorer`
+      description: `Din inriktning matchar ${matchingCount}/${totalSectors} av bidragets sektorer`
     };
   }
 
@@ -328,69 +495,131 @@ function checkIndustryMatch(
   };
 }
 
+function matchesSizeTarget(target: string, employees: number | null, foundedYear: number | null, orgType: string): boolean {
+  const age = foundedYear ? new Date().getFullYear() - foundedYear : null;
+  switch (target) {
+    case "startup":
+      return (age !== null && age <= 7) || (employees !== null && employees <= 10 && (age === null || age <= 10));
+    case "micro": return employees !== null && employees <= 9;
+    case "small": return employees !== null && employees <= 49;
+    case "medium": return employees !== null && employees >= 10 && employees <= 249;
+    case "sme": return employees !== null && employees <= 249;
+    case "large":
+    case "large_enterprise": return employees !== null && employees >= 250;
+    case "enterprise": return true;
+    case "sole_proprietor": return employees !== null && employees <= 1;
+    default: return false;
+  }
+}
+
 function checkEmployeeMatch(
-  company: Company, 
-  eligibility: EligibilityCriteria | null
+  company: Company,
+  eligibility: EligibilityCriteria | null,
+  targetGroup: string[]
 ): MatchFactor {
-  const maxPoints = 20;
+  const maxPoints = MATCHING_WEIGHTS.sizeMax;
+  const NEUTRAL = MATCHING_WEIGHTS.sizeNeutral;
   const minEmployees = eligibility?.min_employees;
   const maxEmployees = eligibility?.max_employees;
-  
-  if (minEmployees === undefined && maxEmployees === undefined) {
+
+  if (minEmployees !== undefined || maxEmployees !== undefined) {
+    if (company.employees == null) {
+      return {
+        name: "Företagsstorlek",
+        points: 0,
+        maxPoints,
+        met: false,
+        description: "Ange antal anställda i profilen"
+      };
+    }
+
+    const employees = company.employees;
+    const meetsMin = minEmployees === undefined || employees >= minEmployees;
+    const meetsMax = maxEmployees === undefined || employees <= maxEmployees;
+    const met = meetsMin && meetsMax;
+
+    let description = "";
+    if (met) {
+      description = `${employees} anställda uppfyller kravet`;
+    } else if (!meetsMin) {
+      description = `Kräver minst ${minEmployees} anställda`;
+    } else {
+      description = `Kräver max ${maxEmployees} anställda`;
+    }
+
     return {
       name: "Företagsstorlek",
-      points: Math.round(maxPoints * 0.3),
+      points: met ? maxPoints : 0,
       maxPoints,
-      met: false,
-      description: "Inga storlekskrav"
+      met,
+      description
     };
   }
 
-  if (!company.employees) {
+  // Inget uttryckligt storlekskrav — läs signal ur målgruppen i stället.
+  const tg = targetGroup.map(t => t.toLowerCase());
+  const sizeTargets = tg.filter(t => SIZE_TARGETS.has(t));
+  const orgType = (company.orgType || "").toLowerCase();
+
+  if (sizeTargets.length > 0) {
+    const matched = sizeTargets.some(t => matchesSizeTarget(t, company.employees ?? null, company.foundedYear ?? null, orgType));
+    const nonprofitMatch = tg.includes("nonprofit") && /ideell|stiftelse|förening|forening/.test(orgType);
+    if (matched || nonprofitMatch) {
+      return {
+        name: "Företagsstorlek",
+        points: MATCHING_WEIGHTS.sizeTargetGroupMatch,
+        maxPoints,
+        met: true,
+        description: `Målgrupp: ${sizeTargets.slice(0, 3).join(", ")}`
+      };
+    }
     return {
       name: "Företagsstorlek",
-      points: 0,
+      points: MATCHING_WEIGHTS.sizeMismatch,
       maxPoints,
       met: false,
-      description: "Ange antal anställda i profilen"
+      description: `Riktar sig främst till: ${sizeTargets.slice(0, 3).join(", ")}`
     };
   }
 
-  const employees = company.employees;
-  const meetsMin = minEmployees === undefined || employees >= minEmployees;
-  const meetsMax = maxEmployees === undefined || employees <= maxEmployees;
-  const met = meetsMin && meetsMax;
-
-  let description = "";
-  if (met) {
-    description = `${employees} anställda uppfyller kravet`;
-  } else if (!meetsMin) {
-    description = `Kräver minst ${minEmployees} anställda`;
-  } else {
-    description = `Kräver max ${maxEmployees} anställda`;
+  // Målgrupp finns men gäller bara organisationstyper som inte är företag
+  // (forskning, offentlig sektor, ideell) — svag matchning för bolag.
+  const hasAll = tg.includes("all");
+  const orgTypeTargets = tg.filter(t => ORG_TYPE_TARGETS.has(t));
+  if (!hasAll && orgTypeTargets.length > 0 && orgTypeTargets.length === tg.filter(t => NON_SECTOR_TARGETS.has(t)).length && tg.every(t => NON_SECTOR_TARGETS.has(t) || NORDIC_REGIONS.has(normalizeTerm(t)))) {
+    const nonprofitMatch = tg.includes("nonprofit") && /ideell|stiftelse|förening|forening/.test(orgType);
+    if (!nonprofitMatch) {
+      return {
+        name: "Företagsstorlek",
+        points: MATCHING_WEIGHTS.sizeMismatch,
+        maxPoints,
+        met: false,
+        description: `Riktar sig främst till: ${orgTypeTargets.slice(0, 3).join(", ")}`
+      };
+    }
   }
 
   return {
     name: "Företagsstorlek",
-    points: met ? maxPoints : 0,
+    points: NEUTRAL,
     maxPoints,
-    met,
-    description
+    met: false,
+    description: "Inga storlekskrav"
   };
 }
 
 function checkRevenueMatch(
-  company: Company, 
+  company: Company,
   eligibility: EligibilityCriteria | null
 ): MatchFactor {
-  const maxPoints = 20;
+  const maxPoints = MATCHING_WEIGHTS.revenueMax;
   const minRevenue = eligibility?.min_revenue;
   const maxRevenue = eligibility?.max_revenue;
-  
+
   if (minRevenue === undefined && maxRevenue === undefined) {
     return {
       name: "Omsättning",
-      points: Math.round(maxPoints * 0.3),
+      points: MATCHING_WEIGHTS.revenueNeutral,
       maxPoints,
       met: false,
       description: "Inga omsättningskrav"
@@ -431,93 +660,238 @@ function checkRevenueMatch(
 }
 
 function checkLocationMatch(
-  company: Company, 
-  eligibility: EligibilityCriteria | null
+  company: Company,
+  eligibility: EligibilityCriteria | null,
+  targetGroup: string[]
 ): MatchFactor {
-  const maxPoints = 15;
-  const regions = eligibility?.regions || [];
-  
+  const maxPoints = MATCHING_WEIGHTS.regionMax;
+  const NEUTRAL = MATCHING_WEIGHTS.regionNeutral;
+
+  // Regionnamn kan även ligga i targetGroup ("skåne") — räkna med dem.
+  const tgRegions = targetGroup.filter(t => NORDIC_REGIONS.has(normalizeTerm(t)));
+  const regions = [...(eligibility?.regions || []), ...tgRegions];
+
   if (regions.length === 0) {
     return {
       name: "Region",
-      points: Math.round(maxPoints * 0.3),
+      points: NEUTRAL,
       maxPoints,
       met: false,
       description: "Inga regionkrav"
     };
   }
 
+  const normRegions = regions.map(r => stripDiacritics(r).toLowerCase().replace(/[_-]+/g, ' ').trim());
+  const isNational = normRegions.some(r => NATIONAL_REGIONS.some(u => r === u || r.includes(u)));
+  const isInternational = !isNational && normRegions.some(r => INTERNATIONAL_REGIONS.some(u => r === u || r.includes(u)));
+  const universalPoints = isNational ? MATCHING_WEIGHTS.regionNational : isInternational ? MATCHING_WEIGHTS.regionInternational : 0;
+  const universalDesc = isNational ? "Öppet för hela landet" : "Öppet för EU/internationellt";
+
   if (!company.location) {
     return {
       name: "Region",
-      points: 0,
+      points: universalPoints,
       maxPoints,
-      met: false,
-      description: "Ange företagets plats i profilen"
+      met: isNational || isInternational,
+      description: (isNational || isInternational) ? universalDesc : "Ange företagets plats i profilen"
     };
   }
 
-  const companyLocation = company.location.toLowerCase();
-  const met = regions.some(r => 
-    companyLocation.includes(r.toLowerCase()) || r.toLowerCase().includes(companyLocation)
+  const companyCity = stripDiacritics(company.location).toLowerCase().trim();
+  const companyRegion = CITY_TO_REGION[companyCity.replace(/[^a-z]/g, '')] || "";
+
+  const met = normRegions.some(r =>
+    companyCity.includes(r) || r.includes(companyCity) ||
+    (companyRegion && (r.includes(companyRegion) || companyRegion.includes(r)))
   );
+
+  if (met) {
+    return {
+      name: "Region",
+      points: maxPoints,
+      maxPoints,
+      met: true,
+      description: `${company.location} ingår i målregioner`
+    };
+  }
+
+  if (isNational || isInternational) {
+    return {
+      name: "Region",
+      points: universalPoints,
+      maxPoints,
+      met: true,
+      description: universalDesc
+    };
+  }
 
   return {
     name: "Region",
-    points: met ? maxPoints : 0,
+    points: 0,
     maxPoints,
-    met,
-    description: met 
-      ? `${company.location} ingår i målregioner` 
-      : `Gäller: ${regions.slice(0, 3).join(", ")}`
+    met: false,
+    description: `Gäller: ${regions.slice(0, 3).join(", ")}`
   };
 }
 
-function checkKeywordsMatch(
-  company: Company, 
-  grantKeywords: string[]
-): MatchFactor {
-  const maxPoints = 15;
-  
-  if (grantKeywords.length === 0) {
-    return {
-      name: "Nyckelord",
-      points: Math.round(maxPoints * 0.3),
-      maxPoints,
-      met: false,
-      description: "Inga specifika nyckelord"
-    };
+// Bygger företagets relevanstermer: bransch + fokusområden (synonymexpanderade),
+// plats + län, samt meningsfulla ord ur beskrivningen.
+function buildCompanyTerms(company: Company): Set<string> {
+  const cacheKey = `${company.industry}|${company.description}|${company.location}|${company.employees}|${company.foundedYear}`;
+  const cached = termCache.get(cacheKey);
+  if (cached) return cached;
+  const terms = new Set<string>();
+
+  if (company.industry) {
+    for (const t of expandIndustryToSectors(company.industry.toLowerCase())) {
+      const n = normalizeTerm(t);
+      if (n.length >= 2) terms.add(n);
+    }
   }
 
-  if (!company.description) {
+  if (company.location) {
+    const city = normalizeTerm(company.location);
+    if (city.length >= 3) terms.add(city);
+    const region = CITY_TO_REGION[city];
+    if (region) terms.add(normalizeTerm(region));
+  }
+
+  if (company.description) {
+    for (const word of tokenizeWords(company.description)) {
+      if (word.length >= 4 && !DESCRIPTION_STOPWORDS.has(word)) {
+        terms.add(word);
+      }
+    }
+  }
+
+  // Unga, små bolag matchar startup-inriktade utlysningar.
+  const age = company.foundedYear ? new Date().getFullYear() - company.foundedYear : null;
+  if ((age !== null && age <= 7) || (company.employees !== null && company.employees !== undefined && company.employees <= 10)) {
+    terms.add("startup");
+  }
+
+  if (termCache.size >= CACHE_LIMIT) termCache.clear();
+  termCache.set(cacheKey, terms);
+  return terms;
+}
+
+// Två normaliserade termer matchar om de är identiska eller om den ena är
+// ett prefix av den andra och prefixet är minst 6 tecken ("energi" ⊂
+// "energieffektivisering", "digital" ⊂ "digitalisering"). Korta termer som
+// "it"/"ai" kräver exakt träff så att de inte träffar godtyckliga ord.
+function termsMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.length >= 6 && long.startsWith(short);
+}
+
+// Specifika nyckelord ("digitalisering", "energilagring") säger mycket mer
+// än generiska ("it", "ai") — poängen per träff viktas därför på ordlängd.
+function keywordWeight(normalized: string): number {
+  if (normalized.length >= 8) return MATCHING_WEIGHTS.keywordWeightLong;
+  if (normalized.length >= 5) return MATCHING_WEIGHTS.keywordWeightMid;
+  return MATCHING_WEIGHTS.keywordWeightShort;
+}
+
+function checkKeywordsMatch(
+  company: Company,
+  grantKeywords: string[],
+  grantTitle: string
+): MatchFactor {
+  const maxPoints = MATCHING_WEIGHTS.keywordMax;
+  const NEUTRAL = MATCHING_WEIGHTS.keywordNeutral;
+
+  const companyTerms = buildCompanyTerms(company);
+
+  if (companyTerms.size === 0) {
     return {
       name: "Nyckelord",
       points: 0,
       maxPoints,
       met: false,
-      description: "Lägg till en beskrivning i profilen"
+      description: "Lägg till bransch och beskrivning i profilen"
     };
   }
 
-  const companyWords = company.description.toLowerCase().split(/\s+/);
-  const matchedKeywords = grantKeywords.filter(keyword =>
-    companyWords.some(word => 
-      word.includes(keyword.toLowerCase()) || keyword.toLowerCase().includes(word)
-    )
-  );
+  // Matcha bidragets nyckelord mot företagets termer. Källor duplicerar ofta
+  // samma begrepp i flera nyckelord ("digitalt", "digitalt/ai") — därför
+  // begränsas antalet räknade träffar av antalet DISTINKTA företags-termer
+  // som träffades, så att dubbletter inte ger dubbel poäng.
+  const matchedKeywords: { keyword: string; weight: number }[] = [];
+  const matchedTerms = new Set<string>();
+  for (const keyword of grantKeywords) {
+    const nk = normalizeTerm(keyword);
+    if (nk.length < 2) continue;
+    let hit = false;
+    for (const term of companyTerms) {
+      if (termsMatch(term, nk)) {
+        matchedTerms.add(term);
+        hit = true;
+      }
+    }
+    if (hit) matchedKeywords.push({ keyword, weight: keywordWeight(nk) });
+  }
 
-  const matchedCount = matchedKeywords.length;
-  const points = Math.min(maxPoints, matchedCount * 5);
+  matchedKeywords.sort((a, b) => b.weight - a.weight);
+  const countedKeywords = matchedKeywords.slice(0, Math.min(matchedKeywords.length, matchedTerms.size));
+
+  // Titeln bär ofta den tydligaste signalen ("Klimatklivet", "Deep Tech
+  // Accelerator") — räkna upp till två extra träffar därifrån.
+  const titleWords = tokenizeWords(grantTitle);
+  const titleTokens = new Set<string>(titleWords);
+  for (let i = 0; i < titleWords.length - 1; i++) {
+    titleTokens.add(titleWords[i] + titleWords[i + 1]);
+  }
+  let titleMatches = 0;
+  const matchedTitleTerms: { term: string; weight: number }[] = [];
+  for (const term of companyTerms) {
+    if (matchedTerms.has(term)) continue;
+    if (titleMatches >= MATCHING_WEIGHTS.keywordTitleCap) break;
+    for (const tok of titleTokens) {
+      if (termsMatch(term, tok)) {
+        titleMatches++;
+        matchedTitleTerms.push({ term, weight: keywordWeight(term) });
+        break;
+      }
+    }
+  }
+
+  const matchedCount = countedKeywords.length + titleMatches;
   const met = matchedCount > 0;
+
+  if (!met) {
+    if (grantKeywords.length === 0) {
+      return {
+        name: "Nyckelord",
+        points: NEUTRAL,
+        maxPoints,
+        met: false,
+        description: "Inga specifika nyckelord"
+      };
+    }
+    return {
+      name: "Nyckelord",
+      points: 0,
+      maxPoints,
+      met: false,
+      description: `Sökord: ${grantKeywords.slice(0, 3).join(", ")}`
+    };
+  }
+
+  const rawPoints = countedKeywords.reduce((sum, k) => sum + k.weight, 0)
+    + matchedTitleTerms.reduce((sum, t) => sum + t.weight, 0);
+  const points = Math.min(maxPoints, rawPoints);
+  const shown = [
+    ...countedKeywords.map(k => k.keyword),
+    ...matchedTitleTerms.map(t => t.term),
+  ].slice(0, 3);
 
   return {
     name: "Nyckelord",
     points,
     maxPoints,
     met,
-    description: met 
-      ? `Matchande: ${matchedKeywords.slice(0, 3).join(", ")}` 
-      : `Sökord: ${grantKeywords.slice(0, 3).join(", ")}`
+    description: `Matchande: ${shown.join(", ")}`
   };
 }
 

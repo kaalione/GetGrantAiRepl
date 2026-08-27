@@ -1,12 +1,7 @@
 import { sendEmail } from './resend';
 import type { SuccessFeeAgreement } from '@shared/schema';
 import type { FeeCalculation } from '../services/successFee';
-
-const BASE_URL = process.env.REPLIT_DEV_DOMAIN
-  ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-  : process.env.REPL_SLUG
-    ? `https://${process.env.REPL_SLUG}.replit.app`
-    : 'https://getgrant.ai';
+import { APP_URL as BASE_URL } from './appUrl';
 
 function emailWrapper(title: string, content: string): string {
   return `<!DOCTYPE html>

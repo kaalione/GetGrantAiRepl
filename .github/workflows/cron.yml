@@ -1,0 +1,78 @@
+# Scheduled jobs for getgrant.ai — replaces Replit's scheduler.
+#
+# Required repository configuration:
+#   Secret  CRON_API_KEY — must match the CRON_API_KEY env of the deployed app
+#   Variable APP_URL     — public base URL, e.g. https://getgrant.ai
+#
+# Every endpoint is also callable manually:
+#   curl -X POST "$APP_URL/api/cron/<job>" -H "Authorization: Bearer $CRON_API_KEY"
+#
+# Times are UTC. Stockholm is UTC+1 (winter) / UTC+2 (summer).
+name: Scheduled jobs
+
+on:
+  schedule:
+    - cron: "0 5 * * *"     # daily-scrape
+    - cron: "0 6 * * 0"     # weekly-scrape + slow scrapers (Sunday)
+    - cron: "0 7 * * *"     # extract-eligibility (daily)
+    - cron: "0 8 * * 6"     # enrich-descriptions (Saturday)
+    - cron: "0 * * * *"     # notifications (hourly)
+    - cron: "30 4 * * *"    # close-expired (daily)
+    - cron: "0 5 * * 1"     # weekly-digest (Monday 07:00 Stockholm summer)
+    - cron: "15 4 * * *"    # success-fee-maintenance (daily)
+    - cron: "0 5 * * 2"     # project-health handled in-app daily; safety net weekly
+    - cron: "45 4 * * *"    # partner-maintenance (daily)
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Cron job to trigger (e.g. scrape, notifications, extract-eligibility)"
+        required: true
+        default: "scrape"
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve jobs for this trigger
+        id: plan
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          MANUAL_JOB: ${{ github.event.inputs.job }}
+        run: |
+          case "${MANUAL_JOB:-$SCHEDULE}" in
+            "0 5 * * *")   jobs="scrape" ;;
+            "0 6 * * 0")   jobs="scrape:weekly scrape-slow" ;;
+            "0 7 * * *")   jobs="extract-eligibility" ;;
+            "0 8 * * 6")   jobs="enrich-descriptions" ;;
+            "0 * * * *")   jobs="notifications" ;;
+            "30 4 * * *")  jobs="close-expired" ;;
+            "0 5 * * 1")   jobs="weekly-digest" ;;
+            "15 4 * * *")  jobs="success-fee-maintenance" ;;
+            "0 5 * * 2")   jobs="project-health" ;;
+            "45 4 * * *")  jobs="partner-maintenance" ;;
+            *)             jobs="$MANUAL_JOB" ;;
+          esac
+          echo "jobs=$jobs" >> "$GITHUB_OUTPUT"
+
+      - name: Call cron endpoints
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_API_KEY: ${{ secrets.CRON_API_KEY }}
+          JOBS: ${{ steps.plan.outputs.jobs }}
+        run: |
+          set -euo pipefail
+          for job in $JOBS; do
+            endpoint="${job%%:*}"
+            body="{}"
+            if [ "$job" = "scrape:weekly" ]; then
+              endpoint="scrape"
+              body='{"frequency":"weekly"}'
+            fi
+            echo "==> POST /api/cron/$endpoint"
+            curl --fail-with-body -sS -X POST "$APP_URL/api/cron/$endpoint" \
+              -H "Authorization: Bearer $CRON_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$body" \
+              --max-time 900
+            echo ""
+          done

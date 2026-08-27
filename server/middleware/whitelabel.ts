@@ -66,8 +66,8 @@ export async function whitelabelMiddleware(
   } else if (
     host !== getgrantDomain &&
     host !== `www.${getgrantDomain}` &&
-    !host.includes('replit.dev') &&
-    !host.includes('localhost')
+    !host.includes('localhost') &&
+    host !== '127.0.0.1'
   ) {
     lookupKey = host;
     lookupType = 'customDomain';

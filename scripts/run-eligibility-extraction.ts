@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { processAllGrants, getEligibilityStatus } from '../server/services/eligibilityExtractor';
 import * as fs from 'fs';
 

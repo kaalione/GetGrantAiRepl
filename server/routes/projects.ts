@@ -15,7 +15,7 @@ import {
   companies,
 } from "@shared/schema";
 import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
-import { isAuthenticated } from "../replit_integrations/auth";
+import { isAuthenticated } from "../auth";
 
 const router = Router();
 
@@ -200,6 +200,9 @@ router.get("/api/projects", isAuthenticated, async (req: any, res) => {
 
       return {
         ...project,
+        // Flat aliases consumed by the calendar and dashboard pages
+        endDate: project.projectEndDate,
+        completionPercentage: percentComplete,
         progress: { milestonesTotal, milestonesCompleted, percentComplete },
         budget: { totalBudgetedSek, totalSpentSek, percentSpent, isOverBudget },
         nextMilestone: nextMs ? {
