@@ -52,6 +52,40 @@ export const companies = pgTable("companies", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Search profiles — what the company is seeking funding FOR. Eligibility
+// factors keep reading from the company; relevance factors read from the
+// selected profile. Every company gets an auto-created 'core' profile that
+// mirrors the company profile (today's behavior); 'project' profiles are
+// user-created via wizard or document extraction.
+export const searchProfiles = pgTable("search_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companies.id),
+  userId: varchar("user_id").notNull(),
+  name: text("name").notNull(),
+  kind: text("kind").notNull(), // 'core' | 'project'
+  description: text("description"),
+  goals: text("goals"),
+  focusAreas: text("focus_areas").array(),
+  keywords: text("keywords").array(),
+  budgetSek: integer("budget_sek"),
+  timeframe: text("timeframe"),
+  sourceDocumentUrl: varchar("source_document_url"),
+  extraction: jsonb("extraction").$type<Record<string, unknown>>(),
+  createdFrom: text("created_from").notNull(), // 'auto' | 'wizard' | 'document'
+  isDefault: boolean("is_default").default(false),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSearchProfileSchema = createInsertSchema(searchProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type SearchProfile = typeof searchProfiles.$inferSelect;
+export type InsertSearchProfile = z.infer<typeof insertSearchProfileSchema>;
+
 // Application status enum for tracking lifecycle
 // draft: AI-generated, not edited
 // ready: User edited, ready to submit
@@ -71,6 +105,7 @@ export const applications = pgTable("applications", {
   sections: jsonb("sections").$type<ApplicationSection[]>(),
   companySnapshot: jsonb("company_snapshot").$type<Record<string, unknown>>(),
   projectData: jsonb("project_data").$type<Record<string, unknown>>(),
+  profileId: varchar("profile_id").references(() => searchProfiles.id), // search profile the application started from
   overallScore: integer("overall_score"),
   warnings: jsonb("warnings").$type<string[]>().default([]),
   aiModelUsed: text("ai_model_used"),
@@ -201,6 +236,7 @@ export const grantAlerts = pgTable('grant_alerts', {
   userId: varchar('user_id').notNull(),
   companyId: varchar('company_id').references(() => companies.id),
   name: text('name').notNull(),
+  profileId: varchar('profile_id').references(() => searchProfiles.id), // null = core profile (pre-profiles alerts)
   active: boolean('active').default(true),
   keywords: jsonb('keywords').$type<string[]>(),
   sources: jsonb('sources').$type<string[]>(),
@@ -370,6 +406,7 @@ export const matchExplanations = pgTable('match_explanations', {
   id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
   grantId: varchar('grant_id').references(() => grants.id).notNull(),
   companyId: varchar('company_id').references(() => companies.id).notNull(),
+  profileId: varchar('profile_id').references(() => searchProfiles.id), // null = core profile (pre-profiles cache rows)
   matchScore: integer('match_score').notNull(),
   headline: text('headline').notNull(),
   reasons: jsonb('reasons').$type<string[]>().notNull(),

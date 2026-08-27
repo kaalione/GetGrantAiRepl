@@ -197,6 +197,14 @@ app.use((req, res, next) => {
     console.error("Failed to close expired grants:", error);
   }
 
+  // Backfill core search profiles for companies that lack one
+  try {
+    const { ensureCoreProfiles } = await import('./scripts/ensure-core-profiles');
+    await ensureCoreProfiles();
+  } catch (error) {
+    console.error("Failed to ensure core search profiles:", error);
+  }
+
   // Initialize partner scheduled jobs
   try {
     const { initPartnerJobs } = await import('./jobs/partnerJobs');

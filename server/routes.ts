@@ -20,6 +20,7 @@ import { eq, sql, and, inArray } from "drizzle-orm";
 import { requirePlan } from "./middleware/plan-check";
 import { APP_URL } from "./lib/appUrl";
 import collaborationRoutes from "./routes/collaboration";
+import profileRoutes from "./routes/profiles";
 import contentLibraryRoutes from "./routes/contentLibrary";
 import projectRoutes from "./routes/projects";
 import successFeeRoutes from "./routes/successFee";
@@ -47,6 +48,7 @@ export async function registerRoutes(
   app.use("/api", whitelabelConfigRouter);
   app.use("/api", partnerAdminRoutes);
   app.use("/api", onboardingRoutes);
+  app.use("/api", profileRoutes);
   
   // Dashboard stats
   app.get("/api/dashboard/stats", async (req, res) => {
