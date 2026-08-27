@@ -515,6 +515,7 @@ class EitKicScraper(BaseScraper):
     def __init__(self, source_id=None, kic_filter=None):
         super().__init__(source_id)
         self.source_name = "EIT KICs"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "European Institute of Innovation & Technology"
         self.default_category = "eu_eit"
         self.kic_filter = kic_filter
@@ -893,10 +894,12 @@ class EitKicScraper(BaseScraper):
         if self._current_kic:
             grant['source_name'] = self._current_kic['label']
             existing_keywords = grant.get('keywords', [])
-            tag_keywords = self._current_kic.get('tags', [])
+            tag_keywords = list(self._current_kic.get('tags', []))
             sector = self._current_kic.get('sector', '')
             if sector:
-                tag_keywords.append(sector.lower())
+                # Sektorn är sammansatt ("Digitalt/AI") — dela upp den så att
+                # inga kompositnyckelord som "digitalt/ai" hamnar i databasen.
+                tag_keywords.extend(part.strip().lower() for part in sector.split('/') if part.strip())
             combined = list(dict.fromkeys(existing_keywords + tag_keywords))
             grant['keywords'] = combined[:15]
             grant['raw_data'] = {

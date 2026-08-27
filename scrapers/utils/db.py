@@ -61,6 +61,15 @@ def upsert_grant(grant_data: Dict[str, Any]) -> str:
     conn = get_connection()
     try:
         prepared_data = grant_data.copy()
+        # Keywords must describe the individual grant, not its source —
+        # keep only scraper keywords grounded in the grant's own text and
+        # add lexicon extractions from title/description (see utils/keywords).
+        from utils.keywords import refine_keywords
+        prepared_data['keywords'] = refine_keywords(
+            prepared_data.get('title'),
+            prepared_data.get('description'),
+            prepared_data.get('keywords'),
+        )
         for field in ['eligibility_criteria', 'application_requirements', 'raw_data']:
             val = prepared_data.get(field)
             if val is None or val == '' or val == {} or val == []:
