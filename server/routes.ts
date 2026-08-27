@@ -1246,12 +1246,27 @@ export async function registerRoutes(
         }
       }
 
-      const { grantId, companyId, matchScore, projectData: projectInput } = req.body;
-      
+      const { grantId, companyId, profileId, matchScore, projectData: projectInput } = req.body;
+
       if (!grantId || !companyId) {
         return res.status(400).json({ error: "grantId and companyId are required" });
       }
-      
+
+      // Records which search profile the application started from (the
+      // project step is prefilled from it). Ownership-checked; ignored if
+      // it does not belong to the user.
+      let verifiedProfileId: string | null = null;
+      if (profileId) {
+        const [ownedProfile] = await db
+          .select({ id: searchProfiles.id })
+          .from(searchProfiles)
+          .where(and(
+            eq(searchProfiles.id, profileId),
+            eq(searchProfiles.userId, userId),
+          ));
+        verifiedProfileId = ownedProfile?.id ?? null;
+      }
+
       const grant = await storage.getGrant(grantId);
       if (!grant) {
         return res.status(404).json({ error: "Grant not found" });
@@ -1295,6 +1310,7 @@ export async function registerRoutes(
             description: company.description,
           },
           projectData: project as unknown as Record<string, unknown>,
+          profileId: verifiedProfileId,
           overallScore: result.overallScore,
           warnings: result.warnings,
           aiModelUsed: "claude-sonnet-4-5-20250929",
@@ -1492,8 +1508,8 @@ export async function registerRoutes(
   app.post("/api/grants/match", isAuthenticated, requirePlan("pro"), semanticAnalysisLimiter, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
-      const { grantId, companyId } = req.body;
-      
+      const { grantId, companyId, profileId } = req.body;
+
       if (!grantId || !companyId) {
         return res.status(400).json({ error: "grantId and companyId are required" });
       }
@@ -1514,8 +1530,23 @@ export async function registerRoutes(
       }
       
       // Calculate semantic match using Claude AI
-      const semanticMatch = await calculateSemanticMatch(company, grant);
-      
+      // Project profile (when selected) supplies the relevance half of the
+      // prompt; the company still supplies eligibility.
+      let profile = null;
+      if (profileId) {
+        const [found] = await db
+          .select()
+          .from(searchProfiles)
+          .where(and(
+            eq(searchProfiles.id, profileId),
+            eq(searchProfiles.userId, userId),
+            eq(searchProfiles.active, true),
+          ));
+        if (found) profile = found;
+      }
+
+      const semanticMatch = await calculateSemanticMatch(company, grant, profile);
+
       try {
         await storage.upsertUserProgress(userId, { firstAIAnalysisRun: true, firstAIAnalysisAt: new Date() });
       } catch (e) { /* progress tracking is non-critical */ }
@@ -2851,7 +2882,7 @@ export async function registerRoutes(
 
   // ===== Grant Alerts =====
 
-  const { grantMatchesAlert, computeMatchScore } = await import('./lib/alert-matching');
+  const { grantMatchesAlert, computeMatchScore, getAlertProfile } = await import('./lib/alert-matching');
 
   async function checkAlertAgainstExistingGrants(alert: GrantAlert) {
     try {
@@ -2862,10 +2893,11 @@ export async function registerRoutes(
       if (alert.companyId) {
         company = (await storage.getCompany(alert.companyId)) || null;
       }
+      const alertProfile = await getAlertProfile(alert);
 
       for (const grant of openGrants) {
         if (grantMatchesAlert(grant, alert)) {
-          const matchScore = computeMatchScore(company, grant);
+          const matchScore = computeMatchScore(company, grant, alertProfile);
 
           if (matchScore >= (alert.minMatchScore || 60)) {
             const exists = await storage.hasAlertMatch(alert.id, grant.id);
@@ -2911,15 +2943,34 @@ export async function registerRoutes(
   app.post("/api/alerts", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { name, keywords, sources, minAmount, maxAmount, industries, minMatchScore, companyId, notifyImmediately, includeInDigest } = req.body;
+      const { name, keywords, sources, minAmount, maxAmount, industries, minMatchScore, companyId, profileId, notifyImmediately, includeInDigest } = req.body;
 
       if (!name || name.trim().length === 0) {
         return res.status(400).json({ error: 'Name is required' });
       }
 
+      // Alerts can watch a specific search profile ("watch the green AI
+      // project"); null means the core profile, matching pre-profile alerts.
+      let alertProfileId: string | null = null;
+      if (profileId) {
+        const [found] = await db
+          .select({ id: searchProfiles.id })
+          .from(searchProfiles)
+          .where(and(
+            eq(searchProfiles.id, profileId),
+            eq(searchProfiles.userId, userId),
+            eq(searchProfiles.active, true),
+          ));
+        if (!found) {
+          return res.status(400).json({ error: 'Ogiltig sökprofil' });
+        }
+        alertProfileId = found.id;
+      }
+
       const alert = await storage.createAlert({
         userId,
         companyId: companyId || null,
+        profileId: alertProfileId,
         name: name.trim(),
         keywords: keywords && keywords.length > 0 ? keywords : null,
         sources: sources && sources.length > 0 ? sources : null,

@@ -3,7 +3,7 @@ import { sendEmail } from './resend';
 import { APP_URL } from './appUrl';
 import { storage } from '../storage';
 import { calculateMatchScore } from '../../client/src/lib/matching';
-import { grantMatchesAlert, computeMatchScore, getAlertNotificationEmail } from './alert-matching';
+import { grantMatchesAlert, computeMatchScore, getAlertNotificationEmail, getAlertProfile } from './alert-matching';
 import type { Grant, Company, InsertNotification, NotificationPreference, GrantAlert } from '@shared/schema';
 
 const MIN_MATCH_SCORE = 50; // Minimum score to trigger notification
@@ -598,11 +598,12 @@ export async function processAlertMatches(): Promise<NotificationResult> {
       if (alert.companyId) {
         company = (await storage.getCompany(alert.companyId)) || null;
       }
+      const alertProfile = await getAlertProfile(alert);
 
       for (const grant of recentGrants) {
         if (!grantMatchesAlert(grant, alert)) continue;
 
-        const matchScore = computeMatchScore(company, grant);
+        const matchScore = computeMatchScore(company, grant, alertProfile);
 
         if (matchScore < (alert.minMatchScore || 60)) continue;
 

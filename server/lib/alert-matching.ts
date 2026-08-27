@@ -1,6 +1,9 @@
 import type { Grant, GrantAlert, Company } from '@shared/schema';
-import { calculateMatchScore } from '../../client/src/lib/matching';
+import { searchProfiles } from '@shared/schema';
+import { calculateMatchScore, type RelevanceProfile } from '../../client/src/lib/matching';
 import { storage } from '../storage';
+import { db } from '../db';
+import { eq } from 'drizzle-orm';
 
 export function grantMatchesAlert(grant: Grant, alert: GrantAlert): boolean {
   const keywords = alert.keywords as string[] | null;
@@ -38,12 +41,31 @@ export function grantMatchesAlert(grant: Grant, alert: GrantAlert): boolean {
   return true;
 }
 
-export function computeMatchScore(company: Company | null, grant: Grant): number {
+export function computeMatchScore(
+  company: Company | null,
+  grant: Grant,
+  profile?: RelevanceProfile | null
+): number {
   if (company) {
-    const match = calculateMatchScore(company, grant);
+    const match = calculateMatchScore(company, grant, profile);
     return match.score;
   }
   return 50;
+}
+
+// Loads the search profile an alert watches, if any. Alerts without a
+// profile watch the core business (pre-profiles behavior).
+export async function getAlertProfile(alert: GrantAlert): Promise<RelevanceProfile | null> {
+  if (!alert.profileId) return null;
+  try {
+    const [profile] = await db
+      .select()
+      .from(searchProfiles)
+      .where(eq(searchProfiles.id, alert.profileId));
+    return profile ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getAlertNotificationEmail(alert: GrantAlert): Promise<string | null> {

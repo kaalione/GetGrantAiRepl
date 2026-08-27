@@ -550,7 +550,8 @@
     "regenerateInstructions": "Gi instruksjoner for hvordan avsnittet skal forbedres",
     "regeneratePlaceholder": "F.eks. «Fokuser mer på bærekraft» eller «Legg til konkrete tall»",
     "regenerateWithAI": "Regenerer med AI",
-    "copyAll": "Kopier alt"
+    "copyAll": "Kopier alt",
+    "prefilledFromProfile": "Utfylt fra søkeprofilen \"{{name}}\" — juster fritt før du genererer."
   },
   "company": {
     "title": "Bedriftsprofil",

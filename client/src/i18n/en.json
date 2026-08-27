@@ -550,7 +550,8 @@
     "regenerateInstructions": "Provide instructions on how to improve the section",
     "regeneratePlaceholder": "E.g. \"Focus more on sustainability\" or \"Add concrete numbers\"",
     "regenerateWithAI": "Regenerate with AI",
-    "copyAll": "Copy All"
+    "copyAll": "Copy All",
+    "prefilledFromProfile": "Prefilled from the \"{{name}}\" search profile — adjust freely before generating."
   },
   "company": {
     "title": "Company Profile",

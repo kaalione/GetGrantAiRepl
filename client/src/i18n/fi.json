@@ -550,7 +550,8 @@
     "regenerateInstructions": "Anna ohjeet osion parantamiseksi",
     "regeneratePlaceholder": "Esim. \"Keskity enemmän kestävyyteen\" tai \"Lisää konkreettisia lukuja\"",
     "regenerateWithAI": "Luo uudelleen tekoälyllä",
-    "copyAll": "Kopioi kaikki"
+    "copyAll": "Kopioi kaikki",
+    "prefilledFromProfile": "Täytetty hakuprofiilista \"{{name}}\" — muokkaa vapaasti ennen luontia."
   },
   "company": {
     "title": "Yritysprofiili",

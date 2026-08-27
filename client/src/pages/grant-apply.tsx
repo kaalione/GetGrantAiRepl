@@ -239,6 +239,21 @@ export default function GrantApply() {
     }
   }, [existingApp?.id]);
 
+  // Prefill the project step from the selected search profile — a project
+  // profile already describes what the money is for. Only fills empty
+  // fields, and never overrides a saved draft.
+  const [prefilledFromProfile, setPrefilledFromProfile] = useState(false);
+  useEffect(() => {
+    if (existingApp || prefilledFromProfile) return;
+    if (!selectedProfile || selectedProfile.kind !== "project") return;
+    if (projectDescription || projectGoals || projectBudget) return;
+
+    if (selectedProfile.description) setProjectDescription(selectedProfile.description);
+    if (selectedProfile.goals) setProjectGoals(selectedProfile.goals);
+    if (selectedProfile.budgetSek) setProjectBudget(String(selectedProfile.budgetSek));
+    setPrefilledFromProfile(true);
+  }, [selectedProfile, existingApp, prefilledFromProfile, projectDescription, projectGoals, projectBudget]);
+
   const generateMutation = useMutation({
     mutationFn: async () => {
       analytics.applicationGenerationStarted(id!);
@@ -253,6 +268,7 @@ export default function GrantApply() {
       const response = await apiRequest("POST", "/api/applications/generate", {
         grantId: id,
         companyId: company?.id,
+        profileId: selectedProfile?.kind === "project" ? selectedProfile.id : undefined,
         matchScore: matchResult?.score,
         projectData: {
           projectDescription,
@@ -719,6 +735,20 @@ export default function GrantApply() {
               <CardDescription>{t("grantApply.step3.desc") || "Beskriv ditt projekt för AI-generering"}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5 px-4 sm:px-6">
+              {prefilledFromProfile && (
+                <div
+                  className="flex items-start gap-2 rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground"
+                  data-testid="notice-prefilled-from-profile"
+                >
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <span>
+                    {t("grantApply.prefilledFromProfile", {
+                      defaultValue: 'Ifyllt från sökprofilen "{{name}}" — justera fritt innan du genererar.',
+                      name: selectedProfile?.name ?? "",
+                    })}
+                  </span>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="project-description">
                   {t("grantApply.projectDescription") || "Projektbeskrivning"} *

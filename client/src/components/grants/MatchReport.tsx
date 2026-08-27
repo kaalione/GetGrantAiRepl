@@ -123,6 +123,7 @@ export function MatchReport({ grant, company, hasCompany }: MatchReportProps) {
       const response = await apiRequest("POST", "/api/grants/match", {
         grantId: grant.id,
         companyId: company.id,
+        profileId: selectedProfile?.id,
       });
       return response.json();
     },

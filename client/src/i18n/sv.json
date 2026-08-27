@@ -550,7 +550,8 @@
     "regenerateInstructions": "Ge instruktioner för hur avsnittet ska förbättras",
     "regeneratePlaceholder": "T.ex. \"Fokusera mer på hållbarhet\" eller \"Lägg till konkreta siffror\"",
     "regenerateWithAI": "Omgenerera med AI",
-    "copyAll": "Kopiera allt"
+    "copyAll": "Kopiera allt",
+    "prefilledFromProfile": "Ifyllt från sökprofilen \"{{name}}\" — justera fritt innan du genererar."
   },
   "company": {
     "title": "Företagsprofil",
