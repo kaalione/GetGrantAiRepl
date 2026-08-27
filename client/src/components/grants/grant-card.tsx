@@ -35,6 +35,7 @@ export function GrantCard({ grant, company, profile, showMatchScore = false, app
   const { t } = useTranslation();
   const matchResult = showMatchScore ? calculateMatchScore(company || null, grant, profile) : null;
   const { bookmarked, toggleBookmark } = useBookmark(grant.id);
+  const isProjectProfile = profile?.kind === 'project';
 
   function formatAmount(min: string | null, max: string | null): string {
     if (!min && !max) return t('grantCard.notSpecified');
@@ -125,9 +126,6 @@ export function GrantCard({ grant, company, profile, showMatchScore = false, app
           </div>
           <div className="flex flex-col items-end gap-2">
             {getStatusBadge(grant.status, grant.deadline)}
-            {showMatchScore && matchResult && (
-              <MatchIndicator matchResult={matchResult} size="sm" showLabel={false} />
-            )}
           </div>
         </div>
       </CardHeader>
@@ -138,35 +136,51 @@ export function GrantCard({ grant, company, profile, showMatchScore = false, app
         <p className="text-sm text-muted-foreground line-clamp-2 mb-4 break-words">
           {grant.description}
         </p>
-        <div className="flex flex-wrap gap-2 mb-4">
-          {eligibilityStatus && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge
-                  variant="secondary"
-                  className={
-                    eligibilityStatus === 'eligible'
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                      : eligibilityStatus === 'almost'
-                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300'
-                        : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                  }
-                  data-testid={`badge-eligibility-${grant.id}`}
-                >
-                  {eligibilityStatus === 'eligible' ? (
-                    <><CheckCircle2 className="h-3 w-3 mr-1" />{t('eligibility.eligible')}</>
-                  ) : eligibilityStatus === 'almost' ? (
-                    <><AlertTriangle className="h-3 w-3 mr-1" />{t('eligibility.almostEligible')}</>
-                  ) : (
-                    <><XCircle className="h-3 w-3 mr-1" />{t('eligibility.notEligible')}</>
+        {(showMatchScore && matchResult) || eligibilityStatus ? (
+          <div className="mb-4 grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3" data-testid={`axes-${grant.id}`}>
+            <div className="min-w-0 space-y-1.5">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                {isProjectProfile ? t('grantCard.axis.relevanceProject') : t('grantCard.axis.relevanceCore')}
+              </div>
+              {showMatchScore && matchResult ? (
+                <>
+                  <div className="font-serif text-lg font-semibold leading-none tabular-nums text-primary">
+                    {matchResult.score}<span className="text-xs">%</span>
+                  </div>
+                  <div className="h-1 w-full rounded-full bg-border">
+                    <div className="h-1 rounded-full bg-primary" style={{ width: `${matchResult.score}%` }} />
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-muted-foreground">{t('grantCard.axis.noProfile')}</div>
+              )}
+            </div>
+            <div className="min-w-0 space-y-1.5 border-l pl-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                {t('grantCard.axis.eligibility')}
+              </div>
+              {eligibilityStatus ? (
+                <>
+                  <div className="flex items-center gap-1.5 text-sm font-medium leading-none">
+                    {eligibilityStatus === 'eligible' ? (
+                      <><CheckCircle2 className="h-3.5 w-3.5 text-primary" />{t('eligibility.eligible')}</>
+                    ) : eligibilityStatus === 'almost' ? (
+                      <><AlertTriangle className="h-3.5 w-3.5 text-amber-600" />{t('eligibility.almostEligible')}</>
+                    ) : (
+                      <><XCircle className="h-3.5 w-3.5 text-destructive" />{t('eligibility.notEligible')}</>
+                    )}
+                  </div>
+                  {eligibilityDetail && (
+                    <div className="line-clamp-1 text-[11px] text-muted-foreground">{eligibilityDetail}</div>
                   )}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{eligibilityDetail || t('eligibility.checksPassed', { passed: '?', total: '?' })}</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
+                </>
+              ) : (
+                <div className="text-xs text-muted-foreground">{t('grantCard.axis.notChecked')}</div>
+              )}
+            </div>
+          </div>
+        ) : null}
+        <div className="flex flex-wrap gap-2 mb-4">
           {applicationInfo && getApplicationStatusBadge(applicationInfo)}
           {getSourceTypeBadge(grant.sourceType)}
           {grant.targetGroup?.slice(0, 2).map((group) => (

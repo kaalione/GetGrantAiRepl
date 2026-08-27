@@ -422,6 +422,13 @@
       "approved": "Beviljad",
       "rejected": "Nekad",
       "withdrawn": "Återkallad"
+    },
+    "axis": {
+      "relevanceProject": "Relevans för satsningen",
+      "relevanceCore": "Relevans",
+      "eligibility": "Behörighet",
+      "noProfile": "Skapa profil",
+      "notChecked": "Ej kontrollerad"
     }
   },
   "filters": {

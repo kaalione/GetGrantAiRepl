@@ -422,6 +422,13 @@
       "approved": "Approved",
       "rejected": "Rejected",
       "withdrawn": "Withdrawn"
+    },
+    "axis": {
+      "relevanceProject": "Relevance for the pursuit",
+      "relevanceCore": "Relevance",
+      "eligibility": "Eligibility",
+      "noProfile": "Create a profile",
+      "notChecked": "Not checked"
     }
   },
   "filters": {

@@ -422,6 +422,13 @@
       "approved": "Innvilget",
       "rejected": "Avslått",
       "withdrawn": "Trukket tilbake"
+    },
+    "axis": {
+      "relevanceProject": "Relevans for satsingen",
+      "relevanceCore": "Relevans",
+      "eligibility": "Kvalifisering",
+      "noProfile": "Opprett profil",
+      "notChecked": "Ikke sjekket"
     }
   },
   "filters": {

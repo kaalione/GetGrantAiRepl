@@ -118,6 +118,16 @@ export default function Dashboard() {
   });
 
   const { selectedProfile } = useSearchProfiles();
+  const isProjectPursuit = selectedProfile?.kind === "project";
+  const pursuitMeta = [
+    isProjectPursuit && selectedProfile?.budgetSek
+      ? `${Number(selectedProfile.budgetSek).toLocaleString("sv-SE")} SEK`
+      : null,
+    isProjectPursuit ? selectedProfile?.timeframe : null,
+  ].filter(Boolean).join(" · ");
+  const pursuitSubtitle = isProjectPursuit && selectedProfile?.description
+    ? selectedProfile.description
+    : t('dashboard.subtitle');
   const { data: topMatches, isLoading: matchesLoading } = useQuery<TopMatch[]>({
     queryKey: [
       selectedProfile && !selectedProfile.isDefault
@@ -197,36 +207,43 @@ export default function Dashboard() {
         noindex={true}
       />
       <div className="space-y-8 animate-fade-in">
-        {hasCompany && (
-          <div className="flex items-center gap-2" data-testid="row-profile-switcher">
-            <ProfileSwitcher companyId={company?.id} />
-          </div>
-        )}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 p-8 text-white">
-          <div className="absolute inset-0 bg-grid-white/10" />
-          <div className="relative z-10">
-            <h1 className="text-3xl font-bold tracking-tight mb-2" data-testid="text-dashboard-title">
-              {t('dashboard.welcome')}
-            </h1>
-            <p className="text-blue-100 max-w-xl" data-testid="text-dashboard-subtitle">
-              {t('dashboard.subtitle')}
-            </p>
-            <div className="mt-6 flex gap-3 flex-wrap">
-              <Button variant="secondary" size="lg" asChild data-testid="button-explore-grants">
-                <Link href="/bidrag">
-                  <Target className="mr-2 h-5 w-5" />
-                  {t('dashboard.exploreGrants')}
-                </Link>
-              </Button>
-              {hasCompany && (
-                <Button variant="outline" size="lg" className="bg-white/10 border-white/30 text-white" asChild>
-                  <Link href="/ansokan">
-                    <FileText className="mr-2 h-5 w-5" />
-                    {t('dashboard.myApplications')}
-                  </Link>
-                </Button>
+        {/* Pursuit header — the selected search profile frames everything
+            below it, replacing the decorative gradient banner. */}
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-6">
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-sm bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent-foreground">
+                {isProjectPursuit
+                  ? t('dashboard.pursuit.project', 'Projektsatsning')
+                  : t('dashboard.pursuit.core', 'Kärnverksamhet')}
+              </span>
+              {pursuitMeta && (
+                <span className="text-xs text-muted-foreground" data-testid="text-pursuit-meta">{pursuitMeta}</span>
               )}
             </div>
+            <h1 className="font-serif text-3xl font-semibold tracking-tight" data-testid="text-dashboard-title">
+              {selectedProfile?.name || company?.companyName || t('dashboard.welcome')}
+            </h1>
+            <p className="max-w-2xl text-sm text-muted-foreground" data-testid="text-dashboard-subtitle">
+              {pursuitSubtitle}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {hasCompany && <ProfileSwitcher companyId={company?.id} />}
+            <Button asChild data-testid="button-explore-grants">
+              <Link href="/bidrag">
+                <Target className="mr-2 h-4 w-4" />
+                {t('dashboard.exploreGrants')}
+              </Link>
+            </Button>
+            {hasCompany && (
+              <Button variant="outline" asChild data-testid="button-my-applications">
+                <Link href="/ansokan">
+                  <FileText className="mr-2 h-4 w-4" />
+                  {t('dashboard.myApplications')}
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
 

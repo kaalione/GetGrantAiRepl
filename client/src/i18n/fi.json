@@ -422,6 +422,13 @@
       "approved": "Myönnetty",
       "rejected": "Hylätty",
       "withdrawn": "Peruutettu"
+    },
+    "axis": {
+      "relevanceProject": "Osuvuus hankkeelle",
+      "relevanceCore": "Osuvuus",
+      "eligibility": "Kelpoisuus",
+      "noProfile": "Luo profiili",
+      "notChecked": "Ei tarkistettu"
     }
   },
   "filters": {
