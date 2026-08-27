@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { companies, searchProfiles } from "@shared/schema";
 import { isNull, eq, and } from "drizzle-orm";
+import { ensureCoreProfileForCompany } from "../services/searchProfiles";
 
 // Ensures every company has its auto-created default "core" search profile
 // (mirrors the company profile — gives exactly the pre-profiles matching
@@ -22,18 +23,8 @@ export async function ensureCoreProfiles(): Promise<number> {
 
   let created = 0;
   for (const company of missing) {
-    if (!company.userId) continue; // orphan rows can't own a profile
-    await db.insert(searchProfiles).values({
-      companyId: company.id,
-      userId: company.userId,
-      name: "Kärnverksamheten",
-      kind: "core",
-      description: company.description,
-      focusAreas: company.focusAreas,
-      createdFrom: "auto",
-      isDefault: true,
-    });
-    created++;
+    const profile = await ensureCoreProfileForCompany(company);
+    if (profile) created++;
   }
   if (created > 0) {
     console.log(`[Profiles] Created ${created} core search profiles`);

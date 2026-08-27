@@ -951,6 +951,15 @@ export async function registerRoutes(
       const data = insertCompanySchema.parse(req.body);
       const company = await storage.createCompany({ ...data, userId });
       try {
+        // Every company needs its auto 'core' search profile immediately —
+        // the startup backfill alone would leave new companies without one
+        // until the next restart.
+        const { ensureCoreProfileForCompany } = await import('./services/searchProfiles');
+        await ensureCoreProfileForCompany(company);
+      } catch (e) {
+        console.error('Failed to create core search profile:', e);
+      }
+      try {
         await storage.upsertUserProgress(userId, { profileCreated: true, profileCreatedAt: new Date() });
       } catch (e) { /* progress tracking is non-critical */ }
       res.status(201).json(company);

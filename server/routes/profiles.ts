@@ -10,6 +10,12 @@ import { and, eq, desc } from "drizzle-orm";
 import { isAuthenticated } from "../auth";
 import { requirePlan } from "../middleware/plan-check";
 import { aiGenerationLimiter } from "../middleware/rate-limit";
+import {
+  listActiveProfiles,
+  createProjectProfile,
+  archiveProfile,
+  projectProfileLimit,
+} from "../services/searchProfiles";
 
 const router = Router();
 
@@ -34,14 +40,6 @@ const uploadProjectDoc = multer({
     else cb(new Error("Endast PDF stöds för närvarande"));
   },
 });
-
-// Plan limits for user-created 'project' profiles (the auto 'core' profile
-// never counts): free = none, pro = 5, enterprise = unlimited.
-const PROJECT_PROFILE_LIMITS: Record<string, number> = {
-  free: 0,
-  pro: 5,
-  enterprise: Number.POSITIVE_INFINITY,
-};
 
 const createProfileSchema = z.object({
   companyId: z.string().min(1),
@@ -82,15 +80,7 @@ router.get("/profiles", isAuthenticated, async (req: any, res: Response) => {
     const userId = req.user.claims.sub;
     const companyId = typeof req.query.companyId === "string" ? req.query.companyId : null;
 
-    const conditions = [eq(searchProfiles.userId, userId), eq(searchProfiles.active, true)];
-    if (companyId) conditions.push(eq(searchProfiles.companyId, companyId));
-
-    const profiles = await db
-      .select()
-      .from(searchProfiles)
-      .where(and(...conditions))
-      .orderBy(desc(searchProfiles.isDefault), desc(searchProfiles.createdAt));
-
+    const profiles = await listActiveProfiles(userId, companyId);
     res.json(profiles);
   } catch (error) {
     console.error("Failed to list search profiles:", error);
@@ -158,50 +148,37 @@ router.post("/profiles", isAuthenticated, async (req: any, res: Response) => {
 
     const [user] = await db.select().from(users).where(eq(users.id, userId));
     const plan = user?.plan || "free";
-    const limit = PROJECT_PROFILE_LIMITS[plan] ?? 0;
 
-    const existing = await db
-      .select({ id: searchProfiles.id })
-      .from(searchProfiles)
-      .where(
-        and(
-          eq(searchProfiles.userId, userId),
-          eq(searchProfiles.kind, "project"),
-          eq(searchProfiles.active, true)
-        )
-      );
+    const result = await createProjectProfile(
+      {
+        companyId: data.companyId,
+        userId,
+        name: data.name,
+        description: data.description,
+        goals: data.goals,
+        focusAreas: data.focusAreas,
+        keywords: data.keywords,
+        budgetSek: data.budgetSek,
+        timeframe: data.timeframe,
+        createdFrom: data.createdFrom,
+        sourceDocumentUrl: data.sourceDocumentPath,
+        extraction: data.extraction as Record<string, unknown> | null | undefined,
+      },
+      plan
+    );
 
-    if (existing.length >= limit) {
+    if (!result.ok) {
       return res.status(403).json({
         error: "Plangräns nådd",
         message:
           plan === "free"
             ? "Projektprofiler kräver Pro. Uppgradera för att söka bidrag till specifika projekt."
-            : `Din plan tillåter ${limit} projektprofiler. Arkivera en profil eller uppgradera.`,
+            : `Din plan tillåter ${projectProfileLimit(plan)} projektprofiler. Arkivera en profil eller uppgradera.`,
         upgrade: plan !== "enterprise",
       });
     }
 
-    const [profile] = await db
-      .insert(searchProfiles)
-      .values({
-        companyId: data.companyId,
-        userId,
-        name: data.name,
-        kind: "project",
-        description: data.description ?? null,
-        goals: data.goals ?? null,
-        focusAreas: data.focusAreas ?? null,
-        keywords: data.keywords ?? null,
-        budgetSek: data.budgetSek ?? null,
-        timeframe: data.timeframe ?? null,
-        createdFrom: data.createdFrom ?? "wizard",
-        sourceDocumentUrl: data.sourceDocumentPath ?? null,
-        extraction: (data.extraction as Record<string, unknown> | null) ?? null,
-      })
-      .returning();
-
-    res.status(201).json(profile);
+    res.status(201).json(result.profile);
   } catch (error) {
     console.error("Failed to create search profile:", error);
     res.status(500).json({ error: "Kunde inte skapa sökprofil" });
@@ -249,11 +226,7 @@ router.delete("/profiles/:id", isAuthenticated, async (req: any, res: Response) 
       return res.status(400).json({ error: "Kärnprofilen kan inte tas bort" });
     }
 
-    await db
-      .update(searchProfiles)
-      .set({ active: false, updatedAt: new Date() })
-      .where(eq(searchProfiles.id, profile.id));
-
+    await archiveProfile(profile.id);
     res.json({ archived: true });
   } catch (error) {
     console.error("Failed to archive search profile:", error);

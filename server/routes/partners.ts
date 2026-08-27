@@ -1,11 +1,12 @@
 import { Router, type Request, type Response } from 'express';
 import { isAuthenticated } from '../auth';
 import { db } from '../db';
-import { partners, partnerActivityLog, partnerClients, users } from '@shared/schema';
+import { partners, partnerActivityLog, partnerClients, users, companies, searchProfiles } from '@shared/schema';
 import { eq, and, desc, ilike, or, count, sql } from 'drizzle-orm';
 import { invalidatePartnerCache } from '../middleware/whitelabel';
 import { validateSubdomain, validateHexColor, PARTNER_PLANS, partnerWithinLimit, partnerHasFeature, type PartnerPlanKey } from '../config/partnerPlans';
 import { createPartnerCheckoutSession, updatePartnerSubscription, createCustomerPortalSession, updateStripeSubscriptionPlan } from '../services/stripe';
+import { listActiveProfiles, createProjectProfile, archiveProfile, projectProfileLimit } from '../services/searchProfiles';
 import { z } from 'zod';
 import type { PartnerContext } from '../middleware/whitelabel';
 import crypto from 'crypto';
@@ -854,6 +855,176 @@ router.post('/clients/:clientId/block', isAuthenticated, async (req: any, res: R
   } catch (error) {
     console.error('Error blocking client:', error);
     res.status(500).json({ error: 'Failed to block client' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Client search profiles — a consultant sets up "what are we seeking funding
+// for?" on behalf of a client. The profile belongs to the CLIENT (its userId
+// is the client's), so the client sees and owns it; created_by_user_id
+// records that the consultant made it. Every mutation is written to the
+// partner activity log.
+// ---------------------------------------------------------------------------
+
+// Resolves an active, joined client of this partner plus their company.
+async function resolveClientForProfiles(partnerId: string, clientId: string) {
+  const [client] = await db.select().from(partnerClients)
+    .where(and(
+      eq(partnerClients.id, clientId),
+      eq(partnerClients.partnerId, partnerId)
+    ));
+  if (!client) return { ok: false as const, error: 'not_found' as const };
+
+  // A profile needs an owning user and company, which only exist once the
+  // client has accepted their invite and set up a company profile.
+  if (client.status !== 'active' || !client.userId) {
+    return { ok: false as const, error: 'not_joined' as const };
+  }
+
+  const [company] = await db.select({ id: companies.id }).from(companies)
+    .where(eq(companies.userId, client.userId));
+  if (!company) return { ok: false as const, error: 'no_company' as const };
+
+  return { ok: true as const, client, companyId: company.id, clientUserId: client.userId };
+}
+
+function clientProfileError(res: Response, error: 'not_found' | 'not_joined' | 'no_company') {
+  if (error === 'not_found') return res.status(404).json({ error: 'Client not found' });
+  if (error === 'not_joined') {
+    return res.status(409).json({
+      error: 'Client has not accepted their invite yet',
+      message: 'Klienten måste acceptera inbjudan innan du kan skapa sökprofiler.',
+    });
+  }
+  return res.status(409).json({
+    error: 'Client has no company profile yet',
+    message: 'Klienten måste skapa en företagsprofil innan sökprofiler kan läggas till.',
+  });
+}
+
+// GET /clients/:clientId/profiles - List a client's search profiles
+router.get('/clients/:clientId/profiles', isAuthenticated, async (req: any, res: Response) => {
+  try {
+    const userId = req.user?.claims?.sub;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const partner = await getPartnerForUser(userId);
+    if (!partner) return res.status(404).json({ error: 'Partner profile not found' });
+    if (partner.status !== 'active') return res.status(403).json({ error: 'Partner account is not active' });
+
+    const resolved = await resolveClientForProfiles(partner.id, req.params.clientId as string);
+    if (!resolved.ok) return clientProfileError(res, resolved.error);
+
+    const profiles = await listActiveProfiles(resolved.clientUserId, resolved.companyId);
+    res.json({ clientId: resolved.client.id, clientEmail: resolved.client.email, profiles });
+  } catch (error) {
+    console.error('Error listing client profiles:', error);
+    res.status(500).json({ error: 'Failed to list client profiles' });
+  }
+});
+
+// POST /clients/:clientId/profiles - Create a project profile for a client
+router.post('/clients/:clientId/profiles', isAuthenticated, async (req: any, res: Response) => {
+  try {
+    const userId = req.user?.claims?.sub;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const partner = await getPartnerForUser(userId);
+    if (!partner) return res.status(404).json({ error: 'Partner profile not found' });
+    if (partner.status !== 'active') return res.status(403).json({ error: 'Partner account is not active' });
+
+    const schema = z.object({
+      name: z.string().min(1).max(120),
+      description: z.string().max(4000).optional().nullable(),
+      goals: z.string().max(4000).optional().nullable(),
+      focusAreas: z.array(z.string().max(80)).max(20).optional().nullable(),
+      keywords: z.array(z.string().max(60)).max(30).optional().nullable(),
+      budgetSek: z.number().int().nonnegative().max(1_000_000_000).optional().nullable(),
+      timeframe: z.string().max(120).optional().nullable(),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid fields', details: parsed.error.flatten() });
+    }
+
+    const resolved = await resolveClientForProfiles(partner.id, req.params.clientId as string);
+    if (!resolved.ok) return clientProfileError(res, resolved.error);
+
+    // The CLIENT's plan governs the allowance, not the partner's.
+    const clientPlan = resolved.client.clientPlan || 'pro';
+    const result = await createProjectProfile(
+      {
+        companyId: resolved.companyId,
+        userId: resolved.clientUserId,
+        ...parsed.data,
+        createdFrom: 'wizard',
+        createdByUserId: userId,
+      },
+      clientPlan
+    );
+
+    if (!result.ok) {
+      return res.status(403).json({
+        error: 'Client profile limit reached',
+        message: `Klientens plan (${clientPlan}) tillåter ${projectProfileLimit(clientPlan)} projektprofiler.`,
+      });
+    }
+
+    await logPartnerActivity(
+      partner.id,
+      userId,
+      'client_profile_created',
+      `Created search profile "${result.profile.name}" for client: ${resolved.client.email}`,
+      { clientId: resolved.client.id, profileId: result.profile.id, profileName: result.profile.name },
+      String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')
+    );
+
+    res.status(201).json(result.profile);
+  } catch (error) {
+    console.error('Error creating client profile:', error);
+    res.status(500).json({ error: 'Failed to create client profile' });
+  }
+});
+
+// DELETE /clients/:clientId/profiles/:profileId - Archive a client's project profile
+router.delete('/clients/:clientId/profiles/:profileId', isAuthenticated, async (req: any, res: Response) => {
+  try {
+    const userId = req.user?.claims?.sub;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const partner = await getPartnerForUser(userId);
+    if (!partner) return res.status(404).json({ error: 'Partner profile not found' });
+    if (partner.status !== 'active') return res.status(403).json({ error: 'Partner account is not active' });
+
+    const resolved = await resolveClientForProfiles(partner.id, req.params.clientId as string);
+    if (!resolved.ok) return clientProfileError(res, resolved.error);
+
+    const [profile] = await db.select().from(searchProfiles)
+      .where(and(
+        eq(searchProfiles.id, req.params.profileId as string),
+        eq(searchProfiles.userId, resolved.clientUserId)
+      ));
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    if (profile.kind === 'core') {
+      return res.status(400).json({ error: 'The core profile cannot be removed' });
+    }
+
+    await archiveProfile(profile.id);
+
+    await logPartnerActivity(
+      partner.id,
+      userId,
+      'client_profile_archived',
+      `Archived search profile "${profile.name}" for client: ${resolved.client.email}`,
+      { clientId: resolved.client.id, profileId: profile.id, profileName: profile.name },
+      String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')
+    );
+
+    res.json({ archived: true });
+  } catch (error) {
+    console.error('Error archiving client profile:', error);
+    res.status(500).json({ error: 'Failed to archive client profile' });
   }
 });
 

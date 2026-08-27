@@ -72,6 +72,9 @@ export const searchProfiles = pgTable("search_profiles", {
   sourceDocumentUrl: varchar("source_document_url"),
   extraction: jsonb("extraction").$type<Record<string, unknown>>(),
   createdFrom: text("created_from").notNull(), // 'auto' | 'wizard' | 'document'
+  // Set when someone other than the owner created the profile — today a
+  // partner consultant acting for their client. Null = the owner made it.
+  createdByUserId: varchar("created_by_user_id"),
   isDefault: boolean("is_default").default(false),
   active: boolean("active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
