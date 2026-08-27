@@ -254,7 +254,9 @@ function keywordInText(keyword: string, text: string): boolean {
   return normText.includes(normKeyword);
 }
 
-function runChecks(tc: TestCompany, top20: GrantResult[]): { checks: CheckResults; issues: string[] } {
+// deepScores: poängen för topp 100 (eller hela poolen om den är mindre) —
+// används av Check C:s differentieringsmått.
+function runChecks(tc: TestCompany, top20: GrantResult[], deepScores: number[]): { checks: CheckResults; issues: string[] } {
   const issues: string[] = [];
   const top10 = top20.slice(0, 10);
 
@@ -295,18 +297,33 @@ function runChecks(tc: TestCompany, top20: GrantResult[]): { checks: CheckResult
     issues.push(`Check B: ${exclusionsFound.length} exclusion(s) in top 10: ${exclusionsFound.join('; ')}`);
   }
 
+  // Check C — topplistans kvalitet, tre delmått:
+  //   1. Topppoäng ≥ 65: den bästa matchningen ska vara stark.
+  //   2. Spread ≥ 10 mellan rank 1 och rank 100: motorn ska differentiera —
+  //      en platt poängmodell ger ~0. (Spread inom topp 10 var det gamla
+  //      måttet, men i pooler på 1 500–2 400 bidrag är topp 10 legitimt
+  //      near-ekvivalenta; se minnesanteckning/commit-historik.)
+  //   3. Minst 3 distinkta källor i topp 10: listan får inte vara en enda
+  //      källas near-dubbletter.
+  // Negativkontroller (C8) undantas: topppoäng ≥65 strider per design mot
+  // Check E (<3 bidrag över 60) — kvaliteten för dem mäts av B och E.
   let checkC: boolean | null = null;
-  if (top10.length >= 10) {
+  if (tc.isNegativeControl) {
+    checkC = null;
+  } else if (top10.length >= 10) {
     const score1 = top10[0].score;
-    const score10 = top10[9].score;
-    const spread = score1 - score10;
+    const deepScore = deepScores.length > 0 ? deepScores[deepScores.length - 1] : score1;
+    const spread = score1 - deepScore;
+    const distinctSources = new Set(top10.map(g => g.sourceName)).size;
     const passScore = score1 >= 65;
-    const passSpread = spread >= 25;
-    checkC = passScore && passSpread;
+    const passSpread = spread >= 10;
+    const passDiversity = distinctSources >= 3;
+    checkC = passScore && passSpread && passDiversity;
     if (!checkC) {
       const reasons: string[] = [];
       if (!passScore) reasons.push(`top score ${score1} < 65`);
-      if (!passSpread) reasons.push(`spread ${spread}pts < 25`);
+      if (!passSpread) reasons.push(`spread rank1→rank${deepScores.length} ${spread}pts < 10`);
+      if (!passDiversity) reasons.push(`only ${distinctSources} distinct sources in top 10 (need 3)`);
       issues.push(`Check C: ${reasons.join(', ')}`);
     }
   } else {
@@ -401,7 +418,8 @@ async function main() {
       ),
     }));
 
-    const { checks, issues } = runChecks(tc, top20Results);
+    const deepScores = scored.slice(0, 100).map(s => s.score);
+    const { checks, issues } = runChecks(tc, top20Results, deepScores);
 
     results.push({
       companyId: tc.id,
