@@ -16,6 +16,8 @@ class SuomiFiScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.suomi.fi/company/financing-a-business-and-business-subsidies/aid-and-subsidies"
         self.source_name = "Suomi.fi"
+        self.market = 'fi'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Digi- ja väestötietovirasto"
         self.default_category = "general"
         self.headers['Accept-Language'] = 'fi-FI,fi;q=0.9,en;q=0.5'

@@ -17,9 +17,10 @@ class EknScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.ekn.se/garantier/vara-garantier/ekns-garantier/"
         self.source_name = "EKN (Exportkreditnämnden)"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Exportkreditnämnden"
         self.default_category = "export"
-        self.market = 'se'
 
     def fetch_grants(self):
         grants_data = []

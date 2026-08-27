@@ -11,6 +11,8 @@ class KKStiftelsenScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.kks.se/en/programmes-and-calls/"
         self.source_name = "KK-stiftelsen"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "KK-stiftelsen"
         self.default_category = "research"
 

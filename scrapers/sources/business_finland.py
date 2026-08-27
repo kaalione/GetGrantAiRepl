@@ -131,6 +131,8 @@ class BusinessFinlandScraper(BaseScraper):
         self.base_url = "https://www.businessfinland.fi/en/services/funding/"
         self.calls_url = "https://www.businessfinland.fi/en/services/funding/calls/"
         self.source_name = "Business Finland"
+        self.market = 'fi'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Business Finland"
         self.default_category = "innovation"
         self.headers['Accept-Language'] = 'en-US,en;q=0.9'

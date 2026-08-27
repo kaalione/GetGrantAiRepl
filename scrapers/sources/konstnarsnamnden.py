@@ -23,9 +23,10 @@ class KonstnarsnamndenScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.konstnarsnamnden.se/stipendier-och-bidrag/"
         self.source_name = "Konstnärsnämnden"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Konstnärsnämnden"
         self.default_category = "culture"
-        self.market = 'se'
 
     @staticmethod
     def _strip_html(rendered):

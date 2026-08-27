@@ -14,6 +14,8 @@ class ForskningsradetScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.forskningsradet.no/utlysninger/"
         self.source_name = "Forskningsrådet"
+        self.market = 'no'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Norges forskningsråd"
         self.default_category = "research"
         self.headers['Accept-Language'] = 'nb-NO,nb;q=0.9,no;q=0.8'

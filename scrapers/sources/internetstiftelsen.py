@@ -11,6 +11,8 @@ class InternetstiftelsenScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://internetstiftelsen.se/"
         self.source_name = "Internetstiftelsen"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Internetstiftelsen"
         self.default_category = "digital"
 

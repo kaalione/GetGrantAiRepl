@@ -29,6 +29,11 @@ class BaseScraper:
         # 'se'/'no'/'fi' for national sources, 'eu' for EU-wide/multinational
         # programmes (visible in every market). None keeps the DB default.
         self.market = None
+        # True for national agencies whose programmes are open country-wide.
+        # Adds a national region to eligibility when the grant text carries
+        # no region info, so matching scores them as "öppet för hela landet"
+        # rather than region-neutral. Leave False for regional sources.
+        self.national = False
         self.headers = {
             'User-Agent': 'GetGrant.ai Bot/1.0 (grant aggregator; contact@getgrant.ai)',
             'Accept-Language': 'sv-SE,sv;q=0.9',
@@ -277,6 +282,12 @@ class BaseScraper:
         eligibility_criteria = None
         if eligibility_text:
             eligibility_criteria = {'text': eligibility_text}
+
+        if self.national:
+            national_region = {'se': 'hela_sverige', 'no': 'hele_norge', 'fi': 'suomi'}.get(self.market or 'se')
+            if national_region:
+                eligibility_criteria = eligibility_criteria or {}
+                eligibility_criteria.setdefault('regions', [national_region])
 
         keywords = self.extract_keywords(title, description)
         target_group = self.extract_target_groups(

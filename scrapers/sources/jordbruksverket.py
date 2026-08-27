@@ -11,6 +11,8 @@ class JordbruksverketScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://jordbruksverket.se/stod"
         self.source_name = "Jordbruksverket"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Jordbruksverket"
         self.default_category = "agriculture"
 

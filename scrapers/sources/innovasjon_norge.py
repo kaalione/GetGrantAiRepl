@@ -14,6 +14,8 @@ class InnovasjonNorgeScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.innovasjonnorge.no/artikkel/tilskudd"
         self.source_name = "Innovasjon Norge"
+        self.market = 'no'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Innovasjon Norge"
         self.default_category = "innovation"
         self.headers['Accept-Language'] = 'nb-NO,nb;q=0.9,no;q=0.8'

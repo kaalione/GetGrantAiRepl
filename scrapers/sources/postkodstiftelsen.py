@@ -11,6 +11,8 @@ class PostkodstiftelsenScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://postkodstiftelsen.se/sok-stod/"
         self.source_name = "Postkodstiftelsen"
+        self.market = 'se'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Postkodstiftelsen"
         self.default_category = "social"
 

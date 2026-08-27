@@ -12,6 +12,8 @@ class RuokavirastoScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.ruokavirasto.fi/tuet/"
         self.source_name = "Ruokavirasto"
+        self.market = 'fi'
+        self.national = True  # nationell myndighet/program — öppet i hela landet
         self.organization = "Ruokavirasto (Finnish Food Authority)"
         self.default_category = "rural_development"
         self.headers['Accept-Language'] = 'fi-FI,fi;q=0.9'
