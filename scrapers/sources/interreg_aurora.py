@@ -11,6 +11,7 @@ class InterregAuroraScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.interregaurora.eu/"
         self.source_name = "Interreg Aurora"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "Interreg Aurora"
         self.default_category = "eu"
         self.calls_url = "https://www.interregaurora.eu/projects/calls-for-applications-2/"

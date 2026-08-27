@@ -11,6 +11,7 @@ class NordicInnovationScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.nordicinnovation.org/programs"
         self.source_name = "Nordic Innovation"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "Nordic Innovation"
         self.default_category = "nordic_innovation"
         self.default_eligibility = "Konsortium med partners från minst 3 nordiska länder. Svenska organisationer fullt berättigade."

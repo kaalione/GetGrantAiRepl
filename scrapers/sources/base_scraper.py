@@ -26,6 +26,9 @@ class BaseScraper:
         self.source_name = ""
         self.organization = ""
         self.default_category = "general"
+        # 'se'/'no'/'fi' for national sources, 'eu' for EU-wide/multinational
+        # programmes (visible in every market). None keeps the DB default.
+        self.market = None
         self.headers = {
             'User-Agent': 'GetGrant.ai Bot/1.0 (grant aggregator; contact@getgrant.ai)',
             'Accept-Language': 'sv-SE,sv;q=0.9',
@@ -294,6 +297,7 @@ class BaseScraper:
             'keywords': keywords,
             'target_group': target_group,
             'application_requirements': None,
+            'market': self.market,
             'raw_data': {'scraped_at': datetime.now().isoformat(), 'source': self.source_name, 'category': raw_data.get('category', self.default_category)},
         }
 

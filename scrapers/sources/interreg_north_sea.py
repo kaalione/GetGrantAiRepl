@@ -11,6 +11,7 @@ class InterregNorthSeaScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://www.interregnorthsea.eu/"
         self.source_name = "Interreg North Sea"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "Interreg North Sea Region"
         self.default_category = "eu"
         self.future_calls_url = "https://www.interregnorthsea.eu/future-calls"

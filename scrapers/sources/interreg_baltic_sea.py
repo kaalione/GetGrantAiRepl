@@ -11,6 +11,7 @@ class InterregBalticSeaScraper(BaseScraper):
         super().__init__(source_id)
         self.base_url = "https://interreg-baltic.eu/"
         self.source_name = "Interreg Baltic Sea"
+        self.market = 'eu'  # EU-omfattande program — synligt i alla marknader
         self.organization = "Interreg Baltic Sea Region"
         self.default_category = "eu"
         self.gateway_url = "https://interreg-baltic.eu/gateway/"
