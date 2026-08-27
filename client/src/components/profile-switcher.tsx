@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Target, ChevronDown, Plus, Check, Building2 } from "lucide-react";
+import { Target, ChevronDown, Plus, Check, Building2, FileUp, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -35,6 +35,58 @@ export function ProfileSwitcher({ companyId }: { companyId: string | null | unde
   const [description, setDescription] = useState("");
   const [goals, setGoals] = useState("");
   const [budget, setBudget] = useState("");
+  const [extracting, setExtracting] = useState(false);
+  const [extracted, setExtracted] = useState<{
+    focusAreas: string[];
+    keywords: string[];
+    timeframe?: string;
+    sourceDocumentPath: string;
+    extraction: Record<string, unknown>;
+    confidence: number;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDocument = async (file: File) => {
+    setExtracting(true);
+    try {
+      const form = new FormData();
+      form.append("document", file);
+      const res = await fetch("/api/profiles/extract-document", {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.message || body?.error || `${res.status}`);
+
+      const p = body.proposal;
+      setName(p.name || "");
+      setDescription(p.description || "");
+      setGoals(p.goals || "");
+      if (p.budget_sek) setBudget(String(p.budget_sek));
+      setExtracted({
+        focusAreas: p.focus_areas || [],
+        keywords: p.keywords || [],
+        timeframe: p.timeframe || undefined,
+        sourceDocumentPath: body.sourceDocumentPath,
+        extraction: { ...p, pages: body.pages },
+        confidence: p.confidence ?? 0.5,
+      });
+      toast({
+        title: t("profiles.extractDone", "Utkast ifyllt från dokumentet"),
+        description: t("profiles.extractReview", "Granska och justera fälten innan du sparar."),
+      });
+    } catch (err: any) {
+      toast({
+        title: t("profiles.extractFailed", "Kunde inte läsa dokumentet"),
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setExtracting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   if (!companyId || profiles.length === 0) return null;
 
@@ -47,12 +99,23 @@ export function ProfileSwitcher({ companyId }: { companyId: string | null | unde
         description: description.trim() || undefined,
         goals: goals.trim() || undefined,
         budgetSek: budget ? parseInt(budget, 10) : undefined,
+        ...(extracted
+          ? {
+              focusAreas: extracted.focusAreas,
+              keywords: extracted.keywords,
+              timeframe: extracted.timeframe,
+              createdFrom: "document" as const,
+              sourceDocumentPath: extracted.sourceDocumentPath,
+              extraction: extracted.extraction,
+            }
+          : {}),
       });
       setDialogOpen(false);
       setName("");
       setDescription("");
       setGoals("");
       setBudget("");
+      setExtracted(null);
       toast({ title: t("profiles.created", "Sökprofil skapad") });
     } catch (err: any) {
       toast({
@@ -112,6 +175,38 @@ export function ProfileSwitcher({ companyId }: { companyId: string | null | unde
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleDocument(e.target.files[0])}
+              data-testid="input-profile-document"
+            />
+            <button
+              type="button"
+              disabled={extracting}
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full rounded-lg border border-dashed p-3 text-sm text-muted-foreground hover-elevate flex items-center justify-center gap-2"
+              data-testid="button-upload-document"
+            >
+              {extracting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t("profiles.extracting", "Läser dokumentet…")}
+                </>
+              ) : extracted ? (
+                <>
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  {t("profiles.extractedBadge", "Ifyllt från dokument — granska fälten nedan")}
+                </>
+              ) : (
+                <>
+                  <FileUp className="h-4 w-4" />
+                  {t("profiles.uploadCta", "Har ni en pitch deck eller projektplan? Ladda upp en PDF så fyller vi i åt er")}
+                </>
+              )}
+            </button>
             <div className="space-y-2">
               <Label htmlFor="profile-name">{t("profiles.fieldName", "Namn på projektet")}</Label>
               <Input

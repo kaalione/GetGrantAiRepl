@@ -1444,6 +1444,12 @@
     "createButton": "Skapa profil",
     "created": "Sökprofil skapad",
     "createFailed": "Kunde inte skapa profilen",
-    "upgradeNeeded": "Uppgradering krävs"
+    "upgradeNeeded": "Uppgradering krävs",
+    "uploadCta": "Har ni en pitch deck eller projektplan? Ladda upp en PDF så fyller vi i åt er",
+    "extracting": "Läser dokumentet…",
+    "extractedBadge": "Ifyllt från dokument — granska fälten nedan",
+    "extractDone": "Utkast ifyllt från dokumentet",
+    "extractReview": "Granska och justera fälten innan du sparar.",
+    "extractFailed": "Kunde inte läsa dokumentet"
   }
 }

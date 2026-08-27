@@ -1,11 +1,39 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
+import multer from "multer";
 import { db } from "../db";
 import { companies, searchProfiles, users, type SearchProfile } from "@shared/schema";
 import { and, eq, desc } from "drizzle-orm";
 import { isAuthenticated } from "../auth";
+import { requirePlan } from "../middleware/plan-check";
+import { aiGenerationLimiter } from "../middleware/rate-limit";
 
 const router = Router();
+
+// Project documents are sensitive (pitch decks) — stored OUTSIDE uploads/,
+// which is served statically. No public URL; the stored path is for
+// traceability and future authorized download.
+const projectDocsDir = path.join(process.cwd(), "private-uploads", "project-docs");
+if (!fs.existsSync(projectDocsDir)) {
+  fs.mkdirSync(projectDocsDir, { recursive: true });
+}
+
+const uploadProjectDoc = multer({
+  storage: multer.diskStorage({
+    destination: projectDocsDir,
+    filename: (_req, file, cb) => {
+      cb(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase() || ".pdf"}`);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "application/pdf") cb(null, true);
+    else cb(new Error("Endast PDF stöds för närvarande"));
+  },
+});
 
 // Plan limits for user-created 'project' profiles (the auto 'core' profile
 // never counts): free = none, pro = 5, enterprise = unlimited.
@@ -24,6 +52,10 @@ const createProfileSchema = z.object({
   keywords: z.array(z.string().max(60)).max(30).optional().nullable(),
   budgetSek: z.number().int().nonnegative().max(1_000_000_000).optional().nullable(),
   timeframe: z.string().max(120).optional().nullable(),
+  // Document-extraction flow: the confirmed proposal's provenance.
+  createdFrom: z.enum(["wizard", "document"]).optional(),
+  sourceDocumentPath: z.string().max(300).optional().nullable(),
+  extraction: z.record(z.string(), z.unknown()).optional().nullable(),
 });
 
 const updateProfileSchema = createProfileSchema.partial().omit({ companyId: true });
@@ -65,6 +97,50 @@ router.get("/profiles", isAuthenticated, async (req: any, res: Response) => {
     res.status(500).json({ error: "Kunde inte hämta sökprofiler" });
   }
 });
+
+// Extract a project proposal from an uploaded PDF (pitch deck, project
+// plan). Returns a PROPOSAL for the user to review — nothing is saved here;
+// the confirmed profile is created via POST /profiles with the extraction
+// attached. Pro+ only; counts against the daily AI generation limit.
+router.post(
+  "/profiles/extract-document",
+  isAuthenticated,
+  requirePlan("pro"),
+  aiGenerationLimiter,
+  (req: any, res: Response, next) => {
+    uploadProjectDoc.single("document")(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Uppladdningen misslyckades" });
+      next();
+    });
+  },
+  async (req: any, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "Ingen fil bifogad" });
+
+      const { extractTextFromPdf, extractProjectFromText } = await import("../services/projectExtractor");
+      const buffer = fs.readFileSync(req.file.path);
+      const { text, pages } = await extractTextFromPdf(buffer);
+
+      if (text.trim().length < 100) {
+        return res.status(422).json({
+          error: "Kunde inte läsa tillräckligt med text ur dokumentet",
+          message: "PDF:en verkar sakna textinnehåll (skannad bild?). Fyll i fälten manuellt istället.",
+        });
+      }
+
+      const extraction = await extractProjectFromText(text);
+
+      res.json({
+        proposal: extraction,
+        sourceDocumentPath: path.relative(process.cwd(), req.file.path),
+        pages,
+      });
+    } catch (error) {
+      console.error("Project extraction failed:", error);
+      res.status(500).json({ error: "Extraktionen misslyckades. Försök igen eller fyll i manuellt." });
+    }
+  }
+);
 
 // Create a project profile (wizard flow). Plan-gated.
 router.post("/profiles", isAuthenticated, async (req: any, res: Response) => {
@@ -119,7 +195,9 @@ router.post("/profiles", isAuthenticated, async (req: any, res: Response) => {
         keywords: data.keywords ?? null,
         budgetSek: data.budgetSek ?? null,
         timeframe: data.timeframe ?? null,
-        createdFrom: "wizard",
+        createdFrom: data.createdFrom ?? "wizard",
+        sourceDocumentUrl: data.sourceDocumentPath ?? null,
+        extraction: (data.extraction as Record<string, unknown> | null) ?? null,
       })
       .returning();
 
