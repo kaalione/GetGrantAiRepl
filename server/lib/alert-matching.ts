@@ -1,6 +1,6 @@
 import type { Grant, GrantAlert, Company } from '@shared/schema';
 import { searchProfiles } from '@shared/schema';
-import { calculateMatchScore, type RelevanceProfile } from '../../client/src/lib/matching';
+import { calculateMatchScore, type RelevanceProfile } from "@shared/matching";
 import { storage } from '../storage';
 import { db } from '../db';
 import { eq } from 'drizzle-orm';

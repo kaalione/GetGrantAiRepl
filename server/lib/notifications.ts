@@ -2,7 +2,7 @@
 import { sendEmail } from './resend';
 import { APP_URL } from './appUrl';
 import { storage } from '../storage';
-import { calculateMatchScore } from '../../client/src/lib/matching';
+import { calculateMatchScore } from "@shared/matching";
 import { grantMatchesAlert, computeMatchScore, getAlertNotificationEmail, getAlertProfile } from './alert-matching';
 import type { Grant, Company, InsertNotification, NotificationPreference, GrantAlert } from '@shared/schema';
 

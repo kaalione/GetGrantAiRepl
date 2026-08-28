@@ -9,7 +9,7 @@ import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { grants, type Grant, type Company } from "../shared/schema";
-import { calculateMatchScore, MATCHING_WEIGHTS, type RelevanceProfile } from "../client/src/lib/matching";
+import { calculateMatchScore, MATCHING_WEIGHTS, type RelevanceProfile } from "@shared/matching";
 
 const { Pool } = pg;
 

@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Grant, Company, Application, ApplicationSection, ComplianceReport as ComplianceReportType, ContentBlock } from "@shared/schema";
 import { useSearchProfiles } from "@/hooks/use-search-profiles";
-import { calculateMatchScore } from "@/lib/matching";
+import { calculateMatchScore } from "@shared/matching";
 import { MatchIndicator } from "@/components/grants/match-indicator";
 import { useTranslation } from "react-i18next";
 import { analytics } from "@/lib/analytics";

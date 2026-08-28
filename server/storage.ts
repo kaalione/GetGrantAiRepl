@@ -26,6 +26,7 @@ export interface GrantFilters {
   amountMax?: number;
   keywords?: string[];
   search?: string;
+  market?: string;
 }
 
 export interface DashboardStats {
@@ -43,6 +44,8 @@ export interface IStorage {
   // Grants
   getGrants(): Promise<Grant[]>;
   getGrantsFiltered(filters: GrantFilters): Promise<Grant[]>;
+  getGrantIdsFiltered(filters: GrantFilters): Promise<string[]>;
+  getGrantsByIds(ids: string[]): Promise<Grant[]>;
   getGrant(id: string): Promise<Grant | undefined>;
   createGrant(grant: InsertGrant): Promise<Grant>;
   updateGrant(id: string, grant: Partial<InsertGrant>): Promise<Grant | undefined>;
@@ -159,7 +162,8 @@ export class DatabaseStorage implements IStorage {
     return await db.select(grantListColumns).from(grants).orderBy(desc(grants.createdAt)) as Grant[];
   }
 
-  async getGrantsFiltered(filters: GrantFilters): Promise<Grant[]> {
+  // Shared filter predicate for both the id-only and full-row queries below.
+  private buildGrantConditions(filters: GrantFilters) {
     const conditions = [];
 
     if (filters.source) {
@@ -223,6 +227,43 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
+    if (filters.market) {
+      conditions.push(
+        or(
+          eq(grants.market, filters.market),
+          eq(grants.market, 'eu'),
+          sql`${grants.market} IS NULL`
+        )
+      );
+    }
+
+    return conditions;
+  }
+
+  // Ids only — used by the search service, which scores and paginates in
+  // memory before hydrating just the requested page.
+  async getGrantIdsFiltered(filters: GrantFilters): Promise<string[]> {
+    const conditions = this.buildGrantConditions(filters);
+    const orderClauses = [
+      sql`CASE WHEN ${grants.status} = 'open' THEN 0 WHEN ${grants.status} = 'upcoming' THEN 1 WHEN ${grants.status} = 'closed' THEN 2 ELSE 3 END`,
+      sql`${grants.deadline} ASC NULLS LAST`,
+    ];
+
+    const query = conditions.length === 0
+      ? db.select({ id: grants.id }).from(grants).orderBy(...orderClauses)
+      : db.select({ id: grants.id }).from(grants).where(and(...conditions)).orderBy(...orderClauses);
+
+    const rows = await query;
+    return rows.map((r) => r.id);
+  }
+
+  async getGrantsByIds(ids: string[]): Promise<Grant[]> {
+    if (ids.length === 0) return [];
+    return await db.select(grantListColumns).from(grants).where(inArray(grants.id, ids)) as Grant[];
+  }
+
+  async getGrantsFiltered(filters: GrantFilters): Promise<Grant[]> {
+    const conditions = this.buildGrantConditions(filters);
     const orderClauses = [
       sql`CASE WHEN ${grants.status} = 'open' THEN 0 WHEN ${grants.status} = 'upcoming' THEN 1 WHEN ${grants.status} = 'closed' THEN 2 ELSE 3 END`,
       sql`${grants.deadline} ASC NULLS LAST`,

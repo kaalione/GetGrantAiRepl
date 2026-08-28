@@ -10,7 +10,7 @@ import type { Grant, Company } from "@shared/schema";
 import { format, differenceInDays } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useSearchProfiles } from "@/hooks/use-search-profiles";
-import { calculateMatchScore } from "@/lib/matching";
+import { calculateMatchScore } from "@shared/matching";
 import { MatchReport } from "@/components/grants/MatchReport";
 import { useTranslation } from 'react-i18next';
 import { analytics } from '@/lib/analytics';

@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { useTranslation } from 'react-i18next';
 import { useLocation } from "wouter";
 import { Building2, Star, Filter } from "lucide-react";
@@ -15,8 +15,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMarket } from "@/components/market-selector";
 import { ProfileSwitcher } from "@/components/profile-switcher";
 import { useSearchProfiles } from "@/hooks/use-search-profiles";
-import { calculateMatchScore } from "@/lib/matching";
 import type { Grant, Company, Application, GrantBookmark } from "@shared/schema";
+
+const PAGE_SIZE = 24;
+
+interface GrantPage {
+  items: (Grant & { matchScore: number | null })[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  scored: boolean;
+}
 
 const initialFilters: FilterState = {
   search: "",
@@ -49,20 +59,40 @@ export default function Grants() {
     if (filters.deadlineDays !== "all") params.set("deadlineDays", filters.deadlineDays);
     if (filters.amountRange[0] > 0) params.set("amountMin", filters.amountRange[0].toString());
     if (filters.amountRange[1] < 50000000) params.set("amountMax", filters.amountRange[1].toString());
-    if (showOnlyMatching && company) params.set("matchProfile", "true");
-    // Selected search profile — consumed by the server once profile-based
-    // relevance lands (spec E2); harmless extra param until then.
-    if (selectedProfile && !selectedProfile.isDefault) params.set("profileId", selectedProfile.id);
+    if (selectedProfile) params.set("profileId", selectedProfile.id);
     if (market) params.set("market", market);
+    // Matching and ordering happen on the server; this only sets the floor.
+    if (showOnlyMatching && company) params.set("minScore", "25");
+    params.set("pageSize", String(PAGE_SIZE));
     return params.toString();
   }, [filters, showOnlyMatching, company, market, selectedProfile]);
 
   const queryString = buildQueryString();
-  const apiUrl = queryString ? `/api/grants?${queryString}` : "/api/grants";
 
-  const { data: grants, isLoading } = useQuery<Grant[]>({
-    queryKey: [apiUrl],
+  const {
+    data: grantPages,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<GrantPage>({
+    queryKey: ["/api/grants", queryString],
+    queryFn: async ({ pageParam }) => {
+      const res = await fetch(`/api/grants?${queryString}&page=${pageParam}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      return res.json();
+    },
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),
   });
+
+  const grants = useMemo(
+    () => grantPages?.pages.flatMap((p) => p.items) ?? [],
+    [grantPages]
+  );
+  const totalGrants = grantPages?.pages[0]?.total ?? 0;
 
   const { data: sources } = useQuery<string[]>({
     queryKey: ["/api/grants/sources"],
@@ -124,20 +154,6 @@ export default function Grants() {
       return acc;
     }, {} as Record<string, { id: string; status: string; submittedAt?: string }>);
   }, [applications]);
-
-  const sortedGrants = useMemo(() => {
-    if (!grants) return [];
-    if (!showOnlyMatching || !company) return grants;
-    return [...grants].sort((a, b) => {
-      const scoreA = calculateMatchScore(company, a, selectedProfile).score;
-      const scoreB = calculateMatchScore(company, b, selectedProfile).score;
-      if (scoreB !== scoreA) return scoreB - scoreA;
-      if (!a.deadline && !b.deadline) return 0;
-      if (!a.deadline) return 1;
-      if (!b.deadline) return -1;
-      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-    });
-  }, [grants, showOnlyMatching, company, selectedProfile]);
 
   const handleFilterChange = useCallback((key: keyof FilterState, value: unknown) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -249,18 +265,23 @@ export default function Grants() {
                     <GrantCardSkeleton key={i} />
                   ))}
                 </div>
-              ) : grants && grants.length > 0 ? (
+              ) : grants.length > 0 ? (
                 <>
                   <p className="text-sm text-muted-foreground" data-testid="text-grants-count">
-                    {t('grants.showingCount', { count: grants.length })}
+                    {t('grants.showingOfTotal', {
+                      shown: grants.length,
+                      total: totalGrants,
+                      defaultValue: 'Visar {{shown}} av {{total}} bidrag',
+                    })}
                   </p>
                   <div className="grid gap-4 md:grid-cols-2">
-                    {sortedGrants.map((grant) => (
+                    {grants.map((grant) => (
                       <GrantCard 
                         key={grant.id} 
                         grant={grant} 
                         company={company}
                         profile={selectedProfile} 
+                        matchScore={grant.matchScore}
                         showMatchScore={!!company}
                         applicationInfo={applicationsByGrantId[grant.id] || null}
                         eligibilityStatus={eligibilityByGrantId[grant.id]?.status || null}
@@ -268,6 +289,20 @@ export default function Grants() {
                       />
                     ))}
                   </div>
+                  {hasNextPage && (
+                    <div className="flex justify-center pt-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => fetchNextPage()}
+                        disabled={isFetchingNextPage}
+                        data-testid="button-load-more-grants"
+                      >
+                        {isFetchingNextPage
+                          ? t('common.loading')
+                          : t('grants.loadMore', { defaultValue: 'Visa fler bidrag' })}
+                      </Button>
+                    </div>
+                  )}
                 </>
               ) : hasActiveFilters || showOnlyMatching ? (
                 <EmptyState

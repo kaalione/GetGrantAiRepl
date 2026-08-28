@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "wouter";
-import { calculateMatchScore } from "@/lib/matching";
+import { calculateMatchScore } from "@shared/matching";
 import { MatchExplanation } from "@/components/grants/match-explanation";
 import { EligibilityChecklist } from "@/components/grants/eligibility-checklist";
 import { apiRequest, queryClient } from "@/lib/queryClient";

@@ -479,6 +479,29 @@ export async function registerRoutes(
   app.get("/api/grants", async (req, res) => {
     try {
       const { source, status, deadlineDays, amountMin, amountMax, search, matchProfile, market } = req.query;
+
+      // Paginated path: scoring, sorting and slicing happen on the server, so
+      // the response carries one page instead of every grant. Opt-in via
+      // page/pageSize so existing callers keep their array response.
+      if (req.query.page || req.query.pageSize) {
+        const { searchGrants } = await import('./services/grantSearch');
+        const result = await searchGrants({
+          source: source as string | undefined,
+          status: status as string | undefined,
+          deadlineDays: deadlineDays ? parseInt(deadlineDays as string, 10) : undefined,
+          amountMin: amountMin ? parseFloat(amountMin as string) : undefined,
+          amountMax: amountMax ? parseFloat(amountMax as string) : undefined,
+          search: search as string | undefined,
+          market: market as string | undefined,
+          userId: (req as any).user?.claims?.sub ?? null,
+          profileId: (req.query.profileId as string | undefined) ?? null,
+          sort: (req.query.sort as 'match' | 'deadline' | 'newest' | undefined) ?? 'match',
+          page: parseInt((req.query.page as string) ?? '1', 10),
+          pageSize: parseInt((req.query.pageSize as string) ?? '24', 10),
+          minScore: req.query.minScore ? parseInt(req.query.minScore as string, 10) : undefined,
+        });
+        return res.json(result);
+      }
       
       const hasFilters = source || status || deadlineDays || amountMin || amountMax || search;
       

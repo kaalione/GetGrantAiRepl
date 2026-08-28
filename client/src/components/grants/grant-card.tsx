@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { Grant, Company } from "@shared/schema";
 import { format, differenceInDays } from "date-fns";
 import { sv } from "date-fns/locale";
-import { calculateMatchScore, type RelevanceProfile } from "@/lib/matching";
+import { calculateMatchScore, type RelevanceProfile } from "@shared/matching";
 import { MatchIndicator } from "./match-indicator";
 import { MatchExplanation } from "./match-explanation";
 import { useTranslation } from 'react-i18next';
@@ -25,15 +25,22 @@ interface GrantCardProps {
   grant: Grant;
   company?: Company | null;
   profile?: RelevanceProfile | null;
+  /** Score computed by the server (paginated list). Falls back to computing
+   *  locally when absent, e.g. on the bookmarks tab. */
+  matchScore?: number | null;
   showMatchScore?: boolean;
   applicationInfo?: ApplicationInfo | null;
   eligibilityStatus?: EligibilityStatus;
   eligibilityDetail?: string;
 }
 
-export function GrantCard({ grant, company, profile, showMatchScore = false, applicationInfo, eligibilityStatus, eligibilityDetail }: GrantCardProps) {
+export function GrantCard({ grant, company, profile, matchScore, showMatchScore = false, applicationInfo, eligibilityStatus, eligibilityDetail }: GrantCardProps) {
   const { t } = useTranslation();
-  const matchResult = showMatchScore ? calculateMatchScore(company || null, grant, profile) : null;
+  const matchResult = showMatchScore
+    ? (typeof matchScore === "number"
+        ? { score: matchScore, factors: [], explanation: "" }
+        : calculateMatchScore(company || null, grant, profile))
+    : null;
   const { bookmarked, toggleBookmark } = useBookmark(grant.id);
   const isProjectProfile = profile?.kind === 'project';
 

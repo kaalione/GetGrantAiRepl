@@ -1,6 +1,6 @@
 import { Check, X, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { MatchFactor } from "@/lib/matching";
+import type { MatchFactor } from "@shared/matching";
 
 interface EligibilityChecklistProps {
   factors: MatchFactor[];

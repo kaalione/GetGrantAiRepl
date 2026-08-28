@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { eq } from "drizzle-orm";
 import { grants, type Grant, type Company } from "../shared/schema";
-import { calculateMatchScore, type RelevanceProfile } from "../client/src/lib/matching";
+import { calculateMatchScore, type RelevanceProfile } from "@shared/matching";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";

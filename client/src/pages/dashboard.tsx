@@ -19,7 +19,6 @@ import { ProfileSwitcher } from "@/components/profile-switcher";
 import { useSearchProfiles } from "@/hooks/use-search-profiles";
 import { useToast } from "@/hooks/use-toast";
 import type { Grant, Company, GrantProject } from "@shared/schema";
-import { calculateMatchScore } from "@/lib/matching";
 import { format, differenceInDays } from "date-fns";
 import { sv } from "date-fns/locale";
 
@@ -146,8 +145,17 @@ export default function Dashboard() {
     retry: false,
   });
 
-  const { data: grants } = useQuery<Grant[]>({
-    queryKey: ["/api/grants"],
+  const urgentQueryString = [
+    "status=open,upcoming",
+    "deadlineDays=14",
+    "sort=match",
+    "pageSize=5",
+    "minScore=25",
+    selectedProfile ? `profileId=${selectedProfile.id}` : "",
+  ].filter(Boolean).join("&");
+
+  const { data: urgentPage } = useQuery<{ items: (Grant & { matchScore: number | null })[] }>({
+    queryKey: [`/api/grants?${urgentQueryString}`],
   });
 
   const activeProjects = (projects || []).filter(p => p.status === "active").slice(0, 3);
@@ -155,32 +163,13 @@ export default function Dashboard() {
 
   const company = companies?.[0] || null;
 
+  // Server-scored, deadline-windowed and already limited to five.
   const urgentDeadlineGrants = useMemo(() => {
-    const grantsArray = Array.isArray(grants) ? grants : [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return grantsArray
-      .filter((g) => {
-        if (!g.deadline) return false;
-        const deadline = new Date(g.deadline);
-        const daysLeft = Math.ceil(
-          (deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-        );
-        return daysLeft >= 0 && daysLeft <= 14;
-      })
-      .map((g) => {
-        const scoreResult = company
-          ? calculateMatchScore(company, g, selectedProfile)
-          : null;
-        return { ...g, matchScore: scoreResult?.score ?? 0 };
-      })
-      .filter((g) => !company || g.matchScore >= 25)
-      .sort((a, b) =>
-        new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime()
-      )
-      .slice(0, 5);
-  }, [grants, company, selectedProfile]);
+    const items = urgentPage?.items ?? [];
+    return [...items]
+      .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())
+      .map((g) => ({ ...g, matchScore: g.matchScore ?? 0 }));
+  }, [urgentPage]);
 
   const profilePct = profileCompletion?.percentage ?? 0;
   const totalInteractions = progress?.completedCount ?? 0;

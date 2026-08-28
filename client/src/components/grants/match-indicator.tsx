@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { MatchResult } from "@/lib/matching";
+import type { MatchResult } from "@shared/matching";
 
 interface MatchIndicatorProps {
   matchResult: MatchResult;
