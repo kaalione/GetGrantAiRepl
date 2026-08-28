@@ -362,237 +362,31 @@ export async function registerRoutes(
   });
 
   // Top matches for user (for onboarding and dashboard)
+  // Top matches are the first page of the same ranked search the grants list
+  // uses — same scoring, same market rules, same cache. It previously ran its
+  // own keyword heuristic, which disagreed with the list and ignored market.
   app.get("/api/grants/top-matches", async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
-      const companyId = req.query.companyId as string | undefined;
-      
-      let company = null;
-      
-      if (companyId && userId) {
-        const requestedCompany = await storage.getCompany(companyId);
-        if (requestedCompany && requestedCompany.userId === userId) {
-          company = requestedCompany;
-        }
-      } else if (userId) {
-        const companies = await storage.getCompaniesByUserId(userId);
-        company = companies[0] || null;
-      }
-      
-      const grants = await storage.getGrantsFiltered({ status: 'open' });
-
-      if (!company) {
-        const topGrants = grants.slice(0, 5).map(g => ({
-          ...g,
-          matchScore: Math.floor(Math.random() * 20) + 70,
-        }));
-        return res.json(topGrants);
-      }
-
-      // Relevance text: the selected search profile when one is provided
-      // (project-based matching), otherwise the company's industry.
-      let relevanceText = company.industry?.toLowerCase() || "";
-      const profileId = req.query.profileId as string | undefined;
-      if (profileId && userId) {
-        const [profile] = await db
-          .select()
-          .from(searchProfiles)
-          .where(and(
-            eq(searchProfiles.id, profileId),
-            eq(searchProfiles.userId, userId),
-            eq(searchProfiles.active, true),
-          ));
-        if (profile) {
-          const parts = [
-            ...(profile.focusAreas ?? []),
-            ...(profile.keywords ?? []),
-            profile.description ?? "",
-          ].filter(Boolean);
-          if (parts.length > 0) relevanceText = parts.join(" ").toLowerCase();
-        }
-      }
-
-      const scoredGrants = grants.map(grant => {
-        let score = 50;
-
-        if (grant.keywords && relevanceText) {
-          const grantKeywords = grant.keywords as string[];
-          const matches = grantKeywords.filter(k =>
-            relevanceText.includes(k.toLowerCase())
-          );
-          score += matches.length * 10;
-        }
-        
-        if (grant.targetGroup) {
-          const targetGroups = grant.targetGroup as string[];
-          if (targetGroups.includes('sme') && (company.employees || 0) < 250) score += 15;
-          if (targetGroups.includes('startup') && (company.employees || 0) < 50) score += 10;
-        }
-        
-        return { ...grant, matchScore: Math.min(score, 99) };
+      const userId = req.user?.claims?.sub ?? null;
+      const { searchGrants } = await import('./services/grantSearch');
+      const result = await searchGrants({
+        status: 'open',
+        userId,
+        companyId: (req.query.companyId as string | undefined) ?? null,
+        profileId: (req.query.profileId as string | undefined) ?? null,
+        market: (req.query.market as string | undefined) ?? undefined,
+        sort: 'match',
+        page: 1,
+        pageSize: 5,
       });
-      
-      const topGrants = scoredGrants
-        .sort((a, b) => b.matchScore - a.matchScore)
-        .slice(0, 5);
-      
-      res.json(topGrants);
+
+      // Historic shape: a bare array of grants carrying matchScore.
+      res.json(result.items.map((g) => ({ ...g, matchScore: g.matchScore ?? 50 })));
     } catch (error) {
+      console.error('Top matches error:', error);
       res.status(500).json({ error: "Failed to fetch top matches" });
     }
   });
-
-  // Grant sources (for filters)
-  app.get("/api/grants/sources", async (req, res) => {
-    try {
-      const sources = await storage.getUniqueGrantSources();
-      res.json(sources);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch grant sources" });
-    }
-  });
-
-  // Upcoming deadlines API
-  app.get("/api/grants/deadlines/upcoming", async (req: any, res) => {
-    try {
-      const allGrants = await storage.getGrants();
-      const now = new Date();
-      const twoWeeksFromNow = new Date();
-      twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
-      
-      const upcomingGrants = allGrants
-        .filter(g => {
-          if (!g.deadline || g.status !== 'open') return false;
-          const deadline = new Date(g.deadline);
-          return deadline >= now && deadline <= twoWeeksFromNow;
-        })
-        .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime());
-      
-      res.json(upcomingGrants);
-    } catch (error) {
-      console.error('Fetch upcoming deadlines error:', error);
-      res.status(500).json({ error: 'Failed to fetch upcoming deadline grants' });
-    }
-  });
-
-  // Grants routes
-  app.get("/api/grants", async (req, res) => {
-    try {
-      const { source, status, deadlineDays, amountMin, amountMax, search, matchProfile, market } = req.query;
-
-      // Paginated path: scoring, sorting and slicing happen on the server, so
-      // the response carries one page instead of every grant. Opt-in via
-      // page/pageSize so existing callers keep their array response.
-      if (req.query.page || req.query.pageSize) {
-        const { searchGrants } = await import('./services/grantSearch');
-        const result = await searchGrants({
-          source: source as string | undefined,
-          status: status as string | undefined,
-          deadlineDays: deadlineDays ? parseInt(deadlineDays as string, 10) : undefined,
-          amountMin: amountMin ? parseFloat(amountMin as string) : undefined,
-          amountMax: amountMax ? parseFloat(amountMax as string) : undefined,
-          search: search as string | undefined,
-          market: market as string | undefined,
-          userId: (req as any).user?.claims?.sub ?? null,
-          profileId: (req.query.profileId as string | undefined) ?? null,
-          sort: (req.query.sort as 'match' | 'deadline' | 'newest' | undefined) ?? 'match',
-          page: parseInt((req.query.page as string) ?? '1', 10),
-          pageSize: parseInt((req.query.pageSize as string) ?? '24', 10),
-          minScore: req.query.minScore ? parseInt(req.query.minScore as string, 10) : undefined,
-        });
-        return res.json(result);
-      }
-      
-      const hasFilters = source || status || deadlineDays || amountMin || amountMax || search;
-      
-      let allGrants: Grant[];
-      if (hasFilters) {
-        const filters = {
-          source: source as string | undefined,
-          status: status as string | undefined,
-          deadlineDays: deadlineDays ? parseInt(deadlineDays as string, 10) : undefined,
-          amountMin: amountMin ? parseFloat(amountMin as string) : undefined,
-          amountMax: amountMax ? parseFloat(amountMax as string) : undefined,
-          search: search as string | undefined,
-        };
-        allGrants = await storage.getGrantsFiltered(filters);
-      } else {
-        allGrants = await storage.getGrants();
-      }
-
-      if (market && typeof market === 'string') {
-        // market='eu' på ett bidrag betyder EU-omfattande/multinationellt
-        // program — det visas för alla marknader (se, no, fi).
-        allGrants = allGrants.filter(g => (g as any).market === market || (g as any).market === 'eu' || !(g as any).market);
-      }
-
-      const userId = (req as any).user?.claims?.sub;
-      if (matchProfile === 'true' && userId) {
-        const userCompanies = await storage.getCompaniesByUserId(userId);
-        const company = userCompanies[0];
-        if (company) {
-          const now = new Date();
-          const nordicMaxOffsetMs = 3 * 3600000;
-          const todayNordic = new Date(now.getTime() + nordicMaxOffsetMs);
-          const cutoffDate = todayNordic.toISOString().slice(0, 10);
-
-          const filtered = allGrants.filter((grant) => {
-            if (grant.deadline) {
-              const deadlineDate = new Date(grant.deadline).toISOString().slice(0, 10);
-              if (deadlineDate <= cutoffDate) return false;
-            }
-
-            const criteria = grant.eligibilityCriteria as Record<string, unknown> | null;
-            if (!criteria || !criteria.company_types) return true;
-
-            let matches = 0;
-            let totalChecks = 0;
-
-            if (Array.isArray(criteria.company_types) && criteria.company_types.length > 0) {
-              totalChecks++;
-              const compType = (company.orgType || '').toLowerCase();
-              if (criteria.company_types.some((t: string) => 
-                compType.includes(t.toLowerCase()) || t.toLowerCase().includes('alla') || t.toLowerCase().includes('all')
-              )) matches++;
-            }
-
-            const geo = criteria.geography as { regions?: string[]; counties?: string[]; description?: string } | undefined;
-            if (geo && (geo.regions?.length || geo.counties?.length)) {
-              totalChecks++;
-              const companyLocation = (company.location || '').toLowerCase();
-              if (!companyLocation || 
-                  geo.regions?.some((r: string) => r.toLowerCase().includes('hela sverige') || r.toLowerCase().includes('all') || companyLocation.includes(r.toLowerCase())) ||
-                  geo.counties?.some((c: string) => companyLocation.includes(c.toLowerCase()))
-              ) matches++;
-            }
-
-            if (Array.isArray(criteria.sectors) && criteria.sectors.length > 0) {
-              totalChecks++;
-              const companyIndustry = (company.industry || '').toLowerCase();
-              if (!companyIndustry ||
-                  criteria.sectors.some((s: string) => 
-                    companyIndustry.includes(s.toLowerCase()) || s.toLowerCase().includes('alla') || s.toLowerCase().includes('all')
-                  )
-              ) matches++;
-            }
-
-            if (totalChecks === 0) return true;
-            return matches > 0;
-          });
-          const lightFiltered = filtered.map(({ rawData, ...rest }) => rest);
-          res.json(lightFiltered);
-          return;
-        }
-      }
-
-      const lightGrants = allGrants.map(({ rawData, ...rest }) => rest);
-      res.json(lightGrants);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch grants" });
-    }
-  });
-
-  // ============ ELIGIBILITY CHECKER ROUTES ============
 
   app.get("/api/grants/eligibility-overview", isAuthenticated, async (req: any, res) => {
     try {
@@ -608,8 +402,12 @@ export async function registerRoutes(
       const currentHash = hashProfile(company);
 
       const { checkEligibility } = await import("./services/eligibilityChecker");
-      const allGrants = await storage.getGrants();
-      const openGrants = allGrants.filter((g: any) => g.status === "open").slice(0, 200);
+      // checkEligibility reads only id, title and eligibilityCriteria, all of
+      // which the shared index carries — no full-table load needed.
+      const { getGrantIndex } = await import("./services/grantSearch");
+      const grantIndex = await getGrantIndex();
+      const openGrants = grantIndex.filter((g) => g.status === "open").slice(0, 200) as unknown as Grant[];
+      const openGrantById = new Map(openGrants.map((g) => [g.id, g]));
 
       const cachedChecks = await storage.getEligibilityChecksByCompanyAndHash(company.id, currentHash);
       const cachedGrantIds = new Set(cachedChecks.map(c => c.grantId));
@@ -622,9 +420,9 @@ export async function registerRoutes(
       if (isCacheHit) {
         allResults = cachedChecks.map(c => ({
           grantId: c.grantId,
-          grantTitle: openGrants.find(g => g.id === c.grantId)?.title || '',
-          source: openGrants.find(g => g.id === c.grantId)?.sourceName || '',
-          deadline: openGrants.find(g => g.id === c.grantId)?.deadline,
+          grantTitle: openGrantById.get(c.grantId)?.title || '',
+          source: openGrantById.get(c.grantId)?.sourceName || '',
+          deadline: openGrantById.get(c.grantId)?.deadline,
           score: c.score,
           checksPassed: (c.result as any)?.checksPassed || 0,
           checksTotal: (c.result as any)?.checksCompleted || 0,
@@ -633,7 +431,7 @@ export async function registerRoutes(
         }));
       } else {
         for (const check of cachedChecks) {
-          const grant = openGrants.find(g => g.id === check.grantId);
+          const grant = openGrantById.get(check.grantId);
           if (!grant) continue;
           allResults.push({
             grantId: check.grantId,
@@ -2780,26 +2578,24 @@ export async function registerRoutes(
       if (sources === 'all' || sources === 'matches') {
         const userCompanies = await storage.getCompaniesByUserId(userId);
         if (userCompanies.length > 0) {
-          const allGrants = await storage.getGrants();
-          for (const grant of allGrants) {
+          // Reads the shared index and the one scoring function the rest of
+          // the product uses; this endpoint previously loaded every grant and
+          // applied its own heuristic, so calendar scores disagreed with the
+          // grants list for the same grant.
+          const { getGrantIndex } = await import('./services/grantSearch');
+          const { calculateMatchScore } = await import('@shared/matching');
+          const company = userCompanies[0];
+          const grantIndex = await getGrantIndex();
+
+          for (const grant of grantIndex) {
             if (!grant.deadline || bookmarkGrantIds.has(grant.id)) continue;
             if (grant.status === 'closed') continue;
             const d = new Date(grant.deadline);
             if (d < startDate || d > endDate) continue;
-            const company = userCompanies[0];
-            let score = 0;
-            const grantIndustry = (grant.keywords || []).join(' ').toLowerCase();
-            const companyIndustry = (company.industry || '').toLowerCase();
-            if (companyIndustry && grantIndustry.includes(companyIndustry)) score += 30;
-            const grantTargets = (grant.targetGroup || []).map(t => t.toLowerCase());
-            if (grantTargets.length === 0 || grantTargets.includes('alla')) score += 20;
-            const grantLocation = (grant.description || '').toLowerCase();
-            const companyLocation = (company.location || '').toLowerCase();
-            if (companyLocation && grantLocation.includes(companyLocation)) score += 15;
-            if (grant.sourceName) score += 10;
-            score = Math.min(score, 100);
-            if (score >= 20) {
-              eventGrants.push({ grant, isBookmarked: false, matchScore: score });
+
+            const score = calculateMatchScore(company, grant as unknown as Grant).score;
+            if (score >= 25) {
+              eventGrants.push({ grant: grant as unknown as Grant, isBookmarked: false, matchScore: score });
             }
           }
         }

@@ -9,11 +9,12 @@ import { storage, type GrantFilters } from "../storage";
 // open grants) and match scoring itself is ~50 ms for the whole table, so
 // the ordering is computed in memory and only the requested page is
 // hydrated with full rows.
-type ScoringRow = Pick<
+export type GrantIndexRow = Pick<
   Grant,
-  "id" | "status" | "deadline" | "market" | "targetGroup" | "keywords" |
+  "id" | "title" | "status" | "deadline" | "market" | "targetGroup" | "keywords" |
   "structuredEligibility" | "eligibilityCriteria" | "createdAt" | "sourceName"
 >;
+type ScoringRow = GrantIndexRow;
 
 interface ScoringCacheEntry {
   rows: ScoringRow[];
@@ -32,6 +33,7 @@ async function loadScoringRows(): Promise<ScoringRow[]> {
   const rows = await db
     .select({
       id: grants.id,
+      title: grants.title,
       status: grants.status,
       deadline: grants.deadline,
       market: grants.market,
@@ -50,6 +52,13 @@ async function loadScoringRows(): Promise<ScoringRow[]> {
 // Called after scrapers write, so a run's results are visible immediately.
 export function invalidateGrantScoringCache(): void {
   scoringCache = null;
+}
+
+// Shared read-only index for endpoints that must reason over every grant
+// but return only a few — eligibility overview, calendar, digests. Avoids
+// each of them loading the full table.
+export async function getGrantIndex(): Promise<GrantIndexRow[]> {
+  return loadScoringRows();
 }
 
 export type GrantSort = "match" | "deadline" | "newest";
