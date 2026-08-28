@@ -15,9 +15,13 @@ RUN npm ci
 
 # Python venv + Playwright Chromium (--with-deps installs its system libs).
 COPY scrapers/requirements.txt scrapers/requirements.txt
+# playwright --with-deps installs system libraries via apt, so the package
+# lists removed above have to be refreshed first.
 RUN python3 -m venv /opt/venv \
   && /opt/venv/bin/pip install --no-cache-dir -r scrapers/requirements.txt \
-  && /opt/venv/bin/playwright install --with-deps chromium
+  && apt-get update \
+  && /opt/venv/bin/playwright install --with-deps chromium \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 RUN npm run build && npm prune --omit=dev
