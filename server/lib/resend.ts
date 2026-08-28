@@ -36,5 +36,13 @@ export async function sendEmail(params: {
     html: params.html,
   });
 
+  // The Resend SDK reports API failures in `error` rather than throwing, so
+  // callers' try/catch blocks never fired and a rejected send (unverified
+  // domain, invalid recipient, rate limit) looked exactly like a success.
+  if (result.error) {
+    const { message, name } = result.error;
+    throw new Error(`Resend rejected the email (${name}): ${message}`);
+  }
+
   return result;
 }
