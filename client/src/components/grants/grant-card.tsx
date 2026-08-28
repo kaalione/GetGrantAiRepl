@@ -80,7 +80,7 @@ export function GrantCard({ grant, company, profile, showMatchScore = false, app
     };
     return (
       <Badge variant="outline" className={styles[sourceType] || ""}>
-        {t(`grantCard.sourceType.${sourceType}`) || sourceType}
+        {t(`grantCard.sourceType.${sourceType}`, { defaultValue: sourceType })}
       </Badge>
     );
   }

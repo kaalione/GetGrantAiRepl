@@ -126,10 +126,37 @@ export interface IStorage {
   upsertMatchExplanation(data: InsertMatchExplanation): Promise<MatchExplanation>;
 }
 
+
+// rawData holds the full scraped source payload — 4.7 MB across the open
+// grants alone, and never read by the UI. List queries select every other
+// column explicitly so it never leaves the database.
+const grantListColumns = {
+  id: grants.id,
+  title: grants.title,
+  description: grants.description,
+  sourceName: grants.sourceName,
+  sourceType: grants.sourceType,
+  url: grants.url,
+  deadline: grants.deadline,
+  amountMin: grants.amountMin,
+  amountMax: grants.amountMax,
+  eligibilityCriteria: grants.eligibilityCriteria,
+  structuredEligibility: grants.structuredEligibility,
+  eligibilityExtractedAt: grants.eligibilityExtractedAt,
+  targetGroup: grants.targetGroup,
+  keywords: grants.keywords,
+  applicationRequirements: grants.applicationRequirements,
+  status: grants.status,
+  createdAt: grants.createdAt,
+  updatedAt: grants.updatedAt,
+  market: grants.market,
+  language: grants.language,
+} as const;
+
 export class DatabaseStorage implements IStorage {
   // Grants
   async getGrants(): Promise<Grant[]> {
-    return db.select().from(grants).orderBy(desc(grants.createdAt));
+    return await db.select(grantListColumns).from(grants).orderBy(desc(grants.createdAt)) as Grant[];
   }
 
   async getGrantsFiltered(filters: GrantFilters): Promise<Grant[]> {
@@ -202,14 +229,14 @@ export class DatabaseStorage implements IStorage {
     ];
 
     if (conditions.length === 0) {
-      return db.select().from(grants).orderBy(...orderClauses);
+      return await db.select(grantListColumns).from(grants).orderBy(...orderClauses) as Grant[];
     }
 
-    return db
-      .select()
+    return await db
+      .select(grantListColumns)
       .from(grants)
       .where(and(...conditions))
-      .orderBy(...orderClauses);
+      .orderBy(...orderClauses) as Grant[];
   }
 
   async getGrant(id: string): Promise<Grant | undefined> {
@@ -218,7 +245,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDashboardStats(): Promise<DashboardStats> {
-    const allGrants = await db.select().from(grants);
+    // Only the columns the counts below actually read.
+    const allGrants = await db
+      .select({
+        id: grants.id,
+        title: grants.title,
+        sourceName: grants.sourceName,
+        status: grants.status,
+        deadline: grants.deadline,
+        createdAt: grants.createdAt,
+      })
+      .from(grants);
     const allApplications = await db.select().from(applications);
     const allNotifications = await db.select().from(notifications);
 
