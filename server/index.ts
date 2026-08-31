@@ -231,6 +231,14 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
+  // An unmatched /api path must not reach the client catch-all below. Without
+  // this, a missing or renamed route answers 200 with index.html, so a broken
+  // endpoint looks healthy to anything checking status codes — which is how a
+  // deleted route once reached production.
+  app.all("/api/{*path}", (req, res) => {
+    res.status(404).json({ error: `No API route for ${req.method} ${req.path}` });
+  });
+
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
