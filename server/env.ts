@@ -20,6 +20,22 @@ const RECOMMENDED = [
   ["APP_URL", "links in emails and Stripe redirects point at the wrong host"],
 ] as const;
 
+// @supabase/supabase-js constructs a Realtime client on creation, which needs
+// a global WebSocket — Node only has one from 22 onwards. On an older runtime
+// the failure surfaces from inside the Supabase bundle, far from the cause.
+const MIN_NODE_MAJOR = 22;
+
+function assertNodeVersion(): void {
+  const major = Number(process.versions.node.split(".")[0]);
+  if (major < MIN_NODE_MAJOR) {
+    console.error(
+      `\nNode ${process.versions.node} is too old — this app needs Node ${MIN_NODE_MAJOR} or later.\n` +
+      `@supabase/supabase-js requires a global WebSocket, which Node added in ${MIN_NODE_MAJOR}.\n`
+    );
+    process.exit(1);
+  }
+}
+
 function assertEnv(): void {
   const missing = REQUIRED.filter(([name]) => !process.env[name]);
 
@@ -41,4 +57,5 @@ function assertEnv(): void {
 // Side effect on import: ESM evaluates imported modules in order, so importing
 // this before ./routes guarantees the check runs first. A function called
 // between import statements would not — those are hoisted above it.
+assertNodeVersion();
 assertEnv();

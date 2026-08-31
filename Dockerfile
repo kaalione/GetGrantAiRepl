@@ -1,6 +1,6 @@
 # getgrant.ai — single-container image: Node server (API + SPA + websockets)
 # with a Python venv for the scrapers the server spawns.
-FROM node:20-bookworm-slim
+FROM node:24-bookworm-slim
 
 # Python for the scrapers.
 RUN apt-get update \
