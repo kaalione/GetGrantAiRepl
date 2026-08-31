@@ -40,6 +40,13 @@ def get_scraper_for_source(source):
     name_lower = source['name'].lower()
     source_type = source.get('type', '').lower()
 
+    # Config-driven sources declare what they are, so adding one of these is a
+    # database row rather than another file in this dispatch chain.
+    config = source.get('selectors') or {}
+    if config.get('kind') == 'regional_stod':
+        from sources.regional_stod import RegionalStodScraper
+        return RegionalStodScraper(source)
+
     if 'vinnova' in name_lower:
         if source_type == 'api' or 'api' in name_lower:
             return VinnovaApiScraper(source)
