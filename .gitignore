@@ -10,8 +10,11 @@ dist/
 uploads/
 *.pyc
 *.bin
+# Every .env variant is secret — .env.backup held live keys and was tracked
+# only by luck. .env.example is the documented template and stays in git.
 .env
-.env.local
+.env.*
+!.env.example
 
 # macOS metadata (AppleDouble files on external volumes)
 ._*
