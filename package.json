@@ -11,7 +11,8 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "smoke": "tsx scripts/smoke-api.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.1",
