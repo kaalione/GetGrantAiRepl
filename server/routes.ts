@@ -1721,6 +1721,18 @@ async function runWithConcurrency<T>(
   await Promise.all(workers);
 }
 
+  // Public: the counts shown on the marketing pages. No auth — this is the
+  // same information any visitor can read off the grants list.
+  app.get("/api/stats", async (_req, res) => {
+    try {
+      const { getPlatformStats } = await import("./services/platformStats");
+      res.json(await getPlatformStats());
+    } catch (error) {
+      console.error("Platform stats error:", error);
+      res.status(500).json({ error: "Failed to load stats" });
+    }
+  });
+
   // Cron endpoints for automation
   // POST /api/cron/scrape - Run scrapers by frequency (daily/weekly)
   // Can be triggered by external cron services like cron-job.org

@@ -173,8 +173,8 @@
       "description": "getgrant.ai uses AI to find relevant grants, analyze your chances, and write applications for you. Fully in Swedish.",
       "ctaPrimary": "Get started for free",
       "ctaSecondary": "See how it works",
-      "activeGrants": "1,700+ active grants",
-      "fromSources": "From 39+ Swedish and European grant sources",
+      "activeGrants": "{{grants}} active grants",
+      "fromSources": "From {{sources}} Swedish and European grant sources",
       "autoUpdated": "Auto-updated daily",
       "inSwedish": "Swedish, Norwegian & Finnish",
       "freeToStart": "Free to start",
@@ -193,14 +193,14 @@
       "step1Title": "Create your profile",
       "step1Desc": "Enter your website — AI builds your profile in 60 seconds",
       "step2Title": "AI finds matches",
-      "step2Desc": "Our AI analyzes 1,700+ grants from 39+ sources and shows the ones that suit you best.",
+      "step2Desc": "Our AI analyzes {{grants}} grants from {{sources}} sources and shows the ones that suit you best.",
       "step3Title": "Generate application",
       "step3Desc": "AI writes a complete application in Swedish based on your profile and grant requirements."
     },
     "features": {
       "title": "Everything you need",
       "subtitle": "A complete platform for finding and applying for grants",
-      "grantSources": "39+ Grant Sources",
+      "grantSources": "{{sources}} Grant Sources",
       "grantSourcesDesc": "Vinnova, Tillväxtverket, EU, Almi, Energimyndigheten, Länsstyrelserna and more. Automatically updated daily.",
       "aiMatching": "AI Matching",
       "aiMatchingDesc": "Claude AI analyzes your profile and shows exactly which grants you can apply for.",
@@ -227,7 +227,7 @@
       "with": {
         "title": "With GetGrant.ai",
         "time": "First match in 5 minutes, full setup in ~10",
-        "ai": "AI filters 1,700+ grants for you",
+        "ai": "AI filters {{grants}} grants for you",
         "reminders": "Automatic deadline reminders",
         "scoring": "AI assesses your chances (0-100%)",
         "draft": "Complete application draft in Swedish"
@@ -244,7 +244,7 @@
       "free": "FREE",
       "popular": "MOST POPULAR",
       "freeFeatures": [
-        "Search all 1,700+ grants",
+        "Search all {{grants}} grants",
         "Filter and track",
         "Basic grant info"
       ],
@@ -328,7 +328,7 @@
     },
     "getStarted": {
       "title": "Get started with getgrant.ai",
-      "description": "Enter your website URL or organization number and AI will auto-fill your profile. Then we'll match you with 1,700+ grants.",
+      "description": "Enter your website URL or organization number and AI will auto-fill your profile. Then we'll match you with {{grants}} grants.",
       "createProfile": "Start AI profiling"
     },
     "topMatches": "Top matches for you",
@@ -338,7 +338,7 @@
     "noGrantsDesc": "There are no grants in the database. Grants are added automatically through the scraping system.",
     "quickActions": {
       "findGrants": "Find grants",
-      "sources": "1,700+ sources",
+      "sources": "{{grants}} sources",
       "aiMatching": "AI matching",
       "autoAnalysis": "Automatic analysis",
       "generateApp": "Generate application",
@@ -378,7 +378,7 @@
     "notFound": "Grant not found",
     "notFoundDesc": "The grant you're looking for doesn't exist or has been removed.",
     "seoTitle": "Grants & Funding",
-    "seoDesc": "Browse 1,700+ Swedish grants and funding opportunities from Vinnova, Tillväxtverket, EU, Almi, Länsstyrelserna and more. Filter and find the right grant for your company.",
+    "seoDesc": "Browse {{grants}} Swedish grants and funding opportunities from Vinnova, Tillväxtverket, EU, Almi, Länsstyrelserna and more. Filter and find the right grant for your company.",
     "noProfileTitle": "Create profile for personalized matches",
     "noProfileDesc": "With a company profile, our AI can show which grants suit your company and rank them by relevance.",
     "createProfile": "Create company profile",
@@ -767,7 +767,7 @@
     "manageSub": "Manage subscription",
     "paymentNote": "Pay by card • Cancel anytime",
     "freeFeatures": [
-      "Search all 1,700+ grants",
+      "Search all {{grants}} grants",
       "Filter by category, region and amount",
       "Save and track grants",
       "Basic grant information"
@@ -834,7 +834,7 @@
       "profile": "Create your company profile",
       "profileDesc": "Tell us about your company so we can find the right grants",
       "matches": "See your first matches",
-      "matchesDesc": "We've analyzed 1,700+ grants for you"
+      "matchesDesc": "We've analyzed {{grants}} grants for you"
     },
     "stepOf": "Step {{current}} of {{total}}",
     "welcome": {
@@ -842,7 +842,7 @@
       "matching": "Matching",
       "application": "Application",
       "findGrants": "Find grants",
-      "findGrantsSub": "1,700+ sources",
+      "findGrantsSub": "{{grants}} sources",
       "aiMatching": "AI matching",
       "aiMatchingSub": "Automatic analysis",
       "generateApps": "Generate applications",
@@ -873,7 +873,7 @@
       "errorFallback": "Something went wrong. Please try again."
     },
     "matches": {
-      "analyzing": "Analyzing 1,700+ grants for you...",
+      "analyzing": "Analyzing {{grants}} grants for you...",
       "congrats": "Congratulations! We found {{count}} matches",
       "congratsMultiple": "Congratulations! We found several matches",
       "bestMatches": "Here are the grants that suit you best right now",
@@ -927,7 +927,7 @@
   },
   "seo": {
     "defaultTitle": "getgrant.ai - Find Swedish grants with AI",
-    "defaultDescription": "AI-powered platform for discovering, matching, and applying for 1,700+ Swedish grants and funding opportunities from Vinnova, Tillväxtverket, EU, Almi, Länsstyrelserna and more.",
+    "defaultDescription": "AI-powered platform for discovering, matching, and applying for {{grants}} Swedish grants and funding opportunities from Vinnova, Tillväxtverket, EU, Almi, Länsstyrelserna and more.",
     "defaultKeywords": "grants, funding, business grants, Vinnova, Tillväxtverket, EU grants, Almi, Energimyndigheten, Länsstyrelserna, foundation grants, AI application, Swedish grants"
   },
   "grantDetail": {

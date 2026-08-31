@@ -173,8 +173,8 @@
       "description": "getgrant.ai bruker AI for å finne relevante tilskudd, analysere sjansene dine og skrive søknader for deg. Helt på norsk.",
       "ctaPrimary": "Kom i gang gratis",
       "ctaSecondary": "Se hvordan det fungerer",
-      "activeGrants": "1 700+ aktive tilskudd",
-      "fromSources": "Fra 39+ nordiske og europeiske tilskuddskilder",
+      "activeGrants": "{{grants}} aktive tilskudd",
+      "fromSources": "Fra {{sources}} nordiske og europeiske tilskuddskilder",
       "autoUpdated": "Oppdateres automatisk",
       "inSwedish": "Svensk, norsk & finsk",
       "freeToStart": "Gratis å starte",
@@ -193,14 +193,14 @@
       "step1Title": "Opprett profilen din",
       "step1Desc": "Oppgi nettadressen din — AI bygger profilen din på 60 sekunder",
       "step2Title": "AI finner treff",
-      "step2Desc": "Vår AI analyserer 1 700+ tilskudd fra 39+ kilder og viser de som passer dere best.",
+      "step2Desc": "Vår AI analyserer {{grants}} tilskudd fra {{sources}} kilder og viser de som passer dere best.",
       "step3Title": "Generer søknad",
       "step3Desc": "AI skriver en komplett søknad på norsk basert på profilen deres og tilskuddskravene."
     },
     "features": {
       "title": "Alt du trenger",
       "subtitle": "En komplett plattform for å finne og søke om tilskudd",
-      "grantSources": "39+ Tilskuddskilder",
+      "grantSources": "{{sources}} Tilskuddskilder",
       "grantSourcesDesc": "Innovasjon Norge, Forskningsrådet, EU, Enova, fylkeskommuner og mer. Automatisk oppdatert daglig.",
       "aiMatching": "AI-Matching",
       "aiMatchingDesc": "Claude AI analyserer profilen deres og viser nøyaktig hvilke tilskudd dere kan søke.",
@@ -227,7 +227,7 @@
       "with": {
         "title": "Med GetGrant.ai",
         "time": "Første treff på 5 minutter, full oppsett på ~10",
-        "ai": "AI filtrerer 1 700+ tilskudd for deg",
+        "ai": "AI filtrerer {{grants}} tilskudd for deg",
         "reminders": "Automatiske fristpåminnelser",
         "scoring": "AI vurderer sjansene deres (0–100 %)",
         "draft": "Ferdig søknad på norsk"
@@ -244,7 +244,7 @@
       "free": "GRATIS",
       "popular": "MEST POPULÆR",
       "freeFeatures": [
-        "Søk blant alle 1 700+ tilskudd",
+        "Søk blant alle {{grants}} tilskudd",
         "Filtrer og overvåk",
         "Grunnleggende tilskuddsinformasjon"
       ],
@@ -328,7 +328,7 @@
     },
     "getStarted": {
       "title": "Kom i gang med getgrant.ai",
-      "description": "Oppgi nettadressen din eller organisasjonsnummeret, så fyller AI-en inn profilen din automatisk. Deretter matcher vi deg mot 1 700+ tilskudd.",
+      "description": "Oppgi nettadressen din eller organisasjonsnummeret, så fyller AI-en inn profilen din automatisk. Deretter matcher vi deg mot {{grants}} tilskudd.",
       "createProfile": "Start AI-profilering"
     },
     "topMatches": "Topptreff for deg",
@@ -338,7 +338,7 @@
     "noGrantsDesc": "Det finnes ingen tilskudd i databasen. Tilskudd legges til automatisk via scrapesystemet.",
     "quickActions": {
       "findGrants": "Finn tilskudd",
-      "sources": "1 700+ kilder",
+      "sources": "{{grants}} kilder",
       "aiMatching": "AI-matching",
       "autoAnalysis": "Automatisk analyse",
       "generateApp": "Generer søknad",
@@ -378,7 +378,7 @@
     "notFound": "Tilskudd ikke funnet",
     "notFoundDesc": "Tilskuddet du leter etter finnes ikke eller er fjernet.",
     "seoTitle": "Tilskudd og finansiering",
-    "seoDesc": "Bla gjennom 1 700+ tilskudd og finansieringsmuligheter fra Innovasjon Norge, Forskningsrådet, EU, Enova, fylkeskommuner og mer. Filtrer og finn riktig tilskudd for din bedrift.",
+    "seoDesc": "Bla gjennom {{grants}} tilskudd og finansieringsmuligheter fra Innovasjon Norge, Forskningsrådet, EU, Enova, fylkeskommuner og mer. Filtrer og finn riktig tilskudd for din bedrift.",
     "noProfileTitle": "Opprett profil for personlige treff",
     "noProfileDesc": "Med en bedriftsprofil kan vår AI vise hvilke tilskudd som passer akkurat din bedrift og rangere dem etter relevans.",
     "createProfile": "Opprett bedriftsprofil",
@@ -769,7 +769,7 @@
     "manageSub": "Administrer abonnement",
     "paymentNote": "Betal med kort • Avslutt når som helst",
     "freeFeatures": [
-      "Søk blant alle 1 700+ tilskudd",
+      "Søk blant alle {{grants}} tilskudd",
       "Filtrer på kategori, region og beløp",
       "Lagre og overvåk tilskudd",
       "Grunnleggende tilskuddsinformasjon"
@@ -836,7 +836,7 @@
       "profile": "Opprett bedriftsprofilen din",
       "profileDesc": "Fortell om bedriften din, så vi kan finne riktig tilskudd",
       "matches": "Se dine første treff",
-      "matchesDesc": "Vi har analysert 1 700+ tilskudd for deg"
+      "matchesDesc": "Vi har analysert {{grants}} tilskudd for deg"
     },
     "stepOf": "Steg {{current}} av {{total}}",
     "welcome": {
@@ -844,7 +844,7 @@
       "matching": "Matching",
       "application": "Søknad",
       "findGrants": "Finn tilskudd",
-      "findGrantsSub": "1 700+ kilder",
+      "findGrantsSub": "{{grants}} kilder",
       "aiMatching": "AI-matching",
       "aiMatchingSub": "Automatisk analyse",
       "generateApps": "Generer søknader",
@@ -875,7 +875,7 @@
       "errorFallback": "Noe gikk galt. Prøv igjen."
     },
     "matches": {
-      "analyzing": "Analyserer 1 700+ tilskudd for deg...",
+      "analyzing": "Analyserer {{grants}} tilskudd for deg...",
       "congrats": "Gratulerer! Vi fant {{count}} treff",
       "congratsMultiple": "Gratulerer! Vi fant flere treff",
       "bestMatches": "Her er tilskuddene som passer dere best akkurat nå",
@@ -929,7 +929,7 @@
   },
   "seo": {
     "defaultTitle": "getgrant.ai – Finn tilskudd med AI",
-    "defaultDescription": "AI-drevet plattform for å oppdage, matche og søke blant 1 700+ tilskudd og finansieringsmuligheter fra Innovasjon Norge, Forskningsrådet, EU, Enova, fylkeskommuner og mer.",
+    "defaultDescription": "AI-drevet plattform for å oppdage, matche og søke blant {{grants}} tilskudd og finansieringsmuligheter fra Innovasjon Norge, Forskningsrådet, EU, Enova, fylkeskommuner og mer.",
     "defaultKeywords": "tilskudd, finansiering, bedriftstilskudd, Innovasjon Norge, Forskningsrådet, EU-tilskudd, Enova, fylkeskommuner, stiftelsestilskudd, AI-søknad, norske tilskudd"
   },
   "grantDetail": {

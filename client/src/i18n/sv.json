@@ -173,8 +173,8 @@
       "description": "getgrant.ai använder AI för att hitta relevanta bidrag, analysera dina chanser, och skriva ansökningar åt dig. Helt på svenska.",
       "ctaPrimary": "Kom igång gratis",
       "ctaSecondary": "Se hur det fungerar",
-      "activeGrants": "1 700+ aktiva bidrag",
-      "fromSources": "Från 39+ svenska och europeiska bidragskällor",
+      "activeGrants": "{{grants}} aktiva bidrag",
+      "fromSources": "Från {{sources}} svenska och europeiska bidragskällor",
       "autoUpdated": "Uppdateras automatiskt",
       "inSwedish": "Svenska, norska & finska",
       "freeToStart": "Gratis att börja",
@@ -193,14 +193,14 @@
       "step1Title": "Skapa din profil",
       "step1Desc": "Ange din webbadress — AI bygger din profil på 60 sekunder",
       "step2Title": "AI hittar matchningar",
-      "step2Desc": "Vår AI analyserar 1 700+ bidrag från 39+ källor och visar de som passar er bäst.",
+      "step2Desc": "Vår AI analyserar {{grants}} bidrag från {{sources}} källor och visar de som passar er bäst.",
       "step3Title": "Generera ansökan",
       "step3Desc": "AI skriver en komplett ansökan på svenska baserat på er profil och bidragskraven."
     },
     "features": {
       "title": "Allt du behöver",
       "subtitle": "En komplett plattform för att hitta och ansöka om bidrag",
-      "grantSources": "39+ Bidragskällor",
+      "grantSources": "{{sources}} Bidragskällor",
       "grantSourcesDesc": "Vinnova, Tillväxtverket, EU, Almi, Energimyndigheten, Länsstyrelserna och fler. Automatiskt uppdaterat dagligen.",
       "aiMatching": "AI-Matchning",
       "aiMatchingDesc": "Claude AI analyserar er profil och visar exakt vilka bidrag ni kan söka.",
@@ -227,7 +227,7 @@
       "with": {
         "title": "Med GetGrant.ai",
         "time": "Första matchning på 5 minuter, full setup på ~10",
-        "ai": "AI filtrerar 1 700+ bidrag åt dig",
+        "ai": "AI filtrerar {{grants}} bidrag åt dig",
         "reminders": "Automatiska deadline-påminnelser",
         "scoring": "AI bedömer era chanser (0-100%)",
         "draft": "Färdig ansökan på svenska"
@@ -244,7 +244,7 @@
       "free": "GRATIS",
       "popular": "POPULÄRAST",
       "freeFeatures": [
-        "Sök bland alla 1 700+ bidrag",
+        "Sök bland alla {{grants}} bidrag",
         "Filtrera och bevaka",
         "Grundläggande bidragsinfo"
       ],
@@ -328,7 +328,7 @@
     },
     "getStarted": {
       "title": "Kom igång med getgrant.ai",
-      "description": "Ange din webbadress eller organisationsnummer så fyller AI:n i din profil automatiskt. Sedan matchar vi dig mot 1 700+ bidrag.",
+      "description": "Ange din webbadress eller organisationsnummer så fyller AI:n i din profil automatiskt. Sedan matchar vi dig mot {{grants}} bidrag.",
       "createProfile": "Starta AI-profilering"
     },
     "topMatches": "Toppmatchningar för dig",
@@ -338,7 +338,7 @@
     "noGrantsDesc": "Det finns inga bidrag i databasen. Bidrag läggs till automatiskt via skrapningsystemet.",
     "quickActions": {
       "findGrants": "Hitta bidrag",
-      "sources": "1 700+ källor",
+      "sources": "{{grants}} källor",
       "aiMatching": "AI-matchning",
       "autoAnalysis": "Automatisk analys",
       "generateApp": "Generera ansökan",
@@ -378,7 +378,7 @@
     "notFound": "Bidrag hittades inte",
     "notFoundDesc": "Bidraget du söker finns inte eller har tagits bort.",
     "seoTitle": "Bidrag & Finansiering",
-    "seoDesc": "Bläddra bland 1 700+ svenska bidrag och finansieringsmöjligheter från Vinnova, Tillväxtverket, EU, Almi, Länsstyrelserna och fler. Filtrera och hitta rätt bidrag för ditt företag.",
+    "seoDesc": "Bläddra bland {{grants}} svenska bidrag och finansieringsmöjligheter från Vinnova, Tillväxtverket, EU, Almi, Länsstyrelserna och fler. Filtrera och hitta rätt bidrag för ditt företag.",
     "noProfileTitle": "Skapa profil för personliga matchningar",
     "noProfileDesc": "Med en företagsprofil kan vår AI visa vilka bidrag som passar just ert företag och rangordna dem efter relevans.",
     "createProfile": "Skapa företagsprofil",
@@ -769,7 +769,7 @@
     "manageSub": "Hantera prenumeration",
     "paymentNote": "Betala med kort • Avsluta när som helst",
     "freeFeatures": [
-      "Sök bland alla 1 700+ bidrag",
+      "Sök bland alla {{grants}} bidrag",
       "Filtrera på kategori, region och belopp",
       "Spara och bevaka bidrag",
       "Grundläggande bidragsinformation"
@@ -834,7 +834,7 @@
       "profile": "Skapa din företagsprofil",
       "profileDesc": "Berätta om ditt företag så vi kan hitta rätt bidrag",
       "matches": "Se dina första matchningar",
-      "matchesDesc": "Vi har analyserat 1 700+ bidrag åt dig"
+      "matchesDesc": "Vi har analyserat {{grants}} bidrag åt dig"
     },
     "stepOf": "Steg {{current}} av {{total}}",
     "profileComplete": "Profil klar!",
@@ -844,7 +844,7 @@
       "matching": "Matchning",
       "application": "Ansökan",
       "findGrants": "Hitta bidrag",
-      "findGrantsSub": "1 700+ källor",
+      "findGrantsSub": "{{grants}} källor",
       "aiMatching": "AI-matchning",
       "aiMatchingSub": "Automatisk analys",
       "generateApps": "Generera ansökningar",
@@ -875,7 +875,7 @@
       "errorFallback": "Något gick fel. Försök igen."
     },
     "matches": {
-      "analyzing": "Analyserar 1 700+ bidrag åt dig...",
+      "analyzing": "Analyserar {{grants}} bidrag åt dig...",
       "congrats": "Grattis! Vi hittade {{count}} matchningar",
       "congratsMultiple": "Grattis! Vi hittade flera matchningar",
       "bestMatches": "Här är bidragen som passar er bäst just nu",
@@ -929,7 +929,7 @@
   },
   "seo": {
     "defaultTitle": "getgrant.ai - Hitta svenska bidrag med AI",
-    "defaultDescription": "AI-driven plattform för att upptäcka, matcha och söka bland 1 700+ svenska bidrag och finansieringsmöjligheter från Vinnova, Tillväxtverket, EU, Almi, Länsstyrelserna och fler.",
+    "defaultDescription": "AI-driven plattform för att upptäcka, matcha och söka bland {{grants}} svenska bidrag och finansieringsmöjligheter från Vinnova, Tillväxtverket, EU, Almi, Länsstyrelserna och fler.",
     "defaultKeywords": "bidrag, finansiering, företagsbidrag, Vinnova, Tillväxtverket, EU-bidrag, Almi, Energimyndigheten, Länsstyrelserna, stiftelsebidrag, AI-ansökan, svenska bidrag"
   },
   "grantDetail": {

@@ -1,3 +1,4 @@
+import { usePlatformStats } from "@/hooks/use-platform-stats";
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight, Sparkles, Target, Zap, CheckCircle, Clock, Users, FileText, Mail, Download, X, ChevronDown } from 'lucide-react';
@@ -29,6 +30,7 @@ const FAQ_ITEMS = [
 ];
 
 export default function Landing() {
+  const stats = usePlatformStats();
   const { t } = useTranslation();
   const [statsVisible, setStatsVisible] = useState(false);
 
@@ -163,11 +165,11 @@ export default function Landing() {
             <div className="p-6 md:p-8">
               <div className="grid grid-cols-3 gap-4 md:gap-6 mb-6">
                 <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 md:p-5 text-center border border-blue-100 dark:border-blue-800/40">
-                  <div className="text-2xl md:text-3xl font-bold text-blue-600 dark:text-blue-400 mb-1">1 700+</div>
+                  <div className="text-2xl md:text-3xl font-bold text-blue-600 dark:text-blue-400 mb-1">{stats.grants}</div>
                   <div className="text-xs md:text-sm text-gray-600 dark:text-gray-400">{t('landing.stats.activeGrants')}</div>
                 </div>
                 <div className="bg-cyan-50 dark:bg-cyan-900/20 rounded-xl p-4 md:p-5 text-center border border-cyan-100 dark:border-cyan-800/40">
-                  <div className="text-2xl md:text-3xl font-bold text-cyan-600 dark:text-cyan-400 mb-1">39+</div>
+                  <div className="text-2xl md:text-3xl font-bold text-cyan-600 dark:text-cyan-400 mb-1">{stats.sources}</div>
                   <div className="text-xs md:text-sm text-gray-600 dark:text-gray-400">{t('landing.stats.sources')}</div>
                 </div>
                 <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 md:p-5 text-center border border-purple-100 dark:border-purple-800/40">
@@ -214,8 +216,8 @@ export default function Landing() {
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-white">
             {[
-              { value: '1 700+', label: t('landing.stats.activeGrants') },
-              { value: '39+', label: t('landing.stats.sources') },
+              { value: stats.grants, label: t('landing.stats.activeGrants') },
+              { value: stats.sources, label: t('landing.stats.sources') },
               { value: '5 min', label: t('landing.stats.firstMatch') },
               { value: '100%', label: t('landing.stats.freeToTest') },
             ].map((stat, i) => (

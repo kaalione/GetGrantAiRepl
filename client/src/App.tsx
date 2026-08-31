@@ -1,3 +1,4 @@
+import { usePlatformStats } from "@/hooks/use-platform-stats";
 import { useState, useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
@@ -113,6 +114,10 @@ function Router() {
 }
 
 function AppContent() {
+  // Publishes the live grant and source counts into i18n so every string that
+  // quotes them stays true, wherever it is rendered.
+  usePlatformStats();
+
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
   const { isWhitelabel } = useWhitelabel();

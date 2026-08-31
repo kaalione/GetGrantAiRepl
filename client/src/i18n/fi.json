@@ -173,8 +173,8 @@
       "description": "getgrant.ai käyttää tekoälyä löytääkseen relevantit avustukset, analysoidakseen mahdollisuutesi ja kirjoittaakseen hakemukset puolestasi. Kokonaan suomeksi.",
       "ctaPrimary": "Aloita ilmaiseksi",
       "ctaSecondary": "Katso miten se toimii",
-      "activeGrants": "1 700+ aktiivista avustusta",
-      "fromSources": "Yli 39 suomalaisesta ja eurooppalaisesta avustuslähteestä",
+      "activeGrants": "{{grants}} aktiivista avustusta",
+      "fromSources": "Yli {{sources}} suomalaisesta ja eurooppalaisesta avustuslähteestä",
       "autoUpdated": "Päivittyy automaattisesti",
       "inSwedish": "Ruotsi, norja & suomi",
       "freeToStart": "Ilmainen aloitus",
@@ -193,14 +193,14 @@
       "step1Title": "Luo profiilisi",
       "step1Desc": "Anna verkkosivustosi osoite — tekoäly rakentaa profiilisi 60 sekunnissa",
       "step2Title": "Tekoäly löytää vastaavuudet",
-      "step2Desc": "Tekoälymme analysoi yli 1 700 avustusta yli 39 lähteestä ja näyttää parhaiten sopivat.",
+      "step2Desc": "Tekoälymme analysoi yli {{grants}} avustusta yli {{sources}} lähteestä ja näyttää parhaiten sopivat.",
       "step3Title": "Luo hakemus",
       "step3Desc": "Tekoäly kirjoittaa täydellisen hakemuksen suomeksi profiilisi ja avustuksen vaatimusten perusteella."
     },
     "features": {
       "title": "Kaikki mitä tarvitset",
       "subtitle": "Täydellinen alusta avustusten löytämiseen ja hakemiseen",
-      "grantSources": "39+ avustuslähdettä",
+      "grantSources": "{{sources}} avustuslähdettä",
       "grantSourcesDesc": "Business Finland, ELY-keskus, EU, Finnvera, Energiavirasto, maakuntaliitot ja paljon muuta. Päivitetään automaattisesti päivittäin.",
       "aiMatching": "Tekoälyvastaavuus",
       "aiMatchingDesc": "Claude-tekoäly analysoi profiilisi ja näyttää tarkalleen, mitä avustuksia voitte hakea.",
@@ -227,7 +227,7 @@
       "with": {
         "title": "GetGrant.ai:n kanssa",
         "time": "Ensimmäinen vastaavuus 5 minuutissa, täysi asennus ~10 min",
-        "ai": "Tekoäly suodattaa 1 700+ avustusta puolestasi",
+        "ai": "Tekoäly suodattaa {{grants}} avustusta puolestasi",
         "reminders": "Automaattiset määräaikamuistutukset",
         "scoring": "Tekoäly arvioi mahdollisuutenne (0–100%)",
         "draft": "Valmis hakemus suomeksi"
@@ -244,7 +244,7 @@
       "free": "ILMAINEN",
       "popular": "SUOSITUIN",
       "freeFeatures": [
-        "Selaa kaikkia 1 700+ avustusta",
+        "Selaa kaikkia {{grants}} avustusta",
         "Suodata ja seuraa",
         "Avustusten perustiedot"
       ],
@@ -328,7 +328,7 @@
     },
     "getStarted": {
       "title": "Aloita getgrant.ai:n käyttö",
-      "description": "Anna verkkosivustosi osoite tai Y-tunnus, niin tekoäly täyttää profiilisi automaattisesti. Sen jälkeen sovitamme sinut yli 1 700 avustukseen.",
+      "description": "Anna verkkosivustosi osoite tai Y-tunnus, niin tekoäly täyttää profiilisi automaattisesti. Sen jälkeen sovitamme sinut yli {{grants}} avustukseen.",
       "createProfile": "Aloita tekoälyprofilointi"
     },
     "topMatches": "Parhaat vastaavuudet sinulle",
@@ -338,7 +338,7 @@
     "noGrantsDesc": "Tietokannassa ei ole avustuksia. Avustukset lisätään automaattisesti hakurobottijärjestelmän kautta.",
     "quickActions": {
       "findGrants": "Löydä avustuksia",
-      "sources": "1 700+ lähdettä",
+      "sources": "{{grants}} lähdettä",
       "aiMatching": "Tekoälyvastaavuus",
       "autoAnalysis": "Automaattinen analyysi",
       "generateApp": "Luo hakemus",
@@ -378,7 +378,7 @@
     "notFound": "Avustusta ei löytynyt",
     "notFoundDesc": "Etsimääsi avustusta ei ole olemassa tai se on poistettu.",
     "seoTitle": "Avustukset & rahoitus",
-    "seoDesc": "Selaa yli 1 700 suomalaista avustusta ja rahoitusmahdollisuutta Business Finlandilta, ELY-keskuksilta, EU:lta, Finnveralta, maakuntalitoilta ja muilta. Suodata ja löydä oikea avustus yrityksellesi.",
+    "seoDesc": "Selaa yli {{grants}} suomalaista avustusta ja rahoitusmahdollisuutta Business Finlandilta, ELY-keskuksilta, EU:lta, Finnveralta, maakuntalitoilta ja muilta. Suodata ja löydä oikea avustus yrityksellesi.",
     "noProfileTitle": "Luo profiili saadaksesi henkilökohtaisia vastaavuuksia",
     "noProfileDesc": "Yritysprofiililla tekoälymme voi näyttää, mitkä avustukset sopivat juuri teidän yrityksellenne ja järjestää ne relevanssin mukaan.",
     "createProfile": "Luo yritysprofiili",
@@ -769,7 +769,7 @@
     "manageSub": "Hallitse tilausta",
     "paymentNote": "Maksa kortilla • Peruuta milloin tahansa",
     "freeFeatures": [
-      "Selaa kaikkia 1 700+ avustusta",
+      "Selaa kaikkia {{grants}} avustusta",
       "Suodata kategorian, alueen ja summan mukaan",
       "Tallenna ja seuraa avustuksia",
       "Avustusten perustiedot"
@@ -836,7 +836,7 @@
       "profile": "Luo yritysprofiilisi",
       "profileDesc": "Kerro yrityksestäsi, niin löydämme oikeat avustukset",
       "matches": "Näe ensimmäiset vastaavuutesi",
-      "matchesDesc": "Olemme analysoineet yli 1 700 avustusta puolestasi"
+      "matchesDesc": "Olemme analysoineet yli {{grants}} avustusta puolestasi"
     },
     "stepOf": "Vaihe {{current}} / {{total}}",
     "welcome": {
@@ -844,7 +844,7 @@
       "matching": "Vastaavuus",
       "application": "Hakemus",
       "findGrants": "Löydä avustuksia",
-      "findGrantsSub": "1 700+ lähdettä",
+      "findGrantsSub": "{{grants}} lähdettä",
       "aiMatching": "Tekoälyvastaavuus",
       "aiMatchingSub": "Automaattinen analyysi",
       "generateApps": "Luo hakemuksia",
@@ -875,7 +875,7 @@
       "errorFallback": "Jokin meni pieleen. Yritä uudelleen."
     },
     "matches": {
-      "analyzing": "Analysoidaan yli 1 700 avustusta puolestasi...",
+      "analyzing": "Analysoidaan yli {{grants}} avustusta puolestasi...",
       "congrats": "Onnittelut! Löysimme {{count}} vastaavuutta",
       "congratsMultiple": "Onnittelut! Löysimme useita vastaavuuksia",
       "bestMatches": "Tässä ovat parhaiten teille sopivat avustukset juuri nyt",
@@ -929,7 +929,7 @@
   },
   "seo": {
     "defaultTitle": "getgrant.ai – Löydä suomalaisia avustuksia tekoälyllä",
-    "defaultDescription": "Tekoälypohjainen alusta, jolla löydät, sovitat ja haet yli 1 700 suomalaista avustusta ja rahoitusmahdollisuutta Business Finlandilta, ELY-keskuksilta, EU:lta, Finnveralta, maakuntalitoilta ja muilta.",
+    "defaultDescription": "Tekoälypohjainen alusta, jolla löydät, sovitat ja haet yli {{grants}} suomalaista avustusta ja rahoitusmahdollisuutta Business Finlandilta, ELY-keskuksilta, EU:lta, Finnveralta, maakuntalitoilta ja muilta.",
     "defaultKeywords": "avustukset, rahoitus, yritystuet, Business Finland, ELY-keskus, EU-avustukset, Finnvera, Energiavirasto, maakuntaliitot, säätiöavustukset, tekoälyhakemus, suomalaiset avustukset"
   },
   "grantDetail": {
