@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,8 +106,41 @@ export default function AuthPage() {
     }
   };
 
-  const oauthButtons = (
+  // A provider that is not enabled in Supabase fails on click, so ask which
+  // ones are on rather than hardcoding the list. Enabling one in the Supabase
+  // dashboard makes its button appear here with no code change.
+  const [providers, setProviders] = useState<{ google: boolean; github: boolean }>({
+    google: false,
+    github: false,
+  });
+
+  useEffect(() => {
+    const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+      import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined;
+    if (!url || !key) return;
+
+    let cancelled = false;
+    fetch(`${url}/auth/v1/settings`, { headers: { apikey: key } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.external) return;
+        setProviders({
+          google: Boolean(data.external.google),
+          github: Boolean(data.external.github),
+        });
+      })
+      // Leaving both off on failure hides the buttons, which is the safe way
+      // to be wrong: email sign-in still works.
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const anyOauth = providers.google || providers.github;
+
+  const oauthButtons = !anyOauth ? null : (
     <div className="space-y-2">
+      {providers.google && (
       <Button
         type="button"
         variant="outline"
@@ -119,6 +152,8 @@ export default function AuthPage() {
         {busy === "google" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SiGoogle className="mr-2 h-4 w-4" />}
         {t("auth.continueWithGoogle", "Fortsätt med Google")}
       </Button>
+      )}
+      {providers.github && (
       <Button
         type="button"
         variant="outline"
@@ -130,10 +165,11 @@ export default function AuthPage() {
         {busy === "github" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SiGithub className="mr-2 h-4 w-4" />}
         {t("auth.continueWithGithub", "Fortsätt med GitHub")}
       </Button>
+      )}
     </div>
   );
 
-  const divider = (
+  const divider = !anyOauth ? null : (
     <div className="relative my-4">
       <div className="absolute inset-0 flex items-center">
         <span className="w-full border-t" />
