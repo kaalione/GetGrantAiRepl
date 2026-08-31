@@ -362,6 +362,122 @@ export async function registerRoutes(
   });
 
   // Top matches for user (for onboarding and dashboard)
+  app.get("/api/grants", async (req, res) => {
+    try {
+      const { source, status, deadlineDays, amountMin, amountMax, search, matchProfile, market } = req.query;
+
+      // Paginated path: scoring, sorting and slicing happen on the server, so
+      // the response carries one page instead of every grant. Opt-in via
+      // page/pageSize so existing callers keep their array response.
+      if (req.query.page || req.query.pageSize) {
+        const { searchGrants } = await import('./services/grantSearch');
+        const result = await searchGrants({
+          source: source as string | undefined,
+          status: status as string | undefined,
+          deadlineDays: deadlineDays ? parseInt(deadlineDays as string, 10) : undefined,
+          amountMin: amountMin ? parseFloat(amountMin as string) : undefined,
+          amountMax: amountMax ? parseFloat(amountMax as string) : undefined,
+          search: search as string | undefined,
+          market: market as string | undefined,
+          userId: (req as any).user?.claims?.sub ?? null,
+          profileId: (req.query.profileId as string | undefined) ?? null,
+          sort: (req.query.sort as 'match' | 'deadline' | 'newest' | undefined) ?? 'match',
+          page: parseInt((req.query.page as string) ?? '1', 10),
+          pageSize: parseInt((req.query.pageSize as string) ?? '24', 10),
+          minScore: req.query.minScore ? parseInt(req.query.minScore as string, 10) : undefined,
+        });
+        return res.json(result);
+      }
+      
+      const hasFilters = source || status || deadlineDays || amountMin || amountMax || search;
+      
+      let allGrants: Grant[];
+      if (hasFilters) {
+        const filters = {
+          source: source as string | undefined,
+          status: status as string | undefined,
+          deadlineDays: deadlineDays ? parseInt(deadlineDays as string, 10) : undefined,
+          amountMin: amountMin ? parseFloat(amountMin as string) : undefined,
+          amountMax: amountMax ? parseFloat(amountMax as string) : undefined,
+          search: search as string | undefined,
+        };
+        allGrants = await storage.getGrantsFiltered(filters);
+      } else {
+        allGrants = await storage.getGrants();
+      }
+
+      if (market && typeof market === 'string') {
+        // market='eu' på ett bidrag betyder EU-omfattande/multinationellt
+        // program — det visas för alla marknader (se, no, fi).
+        allGrants = allGrants.filter(g => (g as any).market === market || (g as any).market === 'eu' || !(g as any).market);
+      }
+
+      const userId = (req as any).user?.claims?.sub;
+      if (matchProfile === 'true' && userId) {
+        const userCompanies = await storage.getCompaniesByUserId(userId);
+        const company = userCompanies[0];
+        if (company) {
+          const now = new Date();
+          const nordicMaxOffsetMs = 3 * 3600000;
+          const todayNordic = new Date(now.getTime() + nordicMaxOffsetMs);
+          const cutoffDate = todayNordic.toISOString().slice(0, 10);
+
+          const filtered = allGrants.filter((grant) => {
+            if (grant.deadline) {
+              const deadlineDate = new Date(grant.deadline).toISOString().slice(0, 10);
+              if (deadlineDate <= cutoffDate) return false;
+            }
+
+            const criteria = grant.eligibilityCriteria as Record<string, unknown> | null;
+            if (!criteria || !criteria.company_types) return true;
+
+            let matches = 0;
+            let totalChecks = 0;
+
+            if (Array.isArray(criteria.company_types) && criteria.company_types.length > 0) {
+              totalChecks++;
+              const compType = (company.orgType || '').toLowerCase();
+              if (criteria.company_types.some((t: string) => 
+                compType.includes(t.toLowerCase()) || t.toLowerCase().includes('alla') || t.toLowerCase().includes('all')
+              )) matches++;
+            }
+
+            const geo = criteria.geography as { regions?: string[]; counties?: string[]; description?: string } | undefined;
+            if (geo && (geo.regions?.length || geo.counties?.length)) {
+              totalChecks++;
+              const companyLocation = (company.location || '').toLowerCase();
+              if (!companyLocation || 
+                  geo.regions?.some((r: string) => r.toLowerCase().includes('hela sverige') || r.toLowerCase().includes('all') || companyLocation.includes(r.toLowerCase())) ||
+                  geo.counties?.some((c: string) => companyLocation.includes(c.toLowerCase()))
+              ) matches++;
+            }
+
+            if (Array.isArray(criteria.sectors) && criteria.sectors.length > 0) {
+              totalChecks++;
+              const companyIndustry = (company.industry || '').toLowerCase();
+              if (!companyIndustry ||
+                  criteria.sectors.some((s: string) => 
+                    companyIndustry.includes(s.toLowerCase()) || s.toLowerCase().includes('alla') || s.toLowerCase().includes('all')
+                  )
+              ) matches++;
+            }
+
+            if (totalChecks === 0) return true;
+            return matches > 0;
+          });
+          const lightFiltered = filtered.map(({ rawData, ...rest }) => rest);
+          res.json(lightFiltered);
+          return;
+        }
+      }
+
+      const lightGrants = allGrants.map(({ rawData, ...rest }) => rest);
+      res.json(lightGrants);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch grants" });
+    }
+  });
+
   // Top matches are the first page of the same ranked search the grants list
   // uses — same scoring, same market rules, same cache. It previously ran its
   // own keyword heuristic, which disagreed with the list and ignored market.
