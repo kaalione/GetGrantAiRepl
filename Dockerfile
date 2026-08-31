@@ -24,6 +24,18 @@ RUN python3 -m venv /opt/venv \
   && rm -rf /var/lib/apt/lists/*
 
 COPY . .
+
+# Vite inlines VITE_* into the client bundle at build time, so these have to be
+# present here — setting them only as runtime variables leaves the deployed
+# client with no Supabase credentials and no way to sign in. Railway passes
+# service variables to the build as arguments; Docker still needs them declared.
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_PUBLISHABLE_KEY
+ARG VITE_POSTHOG_KEY
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
+    VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY \
+    VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY
+
 RUN npm run build && npm prune --omit=dev
 
 ENV NODE_ENV=production \
