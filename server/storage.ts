@@ -170,7 +170,12 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(grants.sourceName, filters.source));
     }
 
-    if (filters.status) {
+    // No status asked for means "grants worth showing" — closed ones are dead
+    // ends for every caller that does not name them, from the dashboard to the
+    // digest emails. "all" is how a caller says it wants the closed ones too.
+    if (!filters.status) {
+      conditions.push(sql`${grants.status} <> 'closed'`);
+    } else if (filters.status !== 'all') {
       if (filters.status.includes(',')) {
         const statuses = filters.status.split(',').map(s => s.trim());
         conditions.push(inArray(grants.status, statuses));

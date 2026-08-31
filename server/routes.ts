@@ -1973,7 +1973,17 @@ async function runWithConcurrency<T>(
         )
         .returning({ id: grants.id });
 
-      res.json({ message: "Expired grants closed", count: result.length });
+      // Same job, next step: retire the closed grants old enough to have
+      // stopped being useful. Skips anything a person has touched.
+      const { pruneClosedGrants } = await import('./services/pruneClosedGrants');
+      const pruned = await pruneClosedGrants();
+
+      res.json({
+        message: "Expired grants closed",
+        count: result.length,
+        pruned: pruned.removed,
+        retentionDays: pruned.retentionDays,
+      });
     } catch (error) {
       console.error('Cron close-expired error:', error);
       res.status(500).json({ error: "Failed to close expired grants" });
