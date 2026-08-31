@@ -1,4 +1,6 @@
 import "dotenv/config";
+// Validates configuration on import — must stay above every other import.
+import "./env";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
