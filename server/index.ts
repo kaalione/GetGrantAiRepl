@@ -170,6 +170,14 @@ app.use((req, res, next) => {
   
   await registerRoutes(httpServer, app);
 
+  // Scraper rows left at "running" by a previous process can never complete.
+  try {
+    const { reapStaleScraperLogs } = await import("./scripts/reap-stale-scraper-logs");
+    await reapStaleScraperLogs();
+  } catch (error) {
+    console.error("Failed to reap stale scraper logs:", error);
+  }
+
   // Seed database with sample data
   try {
     await seedDatabase();

@@ -1700,6 +1700,27 @@ export async function registerRoutes(
     }
   });
 
+
+// Each scraper spawns a Python process that drives a Chromium instance. Firing
+// one per source at once put 21 browsers in the container simultaneously, which
+// is enough to exhaust its memory; when the process is killed the log rows it
+// owned are stranded at "running" forever. Start them a few at a time instead.
+const SCRAPER_CONCURRENCY = Number(process.env.SCRAPER_CONCURRENCY || 3);
+
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  run: (item: T) => Promise<void>,
+): Promise<void> {
+  const queue = [...items];
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, queue.length)) }, async () => {
+    for (let item = queue.shift(); item !== undefined; item = queue.shift()) {
+      await run(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
   // Cron endpoints for automation
   // POST /api/cron/scrape - Run scrapers by frequency (daily/weekly)
   // Can be triggered by external cron services like cron-job.org
@@ -1721,78 +1742,63 @@ export async function registerRoutes(
       const sources = await storage.getScraperSourcesByFrequency(frequency, true);
       const results: { sourceId: string; name: string; logId: string }[] = [];
       
+      // Log rows are created up front so the response can list them, but the
+      // processes themselves are queued: see SCRAPER_CONCURRENCY above.
+      const queued: Array<{ source: typeof sources[number]; logId: string }> = [];
       for (const source of sources) {
-        // Create log entry
         const log = await storage.createScraperLog({
           sourceId: source.id,
           status: "running",
           grantsFound: 0,
         });
-        
-        // Update last scraped time
-        await storage.updateScraperSource(source.id, {
-          lastScraped: new Date(),
-        });
-        
-        // Trigger Python scraper asynchronously
-        const scraperPath = path.join(process.cwd(), 'scrapers', 'main.py');
-        const pythonProcess = spawn(process.env.PYTHON_BIN || 'python3', [scraperPath, '--source-id', source.id], {
-          env: { ...process.env },
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: false,
-        });
-        
-        let stdout = '';
-        let stderr = '';
-        
-        pythonProcess.stdout.on('data', (data) => {
-          stdout += data.toString();
-        });
-        
-        pythonProcess.stderr.on('data', (data) => {
-          stderr += data.toString();
-        });
-        
-        const timeout = setTimeout(() => {
-          pythonProcess.kill('SIGTERM');
-        }, 120000);
-        
-        pythonProcess.on('close', async (code) => {
-          clearTimeout(timeout);
-          try {
-            if (code !== 0) {
-              await storage.updateScraperLog(log.id, {
-                status: "failed",
-                errorMessage: stderr || `Process exited with code ${code}`,
-              });
-            } else {
-              const grantsMatch = stdout.match(/(\d+) grants found/);
-              const grantsFound = grantsMatch ? parseInt(grantsMatch[1], 10) : 0;
-              await storage.updateScraperLog(log.id, {
-                status: "success",
-                grantsFound,
-              });
-            }
-          } catch (updateError) {
-            console.error('Error updating scraper log:', updateError);
-          }
-        });
-        
-        pythonProcess.on('error', async (err) => {
-          clearTimeout(timeout);
-          try {
-            await storage.updateScraperLog(log.id, {
-              status: "failed",
-              errorMessage: `Failed to start scraper: ${err.message}`,
-            });
-          } catch (updateError) {
-            console.error('Error updating scraper log:', updateError);
-          }
-        });
-        
+        await storage.updateScraperSource(source.id, { lastScraped: new Date() });
+        queued.push({ source, logId: log.id });
         results.push({ sourceId: source.id, name: source.name, logId: log.id });
       }
-      
+
+      // Deliberately not awaited: the caller is a cron job that should get an
+      // acknowledgement, not hold a connection open for the whole sweep.
+      void runWithConcurrency(queued, SCRAPER_CONCURRENCY, ({ source, logId }) =>
+        new Promise<void>((resolve) => {
+          const scraperPath = path.join(process.cwd(), 'scrapers', 'main.py');
+          const pythonProcess = spawn(process.env.PYTHON_BIN || 'python3', [scraperPath, '--source-id', source.id], {
+            env: { ...process.env },
+            stdio: ['ignore', 'pipe', 'pipe'],
+            detached: false,
+          });
+
+          let stdout = '';
+          let stderr = '';
+          pythonProcess.stdout.on('data', (data) => { stdout += data.toString(); });
+          pythonProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+
+          const timeout = setTimeout(() => pythonProcess.kill('SIGTERM'), 120000);
+
+          const finish = async (update: { status: string; errorMessage?: string; grantsFound?: number }) => {
+            clearTimeout(timeout);
+            try {
+              await storage.updateScraperLog(logId, update as any);
+            } catch (updateError) {
+              console.error('Error updating scraper log:', updateError);
+            }
+            resolve();
+          };
+
+          pythonProcess.on('close', (code) => {
+            if (code !== 0) {
+              void finish({ status: "failed", errorMessage: stderr || `Process exited with code ${code}` });
+            } else {
+              const grantsMatch = stdout.match(/(\d+) grants found/);
+              void finish({ status: "success", grantsFound: grantsMatch ? parseInt(grantsMatch[1], 10) : 0 });
+            }
+          });
+
+          pythonProcess.on('error', (err) => {
+            void finish({ status: "failed", errorMessage: `Failed to start scraper: ${err.message}` });
+          });
+        }),
+      ).catch((err) => console.error('[scrape] queue failed:', err));
+
       res.json({ 
         message: `Started ${results.length} ${frequency} scrapers`,
         scrapers: results
