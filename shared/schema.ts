@@ -1124,6 +1124,11 @@ export const fundingAwards = pgTable("funding_awards", {
   category: text("category"),
   researchSubject: text("research_subject"),
   sustainabilityGoals: text("sustainability_goals"),
+  // Only the API carries these; the CSV export does not. Keywords are what
+  // make a benchmark answerable by topic rather than only by funder.
+  keywords: text("keywords"),
+  callCaseNumber: text("call_case_number"),
+  grantForm: text("grant_form"),
   importedAt: timestamp("imported_at").defaultNow(),
 }, (table) => [
   index("funding_awards_funder_idx").on(table.funder),

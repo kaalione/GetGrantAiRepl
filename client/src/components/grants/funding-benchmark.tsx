@@ -17,14 +17,20 @@ interface Benchmark {
  * advertises.
  *
  * A call quoting "up to 5 000 000 kr" tells an applicant almost nothing: the
- * median Vinnova award to a company is around 100 000. This is the one number
+ * median Vinnova award to a company is around 147 000. This is the one number
  * that changes whether the effort is worth it, and no competitor shows it.
  *
- * Renders nothing unless there is enough history to be honest about — only
- * Vinnova publishes the open data today, so most grants will show no panel
- * rather than an empty one.
+ * Both thresholds matter, and the second is the one that bites. Counting awards
+ * alone, Vetenskapsrådet passes with 37 — spread across four companies. A
+ * median of four companies is noise wearing the clothes of a benchmark, so a
+ * funder must have awarded a reasonable number of distinct companies before
+ * this claims to describe what a company can expect.
+ *
+ * In practice that means Vinnova today: the research councils fund universities,
+ * and their company awards number in the tens.
  */
 const MIN_AWARDS = 30;
+const MIN_COMPANIES = 20;
 
 function kr(value: number): string {
   return `${value.toLocaleString("sv-SE")} kr`;
@@ -40,7 +46,8 @@ export function FundingBenchmark({ sourceName }: { sourceName: string }) {
     staleTime: 60 * 60 * 1000,
   });
 
-  if (!data || data.awards < MIN_AWARDS || data.median === null) return null;
+  if (!data || data.median === null) return null;
+  if (data.awards < MIN_AWARDS || data.companies < MIN_COMPANIES) return null;
 
   return (
     <Card data-testid="card-funding-benchmark">
