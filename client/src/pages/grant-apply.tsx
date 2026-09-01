@@ -112,11 +112,14 @@ function SectionLibrarySuggestions({ sectionKey, onInsert }: { sectionKey: strin
   );
 }
 
+// Named for what the user does at each step rather than what the screen shows.
+// "Bidrag / Företag" described the data on the page; the applicant is choosing
+// which pursuit this application is for, then writing it.
 const STEPS = [
-  { key: "grant", label: "Bidrag" },
-  { key: "company", label: "Företag" },
-  { key: "project", label: "Projekt" },
-  { key: "result", label: "Ansökan" },
+  { key: "grant", label: "Satsning" },
+  { key: "company", label: "Projektuppgifter" },
+  { key: "project", label: "Skriv avsnitt" },
+  { key: "result", label: "Granska" },
 ];
 
 export default function GrantApply() {
@@ -194,8 +197,11 @@ export default function GrantApply() {
   });
 
   const company = companies?.[0] || null;
-  const { selectedProfile } = useSearchProfiles();
+  const { profiles, selectedProfile, selectProfile } = useSearchProfiles();
   const matchResult = grant && company ? calculateMatchScore(company, grant, selectedProfile) : null;
+  const sectionsDone = sections.filter(
+    (s) => s.content?.trim() && !(s.maxWords && s.wordCount > s.maxWords),
+  ).length;
 
   const { data: existingApplications } = useQuery<Application[]>({
     queryKey: ["/api/applications"],
@@ -325,12 +331,47 @@ export default function GrantApply() {
     },
   });
 
+  // Long-form writing where a lost draft is the worst possible outcome, so
+  // edits persist on their own. The explicit Save button stays — it closes the
+  // editor and confirms — but it is no longer the only thing standing between
+  // the user and their work.
+  const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const savedContentRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!applicationId || !editingSectionKey) return;
+    const section = sections.find((s) => s.sectionKey === editingSectionKey);
+    if (!section) return;
+
+    // Seed from the server's copy so loading a draft never triggers a write.
+    if (savedContentRef.current[editingSectionKey] === undefined) {
+      savedContentRef.current[editingSectionKey] = section.content ?? "";
+      return;
+    }
+    if (savedContentRef.current[editingSectionKey] === section.content) return;
+
+    const timer = setTimeout(async () => {
+      const content = section.content;
+      setAutosaveState("saving");
+      try {
+        await apiRequest("PUT", `/api/applications/${applicationId}/section/${editingSectionKey}`, { content });
+        savedContentRef.current[editingSectionKey] = content;
+        setAutosaveState("saved");
+      } catch {
+        setAutosaveState("error");
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [applicationId, editingSectionKey, sections]);
+
   const sectionSaveMutation = useMutation({
     mutationFn: async ({ sectionKey, content }: { sectionKey: string; content: string }) => {
       if (!applicationId) throw new Error("No application");
       return apiRequest("PUT", `/api/applications/${applicationId}/section/${sectionKey}`, { content });
     },
     onSuccess: (_, { sectionKey, content }) => {
+      savedContentRef.current[sectionKey] = content;
+      setAutosaveState("saved");
       setEditingSectionKey(null);
       queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
       toast({ title: t("grantApply.toast.sectionSaved") || "Avsnitt sparat" });
@@ -546,9 +587,27 @@ export default function GrantApply() {
         </Button>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{t("grantApply.title")}</h1>
-          <p className="text-muted-foreground text-sm sm:text-base truncate">{grant.title}</p>
+          {/* Which funder, which pursuit, which call — the three things an
+              applicant juggling several open applications needs to see. */}
+          <p className="text-muted-foreground text-sm truncate" data-testid="text-application-breadcrumb">
+            {[grant.sourceName, selectedProfile?.kind === "project" ? selectedProfile.name : null, grant.title]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {autosaveState !== "idle" && (
+            <span
+              className={`text-xs hidden sm:inline ${autosaveState === "error" ? "text-destructive" : "text-muted-foreground"}`}
+              data-testid="text-autosave-state"
+            >
+              {autosaveState === "saving"
+                ? t("grantApply.autosaveSaving", "Sparar…")
+                : autosaveState === "saved"
+                  ? t("grantApply.autosaveSaved", "Sparat automatiskt")
+                  : t("grantApply.autosaveError", "Kunde inte spara — kopiera texten")}
+            </span>
+          )}
           <PresenceBar users={presenceUsers} />
           {applicationId && (
             <Button
@@ -590,6 +649,50 @@ export default function GrantApply() {
 
       {step === 0 && (
         <div className="space-y-4" data-testid="step-grant-content">
+          {profiles.length > 1 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  {t("grantApply.pursuit.title", "Vilken satsning gäller ansökan?")}
+                </CardTitle>
+                <CardDescription>
+                  {t(
+                    "grantApply.pursuit.desc",
+                    "Valet avgör vilken bakgrund som fylls i åt er och vad ansökan skrivs utifrån.",
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {profiles.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => selectProfile(p.id)}
+                    className={`w-full text-left rounded-lg border p-3 transition-colors ${
+                      selectedProfile?.id === p.id ? "border-primary bg-primary/5" : "hover-elevate"
+                    }`}
+                    data-testid={`button-select-pursuit-${p.id}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {p.kind === "core" ? (
+                        <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                      ) : (
+                        <Target className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
+                      <span className="font-medium">{p.name}</span>
+                      {selectedProfile?.id === p.id && (
+                        <CheckCircle2 className="h-4 w-4 text-primary ml-auto shrink-0" />
+                      )}
+                    </div>
+                    {p.description && (
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{p.description}</p>
+                    )}
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -877,6 +980,23 @@ export default function GrantApply() {
             </Card>
           ) : (
             <>
+              {/* Six long text boxes give no sense of how far along you are;
+                  this is the one number that answers "can I submit yet?". */}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-sm font-medium" data-testid="text-sections-progress">
+                  {t("grantApply.sectionsDone", {
+                    defaultValue: "Avsnitt {{done}} av {{total}} klara",
+                    done: sectionsDone,
+                    total: sections.length,
+                  })}
+                </p>
+                <div className="h-1.5 flex-1 min-w-[120px] max-w-xs rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${sections.length ? (sectionsDone / sections.length) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
               {sections.map((section) => {
                 const isEditing = editingSectionKey === section.sectionKey;
                 const isOverLimit = section.maxWords && section.wordCount > section.maxWords;
