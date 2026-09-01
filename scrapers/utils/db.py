@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 from datetime import datetime
@@ -13,12 +14,36 @@ try:
 except ImportError:
     pass
 
+# A scrape can run for minutes and opens a connection per write, so a momentary
+# network blip should not discard work already done. One such blip — "Network is
+# unreachable" against the Supabase pooler — cost a whole agency's run, and the
+# same connection succeeded seconds later.
+CONNECT_ATTEMPTS = 4
+CONNECT_BACKOFF_SECONDS = 1.5
+
+
 def get_connection():
-    """Get a connection to the PostgreSQL database."""
+    """Get a connection to the PostgreSQL database, retrying transient failures."""
     database_url = os.environ.get('DATABASE_URL')
     if not database_url:
         raise ValueError("DATABASE_URL environment variable is not set")
-    return psycopg2.connect(database_url)
+
+    last_error = None
+    for attempt in range(1, CONNECT_ATTEMPTS + 1):
+        try:
+            return psycopg2.connect(database_url, connect_timeout=15)
+        except psycopg2.OperationalError as error:
+            # Authentication and configuration errors will not fix themselves.
+            message = str(error).lower()
+            if 'password' in message or 'does not exist' in message:
+                raise
+            last_error = error
+            if attempt < CONNECT_ATTEMPTS:
+                delay = CONNECT_BACKOFF_SECONDS * attempt
+                print(f"  DB connect failed ({str(error).strip()[:60]}) — retrying in {delay:.0f}s")
+                time.sleep(delay)
+
+    raise last_error
 
 def get_active_sources() -> List[Dict[str, Any]]:
     """Fetch all active scraper sources from the database."""
