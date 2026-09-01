@@ -119,7 +119,12 @@
   --accent: 150 14% 19%;
   --accent-foreground: 148 35% 80%;
   --destructive: 11 55% 52%;
-  --destructive-foreground: 43 16% 8%;
+  /* 8% put the "Today" deadline badge at 4.30:1 against the destructive
+     background, just under the 4.5 needed for its 12px text. Darkening the
+     background makes it worse — the text is already dark, so lowering the
+     background's luminance closes the gap rather than opening it. 5% gives
+     4.59 and is visually indistinguishable. */
+  --destructive-foreground: 43 16% 5%;
   --input: 41 14% 28%;
   --ring: 148 41% 64%;
   --chart-1: 148 41% 64%;

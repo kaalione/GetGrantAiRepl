@@ -38,9 +38,15 @@ export function EligibilityChecklist({ factors, className }: EligibilityChecklis
             className={cn(
               "shrink-0 w-6 h-6 rounded-full flex items-center justify-center",
               factor.met
-                ? "bg-green-500 text-white"
+                // Same problem as the amber below: white on green-500 is
+                // 2.28:1, and a check mark that carries meaning needs 3:1 at
+                // minimum. green-950 gives 6.6:1.
+                ? "bg-green-500 text-green-950"
                 : factor.points > 0
-                ? "bg-amber-500 text-white"
+                // White on amber-500 is 2.15:1 — the "~" marking a partial
+                // match was effectively unreadable. amber-950 gives 6.97:1
+                // and keeps the amber reading as a warning.
+                ? "bg-amber-500 text-amber-950"
                 : "bg-muted-foreground/20 text-muted-foreground"
             )}
           >
