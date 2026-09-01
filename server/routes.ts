@@ -1721,6 +1721,25 @@ async function runWithConcurrency<T>(
   await Promise.all(workers);
 }
 
+  // POST /api/cron/import-gdp-awards - refresh the historical award data the
+  // benchmarks read. The GDP files are rebuilt daily; weekly is enough here,
+  // since a decision from last week does not move a median over 30 000 awards.
+  app.post("/api/cron/import-gdp-awards", async (req, res) => {
+    try {
+      const provided = req.headers["x-api-key"];
+      if (!process.env.CRON_API_KEY || provided !== process.env.CRON_API_KEY) {
+        return res.status(401).json({ error: "Invalid or missing API key" });
+      }
+
+      const { importGdpAwards } = await import("./scripts/import-gdp-awards");
+      const result = await importGdpAwards();
+      res.json({ message: "GDP awards imported", ...result });
+    } catch (error) {
+      console.error("Cron import-gdp-awards error:", error);
+      res.status(500).json({ error: "Failed to import GDP awards" });
+    }
+  });
+
   // What this funder has actually awarded companies, from GDP historical data.
   // Public: it is open data, and it is most useful to someone deciding whether
   // a call is worth the effort before they sign up.

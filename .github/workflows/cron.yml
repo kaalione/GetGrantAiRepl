@@ -22,6 +22,7 @@ on:
     - cron: "15 4 * * *"    # success-fee-maintenance (daily)
     - cron: "0 5 * * 2"     # project-health handled in-app daily; safety net weekly
     - cron: "45 4 * * *"    # partner-maintenance (daily)
+    - cron: "30 6 * * 0"    # import-gdp-awards (Sunday, after the weekly scrape)
   workflow_dispatch:
     inputs:
       job:
@@ -50,6 +51,7 @@ jobs:
             "15 4 * * *")  jobs="success-fee-maintenance" ;;
             "0 5 * * 2")   jobs="project-health" ;;
             "45 4 * * *")  jobs="partner-maintenance" ;;
+            "30 6 * * 0")  jobs="import-gdp-awards" ;;
             *)             jobs="$MANUAL_JOB" ;;
           esac
           echo "jobs=$jobs" >> "$GITHUB_OUTPUT"

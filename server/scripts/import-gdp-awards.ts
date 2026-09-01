@@ -67,7 +67,9 @@ function splitRow(line: string): string[] {
   return out.map((v) => v.trim());
 }
 
-async function main() {
+export async function importGdpAwards(): Promise<{ funders: number; written: number }> {
+  let totalWritten = 0;
+
   for (const source of SOURCES) {
     console.log(`\n${source.funder}`);
 
@@ -156,6 +158,7 @@ async function main() {
       if (written % 10000 === 0) console.log(`    ${written}…`);
     }
     console.log(`  wrote ${written}`);
+    totalWritten += written;
   }
 
   const r = await pool.query(
@@ -164,7 +167,14 @@ async function main() {
   for (const row of r.rows) {
     console.log(`\n  ${row.funder}: ${row.n} awards, ${row.orgs} distinct companies`);
   }
-  process.exit(0);
+
+  return { funders: SOURCES.length, written: totalWritten };
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+// Also runnable on its own: npx tsx server/scripts/import-gdp-awards.ts
+const runDirectly = process.argv[1]?.includes("import-gdp-awards");
+if (runDirectly) {
+  importGdpAwards()
+    .then(() => process.exit(0))
+    .catch((e) => { console.error(e); process.exit(1); });
+}
