@@ -25,9 +25,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useSearchProfiles } from "@/hooks/use-search-profiles";
 
 function SourceTag() {
+  const { t } = useTranslation();
   return (
     <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary" data-testid="tag-from-pdf">
-      ur pdf
+      {t("profiles.fromPdf", "ur pdf")}
     </span>
   );
 }
@@ -477,13 +478,21 @@ export function ProfileSwitcher({ companyId }: { companyId: string | null | unde
                 </div>
 
                 {preview && (
-                  <p className="text-sm text-muted-foreground" data-testid="text-quota">
-                    {t("profiles.quota", {
-                      defaultValue: "Sparas som er {{position}}:a av {{limit}} projektsatsningar",
-                      position: preview.position,
-                      limit: preview.limit,
-                    })}
-                  </p>
+                  <div className="rounded-lg border bg-muted/40 p-3 space-y-1">
+                    <p className="text-sm font-medium" data-testid="text-match-preview">
+                      {t("profiles.matchPreview", {
+                        defaultValue: "{{count}} utlysningar matchar den här satsningen just nu",
+                        count: preview.matches,
+                      })}
+                    </p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-quota">
+                      {t("profiles.quota", {
+                        defaultValue: "Sparas som er {{position}}:a av {{limit}} projektsatsningar",
+                        position: preview.position,
+                        limit: preview.limit,
+                      })}
+                    </p>
+                  </div>
                 )}
 
                 <DialogFooter className="gap-2">
@@ -498,12 +507,7 @@ export function ProfileSwitcher({ companyId }: { companyId: string | null | unde
                   <Button type="submit" disabled={createProfile.isPending} data-testid="button-create-profile-submit">
                     {createProfile.isPending
                       ? t("profiles.saving", "Sparar…")
-                      : preview
-                        ? t("profiles.saveAndShow", {
-                            defaultValue: "Spara och visa {{count}} matchningar",
-                            count: preview.matches,
-                          })
-                        : t("profiles.createButton", "Spara satsningen")}
+                      : t("profiles.createButton", "Spara satsningen")}
                   </Button>
                 </DialogFooter>
               </form>

@@ -558,7 +558,21 @@
     "regeneratePlaceholder": "E.g. \"Focus more on sustainability\" or \"Add concrete numbers\"",
     "regenerateWithAI": "Regenerate with AI",
     "copyAll": "Copy All",
-    "prefilledFromProfile": "Prefilled from the \"{{name}}\" search profile — adjust freely before generating."
+    "prefilledFromProfile": "Prefilled from the \"{{name}}\" search profile — adjust freely before generating.",
+    "steps": {
+      "pursuit": "Pursuit",
+      "details": "Project details",
+      "write": "Write sections",
+      "review": "Review"
+    },
+    "sectionsDone": "{{done}} of {{total}} sections done",
+    "autosaveSaving": "Saving…",
+    "autosaveSaved": "Saved automatically",
+    "autosaveError": "Could not save — copy your text",
+    "pursuit": {
+      "title": "Which pursuit is this application for?",
+      "desc": "The choice decides which background is filled in for you and what the application is written from."
+    }
   },
   "company": {
     "title": "Company Profile",
@@ -1453,8 +1467,8 @@
     "fieldDescription": "What is the project about?",
     "fieldGoals": "What do you want to achieve?",
     "fieldBudget": "Approximate budget (SEK, optional)",
-    "createButton": "Create profile",
-    "created": "Search profile created",
+    "createButton": "Save pursuit",
+    "created": "Pursuit saved",
     "createFailed": "Could not create the profile",
     "upgradeNeeded": "Upgrade required",
     "uploadCta": "Have a pitch deck or project plan? Upload a PDF and we'll fill this in for you",
@@ -1462,6 +1476,30 @@
     "extractedBadge": "Filled in from document — review the fields below",
     "extractDone": "Draft filled in from the document",
     "extractReview": "Review and adjust the fields before saving.",
-    "extractFailed": "Could not read the document"
+    "extractFailed": "Could not read the document",
+    "step1Title": "New pursuit — step 1 of 2",
+    "step1Desc": "Already written the project down? Upload it and we will read the fields out for you. You review everything before anything is saved.",
+    "uploadTitle": "Upload pitch deck or project plan",
+    "uploadHint": "PDF",
+    "fillManually": "Or fill it in yourself",
+    "step2Title": "Step 2 of 2 — review what we read from the document",
+    "step2Desc": "We suggest, you decide. Adjust freely — nothing is saved until you approve.",
+    "step2TitleManual": "Describe the pursuit",
+    "step2DescManual": "This governs which calls you are matched against. Nothing is saved until you approve.",
+    "changeFile": "Change file",
+    "readQuality": "Read quality",
+    "fieldsFromDoc": "fields filled from the document",
+    "howUsed": "How the pursuit is used",
+    "howUsed1": "Calls are ranked against this project instead of your core business.",
+    "howUsed2": "Alerts and deadlines follow the pursuit.",
+    "howUsed3": "Applications you start draw their background from here.",
+    "fieldTimeframe": "Timeframe",
+    "fieldTimeframePlaceholder": "18 months",
+    "fieldKeywords": "Keywords",
+    "addKeyword": "add",
+    "matchPreview": "{{count}} calls match this pursuit right now",
+    "quota": "Saved as pursuit {{position}} of {{limit}}",
+    "saving": "Saving…",
+    "fromPdf": "from pdf"
   }
 }

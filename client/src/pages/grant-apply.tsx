@@ -116,10 +116,10 @@ function SectionLibrarySuggestions({ sectionKey, onInsert }: { sectionKey: strin
 // "Bidrag / Företag" described the data on the page; the applicant is choosing
 // which pursuit this application is for, then writing it.
 const STEPS = [
-  { key: "grant", label: "Satsning" },
-  { key: "company", label: "Projektuppgifter" },
-  { key: "project", label: "Skriv avsnitt" },
-  { key: "result", label: "Granska" },
+  { key: "grant", labelKey: "grantApply.steps.pursuit", fallback: "Satsning" },
+  { key: "company", labelKey: "grantApply.steps.details", fallback: "Projektuppgifter" },
+  { key: "project", labelKey: "grantApply.steps.write", fallback: "Skriv avsnitt" },
+  { key: "result", labelKey: "grantApply.steps.review", fallback: "Granska" },
 ];
 
 export default function GrantApply() {
@@ -640,7 +640,7 @@ export default function GrantApply() {
               data-testid={`step-${s.key}`}
             >
               <span>{i + 1}.</span>
-              <span className="hidden sm:inline">{s.label}</span>
+              <span className="hidden sm:inline">{t(s.labelKey, s.fallback)}</span>
               {i < step && <CheckCircle2 className="h-3.5 w-3.5" />}
             </button>
           </div>

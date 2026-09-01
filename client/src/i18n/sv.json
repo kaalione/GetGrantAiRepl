@@ -558,7 +558,21 @@
     "regeneratePlaceholder": "T.ex. \"Fokusera mer på hållbarhet\" eller \"Lägg till konkreta siffror\"",
     "regenerateWithAI": "Omgenerera med AI",
     "copyAll": "Kopiera allt",
-    "prefilledFromProfile": "Ifyllt från sökprofilen \"{{name}}\" — justera fritt innan du genererar."
+    "prefilledFromProfile": "Ifyllt från sökprofilen \"{{name}}\" — justera fritt innan du genererar.",
+    "steps": {
+      "pursuit": "Satsning",
+      "details": "Projektuppgifter",
+      "write": "Skriv avsnitt",
+      "review": "Granska"
+    },
+    "sectionsDone": "Avsnitt {{done}} av {{total}} klara",
+    "autosaveSaving": "Sparar…",
+    "autosaveSaved": "Sparat automatiskt",
+    "autosaveError": "Kunde inte spara — kopiera texten",
+    "pursuit": {
+      "title": "Vilken satsning gäller ansökan?",
+      "desc": "Valet avgör vilken bakgrund som fylls i åt er och vad ansökan skrivs utifrån."
+    }
   },
   "company": {
     "title": "Företagsprofil",
@@ -1455,8 +1469,8 @@
     "fieldDescription": "Vad går projektet ut på?",
     "fieldGoals": "Vad vill ni uppnå?",
     "fieldBudget": "Ungefärlig budget (SEK, valfritt)",
-    "createButton": "Skapa profil",
-    "created": "Sökprofil skapad",
+    "createButton": "Spara satsningen",
+    "created": "Satsningen sparad",
     "createFailed": "Kunde inte skapa profilen",
     "upgradeNeeded": "Uppgradering krävs",
     "uploadCta": "Har ni en pitch deck eller projektplan? Ladda upp en PDF så fyller vi i åt er",
@@ -1464,6 +1478,30 @@
     "extractedBadge": "Ifyllt från dokument — granska fälten nedan",
     "extractDone": "Utkast ifyllt från dokumentet",
     "extractReview": "Granska och justera fälten innan du sparar.",
-    "extractFailed": "Kunde inte läsa dokumentet"
+    "extractFailed": "Kunde inte läsa dokumentet",
+    "step1Title": "Ny satsning — steg 1 av 2",
+    "step1Desc": "Har ni redan skrivit ned projektet? Ladda upp det, så läser vi ut fälten åt er. Ni granskar allt innan något sparas.",
+    "uploadTitle": "Ladda upp pitch deck eller projektplan",
+    "uploadHint": "PDF",
+    "fillManually": "Eller fyll i själv",
+    "step2Title": "Steg 2 av 2 — granska vad vi läste ur dokumentet",
+    "step2Desc": "Vi föreslår, ni bestämmer. Justera fritt — inget sparas förrän ni godkänner.",
+    "step2TitleManual": "Beskriv satsningen",
+    "step2DescManual": "Det här styr vilka utlysningar ni matchas mot. Inget sparas förrän ni godkänner.",
+    "changeFile": "Byt fil",
+    "readQuality": "Läskvalitet",
+    "fieldsFromDoc": "fält ifyllda från dokumentet",
+    "howUsed": "Så används satsningen",
+    "howUsed1": "Utlysningar rankas mot det här projektet i stället för mot kärnverksamheten.",
+    "howUsed2": "Bevakningar och deadlines följer satsningen.",
+    "howUsed3": "Ansökningar ni startar hämtar sin bakgrund härifrån.",
+    "fieldTimeframe": "Tidsram",
+    "fieldTimeframePlaceholder": "18 månader",
+    "fieldKeywords": "Nyckelord",
+    "addKeyword": "lägg till",
+    "matchPreview": "{{count}} utlysningar matchar den här satsningen just nu",
+    "quota": "Sparas som er {{position}}:a av {{limit}} projektsatsningar",
+    "saving": "Sparar…",
+    "fromPdf": "ur pdf"
   }
 }
