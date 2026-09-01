@@ -117,6 +117,14 @@ class BaseScraper:
     def extract_amount(self, text):
         if not text:
             return None, None, text
+
+        # Swedish and Norwegian sites separate thousands with a non-breaking
+        # space, so "20 000 kronor" arrives as "20\xa0000 kronor". The regexes
+        # below use \s and the parsing strips ASCII spaces, so an unnormalised
+        # NBSP both hid the amount and crashed int() — one such figure aborted a
+        # whole source, losing every grant it had already found.
+        text = re.sub(r"[\u00a0\u2007\u2009\u202f\u2060]", " ", text)
+
         amount_min = None
         amount_max = None
         text_lower = text.lower()
@@ -127,7 +135,11 @@ class BaseScraper:
                 amount_max = val
             if amount_min is None or val < amount_min:
                 amount_min = val
-        millions = re.findall(r'(\d+(?:[.,]\d+)?)\s*millio?n(?:er)?', text_lower)
+        # "million(er)" is English and Norwegian; Swedish is "miljon(er)". Only
+        # the former was matched, so every Swedish grant quoting an amount in
+        # millions — which is most of the large ones — recorded no amount at all.
+        millions = re.findall(
+            r'(\d+(?:[.,]\d+)?)\s*(?:miljon(?:er)?|millio?n(?:er)?)', text_lower)
         if millions:
             for m in millions:
                 val = float(m.replace(',', '.')) * 1_000_000
@@ -334,7 +346,14 @@ class BaseScraper:
             processed_grants = []
             grants_inserted = 0
             for raw in grants_data:
-                grant = self.transform_to_grant(raw)
+                # A single unparseable page used to abort the whole run, so a
+                # source with one odd amount reported zero grants instead of
+                # the twenty it had actually read.
+                try:
+                    grant = self.transform_to_grant(raw)
+                except Exception as item_error:
+                    print(f"  Skipping unparseable item: {item_error}")
+                    continue
                 if not grant['title'] or not grant['url']:
                     continue
                 dup, dup_id = is_duplicate(grant, processed_grants)
