@@ -132,6 +132,69 @@ router.post(
   }
 );
 
+// Preview a draft pursuit before it is saved. The review step promises the
+// user a number — "Spara och visa 38 matchningar" — and that promise has to be
+// the count they will actually see, so this scores the draft through the same
+// function and the same threshold the grant list uses to flag a match (40).
+// Also returns where the pursuit lands in the plan's allowance, so the dialog
+// can say what saving costs before the user commits.
+router.post("/profiles/preview", isAuthenticated, async (req: any, res: Response) => {
+  try {
+    const userId = req.user.claims.sub;
+    const schema = z.object({
+      companyId: z.string().min(1),
+      description: z.string().max(4000).optional().nullable(),
+      goals: z.string().max(4000).optional().nullable(),
+      focusAreas: z.array(z.string().max(80)).max(20).optional().nullable(),
+      keywords: z.array(z.string().max(60)).max(30).optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Ogiltiga fält", details: parsed.error.flatten() });
+    }
+    const draft = parsed.data;
+
+    if (!(await ownedCompany(draft.companyId, userId))) {
+      return res.status(403).json({ error: "Företaget tillhör inte ditt konto" });
+    }
+
+    const [[company], [user], existing] = await Promise.all([
+      db.select().from(companies).where(eq(companies.id, draft.companyId)),
+      db.select().from(users).where(eq(users.id, userId)),
+      listActiveProfiles(draft.companyId, userId),
+    ]);
+
+    const plan = user?.plan || "free";
+    const limit = projectProfileLimit(plan);
+    const projectCount = existing.filter((p) => p.kind === "project").length;
+
+    let matches = 0;
+    if (company) {
+      const { getGrantIndex } = await import("../services/grantSearch");
+      const { calculateMatchScore } = await import("@shared/matching");
+      const grantIndex = await getGrantIndex();
+      const now = new Date();
+      for (const grant of grantIndex) {
+        if (grant.status === "closed") continue;
+        if (grant.deadline && new Date(grant.deadline) < now) continue;
+        const score = calculateMatchScore(company, grant as any, {
+          kind: "project",
+          description: draft.description ?? null,
+          goals: draft.goals ?? null,
+          focusAreas: draft.focusAreas ?? null,
+          keywords: draft.keywords ?? null,
+        }).score;
+        if (score >= 40) matches++;
+      }
+    }
+
+    res.json({ matches, position: projectCount + 1, limit });
+  } catch (error) {
+    console.error("Profile preview failed:", error);
+    res.status(500).json({ error: "Kunde inte förhandsgranska matchningarna" });
+  }
+});
+
 // Create a project profile (wizard flow). Plan-gated.
 router.post("/profiles", isAuthenticated, async (req: any, res: Response) => {
   try {
