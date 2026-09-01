@@ -46,6 +46,9 @@ def get_scraper_for_source(source):
     if config.get('kind') == 'regional_stod':
         from sources.regional_stod import RegionalStodScraper
         return RegionalStodScraper(source)
+    if config.get('kind') == 'gdp_api':
+        from sources.gdp_api import GdpApiScraper
+        return GdpApiScraper(source)
 
     if 'vinnova' in name_lower:
         if source_type == 'api' or 'api' in name_lower:
