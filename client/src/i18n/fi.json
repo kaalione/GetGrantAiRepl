@@ -972,7 +972,13 @@
     "runEligibilityPrompt": "Suorita tukikelpoisuustarkistus nähdäksesi, kuinka hyvin täytätte vaatimukset.",
     "noConcerns": "Ei huolenaiheita löydetty",
     "noConcernsDesc": "Saatavilla olevan datan perusteella kaikki näyttää hyvältä. Suorita tekoälyanalyysi syvempien näkemysten saamiseksi.",
-    "ruleMismatches": "Sääntöpohjaiset poikkeamat"
+    "ruleMismatches": "Sääntöpohjaiset poikkeamat",
+    "benchmark": {
+      "label": "Mitä todellisuudessa myönnetään",
+      "median": "Mediaani {{amount}}",
+      "spread": "8 kymmenestä myönnöstä osuu tähän välille",
+      "basis": "Perustuu {{awards}} myöntöön {{companies}} yritykselle vuodesta {{from}}. Rahoittajien avointa dataa."
+    }
   },
   "recentlyViewed": {
     "title": "Viimeksi katsotut",

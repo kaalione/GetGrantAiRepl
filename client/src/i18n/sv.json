@@ -972,7 +972,13 @@
     "runEligibilityPrompt": "Kör en behörighetskontroll för att se hur väl ni uppfyller kraven.",
     "noConcerns": "Inga orosmoment hittades",
     "noConcernsDesc": "Baserat på tillgänglig data ser allt bra ut. Kör en AI-analys för djupare insikter.",
-    "ruleMismatches": "Regelbaserade avvikelser"
+    "ruleMismatches": "Regelbaserade avvikelser",
+    "benchmark": {
+      "label": "Vad som faktiskt beviljas",
+      "median": "Median {{amount}}",
+      "spread": "8 av 10 beviljade belopp ligger i detta spann",
+      "basis": "Baserat på {{awards}} beviljade belopp till {{companies}} företag sedan {{from}}. Öppna data från finansiärerna."
+    }
   },
   "recentlyViewed": {
     "title": "Senast visade",

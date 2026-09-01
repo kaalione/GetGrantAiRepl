@@ -972,7 +972,13 @@
     "runEligibilityPrompt": "Kjør en kvalifiseringssjekk for å se hvor godt dere oppfyller kravene.",
     "noConcerns": "Ingen bekymringer funnet",
     "noConcernsDesc": "Basert på tilgjengelig data ser alt bra ut. Kjør en AI-analyse for dypere innsikt.",
-    "ruleMismatches": "Regelbaserte avvik"
+    "ruleMismatches": "Regelbaserte avvik",
+    "benchmark": {
+      "label": "Hva som faktisk tildeles",
+      "median": "Median {{amount}}",
+      "spread": "8 av 10 tildelinger ligger i dette spennet",
+      "basis": "Basert på {{awards}} tildelinger til {{companies}} selskaper siden {{from}}. Åpne data fra finansiørene."
+    }
   },
   "recentlyViewed": {
     "title": "Nylig vist",

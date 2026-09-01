@@ -28,6 +28,10 @@ export interface Benchmark {
   topCategories: Array<{ category: string; awards: number; median: number }>;
 }
 
+export function normaliseFunder(name: string): string {
+  return name.replace(/\s*\((?:GDP|API)[^)]*\)\s*$/i, "").trim();
+}
+
 export async function getFundingBenchmark(q: BenchmarkQuery): Promise<Benchmark> {
   const where: string[] = ["amount_sek > 0"];
   const params: unknown[] = [];
@@ -37,7 +41,10 @@ export async function getFundingBenchmark(q: BenchmarkQuery): Promise<Benchmark>
     where.push(sql.replace("?", `$${params.length}`));
   };
 
-  if (q.funder) add("funder = ?", q.funder);
+  // A grant's source is named for how it is read — "Vinnova (GDP)" — while the
+  // award data names the funder itself. Callers pass a source name and should
+  // not have to know the difference.
+  if (q.funder) add("funder = ?", normaliseFunder(q.funder));
   // Categories are pipe-separated multi-values in the source data.
   if (q.category) add("category ILIKE ?", `%${q.category}%`);
   if (q.county) add("county ILIKE ?", `%${q.county}%`);

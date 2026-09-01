@@ -1,3 +1,4 @@
+import { FundingBenchmark } from "@/components/grants/funding-benchmark";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { useEffect } from "react";
@@ -507,6 +508,10 @@ export default function GrantDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* The advertised ceiling above says what a call may give;
+              this says what the funder has actually given companies. */}
+          <FundingBenchmark sourceName={grant.sourceName} />
 
           <Card>
             <CardContent className="p-6 space-y-4">

@@ -970,7 +970,13 @@
     "runEligibilityPrompt": "Run an eligibility check to see how well you meet the requirements.",
     "noConcerns": "No concerns found",
     "noConcernsDesc": "Based on available data, everything looks good. Run an AI analysis for deeper insights.",
-    "ruleMismatches": "Rule-based mismatches"
+    "ruleMismatches": "Rule-based mismatches",
+    "benchmark": {
+      "label": "What is actually awarded",
+      "median": "Median {{amount}}",
+      "spread": "8 in 10 awards fall in this range",
+      "basis": "Based on {{awards}} awards to {{companies}} companies since {{from}}. Open data from the funders."
+    }
   },
   "recentlyViewed": {
     "title": "Recently Viewed",
