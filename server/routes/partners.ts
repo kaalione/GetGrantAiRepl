@@ -541,13 +541,23 @@ router.get('/clients', isAuthenticated, async (req: any, res: Response) => {
       .where(eq(partnerClients.partnerId, partner.id));
     const totalGrantValueSek = allClients.reduce((sum, c) => sum + (c.totalGrantValueSek || 0), 0);
 
+    const { getClientPortfolio, getPortfolioSummary } = await import('../services/partnerPortfolio');
+    const [portfolio, portfolioSummary] = await Promise.all([
+      getClientPortfolio(clients),
+      getPortfolioSummary(userId, allClients),
+    ]);
+
     res.json({
-      clients,
+      clients: clients.map((client) => ({
+        ...client,
+        ...(portfolio.get(client.id) ?? {}),
+      })),
       total: totalResult?.count || 0,
       summary: {
         totalActive: activeResult[0]?.count || 0,
         totalInvited: invitedResult[0]?.count || 0,
         totalGrantValueSek,
+        ...portfolioSummary,
       },
     });
   } catch (error) {
