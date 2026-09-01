@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, numeric, integer, boolean, jsonb, date, uuid, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, numeric, integer, boolean, jsonb, date, uuid, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1102,3 +1102,32 @@ export type PartnerUsageStat = typeof partnerUsageStats.$inferSelect;
 export type InsertPartnerUsageStat = z.infer<typeof insertPartnerUsageStatsSchema>;
 export type PartnerEmailSetting = typeof partnerEmailSettings.$inferSelect;
 export type InsertPartnerEmailSetting = z.infer<typeof insertPartnerEmailSettingsSchema>;
+
+// Historical funding decisions from the Gemensamma data-projektet (GDP) open
+// data set — currently Vinnova only; the other agencies' files are "on the way"
+// per gdphub.se. Powers benchmarks: what a funder actually awards companies,
+// rather than the ceiling quoted in a call. Not grants to apply for, so it is
+// deliberately kept out of the grants table.
+export const fundingAwards = pgTable("funding_awards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  funder: text("funder").notNull(),
+  // The funder's own case number. Several rows share one — a consortium — and
+  // it is the join key to the classification data.
+  caseNumber: text("case_number").notNull(),
+  orgName: text("org_name"),
+  orgNumber: text("org_number"),
+  orgType: text("org_type"),
+  county: text("county"),
+  year: integer("year"),
+  amountSek: numeric("amount_sek"),
+  // From the classification file, joined on case number.
+  category: text("category"),
+  researchSubject: text("research_subject"),
+  sustainabilityGoals: text("sustainability_goals"),
+  importedAt: timestamp("imported_at").defaultNow(),
+}, (table) => [
+  index("funding_awards_funder_idx").on(table.funder),
+  index("funding_awards_org_number_idx").on(table.orgNumber),
+  index("funding_awards_category_idx").on(table.category),
+  unique("funding_awards_unique").on(table.funder, table.caseNumber, table.orgNumber, table.year),
+]);

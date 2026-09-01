@@ -1721,6 +1721,26 @@ async function runWithConcurrency<T>(
   await Promise.all(workers);
 }
 
+  // What this funder has actually awarded companies, from GDP historical data.
+  // Public: it is open data, and it is most useful to someone deciding whether
+  // a call is worth the effort before they sign up.
+  app.get("/api/benchmarks/funding", async (req, res) => {
+    try {
+      const { getFundingBenchmark } = await import("./services/fundingBenchmarks");
+      const result = await getFundingBenchmark({
+        funder: (req.query.funder as string) || undefined,
+        category: (req.query.category as string) || undefined,
+        county: (req.query.county as string) || undefined,
+        orgNumber: (req.query.orgNumber as string) || undefined,
+        sinceYear: req.query.sinceYear ? parseInt(req.query.sinceYear as string, 10) : undefined,
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Funding benchmark error:", error);
+      res.status(500).json({ error: "Failed to load funding benchmark" });
+    }
+  });
+
   // Public: the counts shown on the marketing pages. No auth — this is the
   // same information any visitor can read off the grants list.
   app.get("/api/stats", async (_req, res) => {
